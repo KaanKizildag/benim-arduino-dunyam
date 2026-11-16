@@ -12,6 +12,7 @@ from ai_service import (
     MOCK_PROJECTS,
     generate_project_with_ai,
     fix_arduino_code,
+    get_all_available_models,
 )
 from arduino_service import (
     get_connected_ports,
@@ -25,10 +26,10 @@ load_dotenv()
 app = FastAPI(
     title="Kid Arduino Studio Backend",
     description="Çocuklar İçin AI Destekli Görsel Arduino Stüdyosu API",
-    version="1.0.0"
+    version="1.1.0"
 )
 
-# CORS yapılandırması (Frontend erişimi için)
+# CORS yapılandırması
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -39,14 +40,15 @@ app.add_middleware(
 
 
 # ---------------------------------------------------------
-# İstek Modelleri (Request Models)
+# İstek Modelleri
 # ---------------------------------------------------------
 
 class GenerateRequest(BaseModel):
     prompt: str
     inventory: List[str]
-    api_key: Optional[str] = None
     model: Optional[str] = None
+    api_key: Optional[str] = None
+    ollama_url: Optional[str] = "http://127.0.0.1:11434"
 
 class UploadRequest(BaseModel):
     code: str
@@ -56,6 +58,7 @@ class FixCodeRequest(BaseModel):
     code: str
     error: str
     project_context: Optional[str] = ""
+    model: Optional[str] = None
 
 
 # ---------------------------------------------------------
@@ -67,8 +70,17 @@ def health_check():
     return {
         "status": "healthy",
         "service": "Kid Arduino Studio API",
-        "version": "1.0.0"
+        "version": "1.1.0"
     }
+
+
+@app.get("/api/models")
+def list_available_models():
+    """
+    Sistemde algılanan yerel Ollama modellerini ve desteklenen bulut modellerini
+    (Gemini, OpenAI, Claude) döner.
+    """
+    return get_all_available_models()
 
 
 @app.get("/api/ports")
@@ -112,13 +124,12 @@ def get_mock_project(project_id: str):
 @app.post("/api/generate-project", response_model=ProjectResponse)
 def generate_project(req: GenerateRequest):
     """
-    Çocuğun Türkçe fikrini ve envanterini alıp tam Arduino projesi üretir.
-    API anahtarı yoksa akıllı mock projeyi yönlendirir.
+    Çocuğun Türkçe fikrini, envanterini ve seçilen modeli (Yerel Ollama veya Gemini/OpenAI/Claude)
+    kullanarak projeyi üretir.
     """
     if not req.prompt.strip():
         raise HTTPException(status_code=400, detail="Lütfen bir proje fikri yazın!")
     
-    # Boş envanter geldiyse temel parçaları sağla
     inventory = req.inventory if req.inventory else ["ARDUINO_UNO", "LED_RED", "RESISTOR_220"]
     if "ARDUINO_UNO" not in inventory:
         inventory.append("ARDUINO_UNO")
@@ -126,8 +137,9 @@ def generate_project(req: GenerateRequest):
     project = generate_project_with_ai(
         prompt=req.prompt,
         inventory=inventory,
+        model=req.model,
         api_key=req.api_key,
-        model_name=req.model
+        ollama_url=req.ollama_url or "http://127.0.0.1:11434"
     )
     return project
 
@@ -136,7 +148,6 @@ def generate_project(req: GenerateRequest):
 def upload_code(req: UploadRequest):
     """
     Arduino kodunu derler ve karta yükler.
-    Derleme hatası oluşursa Self-Healing için hata detayını da döner.
     """
     if not req.code.strip():
         raise HTTPException(status_code=400, detail="Yüklenecek Arduino kodu boş olamaz!")
@@ -151,7 +162,7 @@ def fix_code(req: FixCodeRequest):
     Self-Healing Endpoint:
     Derleme hatasını AI'a ileterek kodun düzeltilmiş halini üretir.
     """
-    fixed_code = fix_arduino_code(req.code, req.error, req.project_context)
+    fixed_code = fix_arduino_code(req.code, req.error, req.project_context, req.model)
     return {
         "success": True,
         "fixed_code": fixed_code,
@@ -163,7 +174,6 @@ def fix_code(req: FixCodeRequest):
 def serial_stream():
     """
     Arduino Seri Monitör verisini SSE (Server-Sent Events) ile canlı akıtır.
-    Web arayüzünde canlı sensör değerleri ve öğretici ipuçları gösterir.
     """
     return StreamingResponse(
         generate_simulated_serial_events(),

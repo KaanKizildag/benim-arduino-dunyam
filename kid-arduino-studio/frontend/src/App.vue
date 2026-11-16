@@ -64,8 +64,18 @@
           </button>
         </nav>
 
-        <!-- Sağ Taraf: Port ve Yükleme Butonu -->
+        <!-- Sağ Taraf: Model Durumu, Port ve Yükleme Butonu -->
         <div class="flex items-center gap-2">
+          <!-- Ollama Durum Rozeti -->
+          <div
+            v-if="modelsData?.ollama_active"
+            class="hidden md:flex items-center gap-1.5 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-xl text-[11px] font-bold text-emerald-700"
+            title="Yerel Ollama Örneği Aktif"
+          >
+            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span>Ollama Aktif ({{ modelsData.local_models.length }} model)</span>
+          </div>
+
           <!-- Port Seçimi -->
           <div class="hidden sm:flex items-center gap-1 bg-slate-100 px-2.5 py-1.5 rounded-xl text-xs font-bold text-slate-600">
             <span>🔌</span>
@@ -152,6 +162,7 @@
       <div v-show="activeTab === 'idea'" class="flex flex-col gap-6 animate-fade-in">
         <PromptInput
           :isLoading="isGenerating"
+          :modelsData="modelsData"
           @generate="handleGenerateProject"
         />
 
@@ -282,14 +293,14 @@
 import { ref, onMounted } from 'vue';
 import confetti from 'canvas-confetti';
 
-import type { ProjectResponse, PortInfo, UploadResult } from './types/project';
+import type { ProjectResponse, PortInfo, UploadResult, ModelsResponse } from './types/project';
 import InventorySelector from './components/InventorySelector.vue';
 import PromptInput from './components/PromptInput.vue';
 import CircuitViewer from './components/CircuitViewer.vue';
 import LogicCards from './components/LogicCards.vue';
 import CodePeekModal from './components/CodePeekModal.vue';
 
-// Varsayılan Proje (Gece Bekçisi Lambası)
+// Varsayılan Proje
 const defaultProject: ProjectResponse = {
   proje_adi: "Akıllı Gece Bekçisi Lambası",
   karsilama_mesaji: "Odan karardığında kendiliğinden yanan akıllı bir gece lambası yapıyoruz. 🌙✨",
@@ -387,6 +398,8 @@ const currentProject = ref<ProjectResponse>(defaultProject);
 const currentProjectId = ref<string>('gece_lambasi');
 const selectedInventory = ref<string[]>(['ARDUINO_UNO', 'LED_RED', 'RESISTOR_220', 'LDR_SENSOR', 'HCSR04', 'BUZZER']);
 
+const modelsData = ref<ModelsResponse | null>(null);
+
 const isGenerating = ref(false);
 const isUploading = ref(false);
 const isCodeModalOpen = ref(false);
@@ -394,6 +407,17 @@ const isCodeModalOpen = ref(false);
 const availablePorts = ref<PortInfo[]>([]);
 const selectedPort = ref<string>('auto');
 const uploadResult = ref<UploadResult | null>(null);
+
+async function fetchModels() {
+  try {
+    const res = await fetch('/api/models');
+    if (res.ok) {
+      modelsData.value = await res.json();
+    }
+  } catch (err) {
+    console.log('Model listesi alınırken hata:', err);
+  }
+}
 
 async function fetchPorts() {
   try {
@@ -543,7 +567,7 @@ void loop() {
   activeTab.value = 'circuit';
 }
 
-async function handleGenerateProject(payload: { prompt: string; apiKey?: string }) {
+async function handleGenerateProject(payload: { prompt: string; model: string; apiKey?: string }) {
   isGenerating.value = true;
   try {
     const res = await fetch('/api/generate-project', {
@@ -552,6 +576,7 @@ async function handleGenerateProject(payload: { prompt: string; apiKey?: string 
       body: JSON.stringify({
         prompt: payload.prompt,
         inventory: selectedInventory.value,
+        model: payload.model,
         api_key: payload.apiKey
       })
     });
@@ -610,6 +635,7 @@ async function handleUpload() {
 }
 
 onMounted(() => {
+  fetchModels();
   fetchPorts();
 });
 </script>

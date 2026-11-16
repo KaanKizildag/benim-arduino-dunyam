@@ -57,3 +57,20 @@ export interface UploadResult {
   error?: string;
   can_heal?: boolean;
 }
+
+export interface ModelOption {
+  id: string;
+  name: string;
+  raw_name?: string;
+  provider: 'local' | 'gemini' | 'openai' | 'anthropic';
+  category: string;
+  badge: string;
+}
+
+export interface ModelsResponse {
+  ollama_active: boolean;
+  default_model: string;
+  local_models: ModelOption[];
+  cloud_models: ModelOption[];
+  configured_keys: Record<string, boolean>;
+}
