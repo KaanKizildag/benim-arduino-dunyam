@@ -18,3 +18,34 @@
     animation: wire-flow 0.8s linear infinite;
   }
 }
+
+/* Çizgi Film & 3D Oyun Tarzı Butonlar ve Kartlar */
+.btn-3d {
+  border: 2.5px solid #1e293b;
+  box-shadow: 0 4px 0 #1e293b;
+  transition: all 0.12s ease;
+}
+
+.btn-3d:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 5px 0 #1e293b;
+}
+
+.btn-3d:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 #1e293b;
+}
+
+.card-3d {
+  border: 2.5px solid #1e293b;
+  box-shadow: 0 5px 0 rgba(30, 41, 59, 0.12);
+}
+
+.doodle-bg {
+  background-color: #7dd3fc;
+  background-image: 
+    radial-gradient(#bae6fd 1.5px, transparent 1.5px),
+    radial-gradient(#93c5fd 1.5px, transparent 1.5px);
+  background-size: 36px 36px;
+  background-position: 0 0, 18px 18px;
+}

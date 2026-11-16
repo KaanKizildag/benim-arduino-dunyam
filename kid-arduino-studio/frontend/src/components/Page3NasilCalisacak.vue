@@ -1,230 +1,187 @@
 <template>
-  <div class="max-w-5xl mx-auto w-full flex flex-col gap-6 py-4 px-3 sm:px-6">
+  <div class="max-w-6xl mx-auto w-full flex flex-col items-center py-4 px-2 sm:px-4">
     
-    <!-- Üst Başlık & Açıklama -->
-    <div class="text-center">
-      <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-100 text-amber-900 text-xs font-black mb-2 shadow-xs">
-        <span>🧠</span>
-        <span>Sebep ➔ Sonuç İnteraktif Simülatörü</span>
-      </div>
-      <h2 class="text-xl sm:text-2xl font-black text-slate-900">
-        Bu Devre Nasıl Düşünüyor ve Çalışıyor?
-      </h2>
-      <p class="text-xs sm:text-sm text-slate-600 font-medium max-w-xl mx-auto mt-1">
-        Karmaşık kodlar yok! Sensörü elle değiştir, Arduino beyninin nasıl karar verdiğini ve lambanın nasıl tepki verdiğini canlı izle!
-      </p>
-    </div>
-
-    <!-- 3 Sütunlu Canlı Sebep-Sonuç Simülatörü -->
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch">
+    <!-- Ana Beyaz Kart (Referans Görsel 2 ile Birebir Aynı) -->
+    <div class="w-full bg-white rounded-[36px] border-[3px] border-slate-900/10 shadow-[0_8px_0_rgba(15,23,42,0.06)] p-6 sm:p-10 relative overflow-hidden flex flex-col justify-between min-h-[580px]">
       
-      <!-- SÜTUN 1: GÖZLEMLE (Sensör Durumu / Çocuk Kontrol Eder) -->
-      <div class="bg-white rounded-3xl p-5 border-2 border-slate-200 shadow-md flex flex-col justify-between">
-        <div>
-          <div class="flex items-center gap-2 mb-3">
-            <span class="w-7 h-7 rounded-xl bg-sky-500 text-white font-black text-xs flex items-center justify-center">1</span>
-            <h3 class="text-sm font-black text-slate-900 uppercase tracking-wide">
-              Gözlemle (Sensör)
+      <!-- Faint Doodle Arka Plan Süsleri -->
+      <div class="absolute inset-0 pointer-events-none opacity-35 select-none overflow-hidden">
+        <svg class="w-full h-full text-slate-300" viewBox="0 0 1000 600" fill="none">
+          <!-- Minik doodle yıldızlar, ampuller, kalpler -->
+          <path d="M 280 80 Q 290 60, 310 80 Q 290 100, 280 80" stroke="currentColor" stroke-width="2" />
+          <circle cx="820" cy="120" r="14" stroke="currentColor" stroke-width="2" stroke-dasharray="3,3" />
+          <path d="M 120 180 Q 130 160, 140 180" stroke="currentColor" stroke-width="2" />
+          <circle cx="700" cy="460" r="18" stroke="currentColor" stroke-width="2" />
+        </svg>
+      </div>
+
+      <!-- Ortadaki 3 Aşamalı Akış Şeması (Flowchart) -->
+      <div class="relative z-10 flex flex-col lg:flex-row items-center justify-center gap-4 sm:gap-6 my-auto py-6">
+        
+        <!-- KUTU 1: 1. GÖZLEMLE -->
+        <div class="w-full max-w-[220px] bg-white rounded-[28px] border-[3px] border-blue-500 shadow-[0_5px_0_#3b82f6] p-5 flex flex-col items-center text-center">
+          <!-- Başlık (Göz İkonu + Yazı) -->
+          <div class="flex items-center gap-2 mb-4">
+            <div class="w-7 h-7 rounded-full bg-blue-500 text-white flex items-center justify-center text-sm shadow-xs">
+              👁️
+            </div>
+            <h3 class="text-sm font-black text-slate-900">
+              1. Gözlemle
             </h3>
           </div>
-          <p class="text-xs text-slate-600 font-medium mb-4 leading-relaxed">
-            {{ akisAdimi?.gozlemle || 'Sensör çevredeki değişiklikleri anlık olarak dinler.' }}
+
+          <!-- LDR Sensör İllüstrasyonu (Sarı Spot Işık Dairesi Üzerinde) -->
+          <div class="relative w-24 h-24 rounded-full bg-amber-100 flex items-center justify-center border-2 border-amber-300 shadow-inner mb-4">
+            <!-- Gerçekçi Çizgi Film LDR Sensörü -->
+            <svg class="w-16 h-16" viewBox="0 0 100 100">
+              <!-- Sensör Başı (Krem disk + turuncu kıvrımlı direnç yolu) -->
+              <circle cx="50" cy="45" r="26" fill="#fde68a" stroke="#d97706" stroke-width="3" />
+              <path d="M 36 38 Q 50 30, 64 38 Q 50 48, 36 48 Q 50 58, 64 58" fill="none" stroke="#b45309" stroke-width="3.5" stroke-linecap="round" />
+              <!-- Bacaklar -->
+              <line x1="42" y1="71" x2="42" y2="92" stroke="#64748b" stroke-width="4" stroke-linecap="round" />
+              <line x1="58" y1="71" x2="58" y2="92" stroke="#64748b" stroke-width="4" stroke-linecap="round" />
+            </svg>
+          </div>
+
+          <!-- Açıklama Metni -->
+          <p class="text-xs font-black text-slate-900 leading-snug">
+            {{ akisAdimi?.gozlemle || 'Odadaki ışığı her an takip et' }}
           </p>
         </div>
 
-        <!-- İnteraktif Kaydırıcı / Sensör Durum Kontrolü -->
-        <div class="bg-slate-50 p-4 rounded-2xl border-2 border-slate-200 flex flex-col gap-3 my-2">
-          <div class="flex items-center justify-between text-xs font-black text-slate-700">
-            <span>{{ isNightMode ? '🌙 Gece / Karanlık' : '☀️ Gündüz / Aydınlık' }}</span>
-            <span class="px-2 py-0.5 rounded-md text-[11px]" :class="isNightMode ? 'bg-indigo-600 text-white' : 'bg-amber-400 text-slate-900'">
-              Değer: {{ sensorValue }}
-            </span>
-          </div>
-
-          <!-- Kaydırıcı Slider -->
-          <input
-            type="range"
-            min="0"
-            max="1000"
-            v-model.number="sensorValue"
-            class="w-full accent-indigo-600 cursor-pointer h-2 bg-slate-200 rounded-lg"
-          />
-
-          <!-- Hızlı Toggle Butonları -->
-          <div class="grid grid-cols-2 gap-2 mt-1">
-            <button
-              type="button"
-              @click="sensorValue = 850"
-              :class="[
-                'py-2 px-3 rounded-xl font-extrabold text-xs transition cursor-pointer flex items-center justify-center gap-1.5',
-                !isNightMode ? 'bg-amber-400 text-amber-950 shadow-xs scale-102' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
-              ]"
-            >
-              <span>☀️ Gündüz</span>
-            </button>
-            <button
-              type="button"
-              @click="sensorValue = 250"
-              :class="[
-                'py-2 px-3 rounded-xl font-extrabold text-xs transition cursor-pointer flex items-center justify-center gap-1.5',
-                isNightMode ? 'bg-indigo-600 text-white shadow-xs scale-102' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
-              ]"
-            >
-              <span>🌙 Gece</span>
-            </button>
-          </div>
+        <!-- BAĞLANTI OKU 1 ➔ 2 (Cyan/Yeşil Gradyan Kalın Çizgi Film Oku) -->
+        <div class="hidden lg:flex items-center justify-center px-1">
+          <svg class="w-16 h-10 drop-shadow-[0_2px_0_#0f172a]" viewBox="0 0 60 40">
+            <defs>
+              <linearGradient id="arrowGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stop-color="#38bdf8" />
+                <stop offset="100%" stop-color="#4ade80" />
+              </linearGradient>
+            </defs>
+            <path d="M 5 14 L 35 14 L 35 4 L 55 20 L 35 36 L 35 26 L 5 26 Z" fill="url(#arrowGrad)" stroke="#0f172a" stroke-width="2.5" />
+          </svg>
         </div>
 
-        <span class="text-[11px] font-bold text-slate-400 text-center block mt-2">
-          👆 Parmağınla veya butonla ışık seviyesini değiştir!
-        </span>
-      </div>
-
-      <!-- SÜTUN 2: KARAR VER (Arduino Pelerinli Robot Beyin) -->
-      <div class="bg-gradient-to-b from-indigo-50 to-white rounded-3xl p-5 border-2 border-indigo-200 shadow-md flex flex-col justify-between items-center text-center relative overflow-hidden">
-        
-        <div class="w-full text-left flex items-center gap-2 mb-2">
-          <span class="w-7 h-7 rounded-xl bg-indigo-600 text-white font-black text-xs flex items-center justify-center">2</span>
-          <h3 class="text-sm font-black text-indigo-950 uppercase tracking-wide">
-            Karar Ver (Arduino Beyni)
-          </h3>
-        </div>
-
-        <!-- Pelerinli Robot Beyin Karakteri -->
-        <div class="relative my-3 group">
-          <div class="w-24 h-24 rounded-3xl bg-indigo-600 text-white flex items-center justify-center text-5xl shadow-xl shadow-indigo-200 relative z-10 transition-transform">
-            🧠
-          </div>
-          <!-- Pelerin İllüstrasyonu -->
-          <div class="absolute -top-1 -right-3 w-8 h-12 bg-rose-500 rounded-tr-xl rounded-br-2xl transform rotate-12 z-0 opacity-90 shadow-xs"></div>
-          <!-- Beyin Düşünme Parıltısı -->
-          <div
-            v-if="isNightMode"
-            class="absolute -inset-2 bg-indigo-400 rounded-3xl opacity-40 blur-md animate-pulse z-0"
-          ></div>
-        </div>
-
-        <!-- Karar Kuralları Kutusu -->
-        <div class="w-full bg-white p-3.5 rounded-2xl border-2 border-indigo-100 shadow-xs flex flex-col gap-2 text-xs">
-          <span class="font-black text-slate-700 block">
-            {{ akisAdimi?.karar_ver || 'Koşul: Işık azaldı mı?' }}
-          </span>
-
-          <div
-            :class="[
-              'p-2.5 rounded-xl font-extrabold text-xs transition flex items-center justify-center gap-2',
-              isNightMode
-                ? 'bg-emerald-500 text-white shadow-xs animate-bounce'
-                : 'bg-slate-100 text-slate-500'
-            ]"
-          >
-            <span>{{ isNightMode ? '✓ EVET! (Karanlık Oldu)' : '✗ HAYIR (Aydınlık)' }}</span>
-          </div>
-        </div>
-
-        <!-- İki Yöne Karar Okları -->
-        <div class="text-xs font-black text-indigo-600 flex items-center gap-1.5 mt-2">
-          <span>⚡ Karar:</span>
-          <span class="underline">{{ isNightMode ? akisAdimi?.evet_sonucu : akisAdimi?.hayir_sonucu }}</span>
-        </div>
-      </div>
-
-      <!-- SÜTUN 3: UYGULA (Görsel Canlı Donanım Önizlemesi) -->
-      <div class="bg-white rounded-3xl p-5 border-2 border-slate-200 shadow-md flex flex-col justify-between items-center text-center">
-        
-        <div class="w-full text-left flex items-center gap-2 mb-2">
-          <span class="w-7 h-7 rounded-xl bg-emerald-500 text-white font-black text-xs flex items-center justify-center">3</span>
-          <h3 class="text-sm font-black text-slate-900 uppercase tracking-wide">
-            Uygula (Donanım Tepkisi)
-          </h3>
-        </div>
-
-        <!-- Canlı Tepki Veren LED / Donanım Animasyonu -->
-        <div class="relative my-4 flex flex-col items-center">
-          <!-- Parlayan Kırmızı LED -->
-          <div class="relative">
-            <div
-              :class="[
-                'w-20 h-20 rounded-full flex items-center justify-center text-4xl transition-all duration-300',
-                isNightMode
-                  ? 'bg-rose-500 text-white shadow-2xl shadow-rose-500 ring-8 ring-rose-200 scale-110'
-                  : 'bg-slate-200 text-slate-400'
-              ]"
-            >
-              💡
+        <!-- KUTU 2: 2. KARAR VER -->
+        <div class="w-full max-w-[220px] bg-white rounded-[28px] border-[3px] border-slate-900 shadow-[0_5px_0_#0f172a] p-5 flex flex-col items-center text-center">
+          <!-- Başlık (Robot İkonu + Yazı) -->
+          <div class="flex items-center gap-2 mb-4">
+            <div class="w-7 h-7 rounded-full bg-blue-500 text-white flex items-center justify-center text-sm shadow-xs">
+              🤖
             </div>
-            <!-- Işık Hüzmeleri Efekti -->
-            <div
-              v-if="isNightMode"
-              class="absolute -inset-4 rounded-full border-4 border-dashed border-rose-300 animate-spin opacity-75"
-              style="animation-duration: 6s;"
-            ></div>
+            <h3 class="text-sm font-black text-slate-900">
+              2. Karar Ver
+            </h3>
           </div>
 
-          <!-- LED'in Konuşma Balonu -->
-          <div
-            :class="[
-              'mt-4 px-3.5 py-2 rounded-2xl text-xs font-black shadow-xs transition-all max-w-[220px]',
-              isNightMode
-                ? 'bg-rose-50 text-rose-900 border border-rose-200 scale-102'
-                : 'bg-slate-100 text-slate-500 border border-slate-200'
-            ]"
-          >
-            <span v-if="isNightMode">
-              "Karanlık oldu! Şimdi odanı aydınlatıyorum! ✨"
-            </span>
-            <span v-else>
-              "Hava aydınlık, enerjiyi saklamak için dinleniyorum. 😴"
-            </span>
+          <!-- Pembe Çizgi Film Beyin İllüstrasyonu -->
+          <div class="relative w-24 h-24 flex items-center justify-center mb-4">
+            <span class="text-6xl drop-shadow-md">🧠</span>
           </div>
+
+          <!-- Açıklama Metni -->
+          <p class="text-xs font-black text-slate-900 leading-snug">
+            {{ akisAdimi?.karar_ver || 'Hava karardı mı diye sor' }}
+          </p>
         </div>
 
-        <!-- Durum Rozeti -->
-        <div class="w-full">
-          <span
-            :class="[
-              'w-full py-2.5 rounded-xl font-black text-xs block',
-              isNightMode ? 'bg-rose-500 text-white shadow-xs' : 'bg-slate-100 text-slate-600'
-            ]"
-          >
-            {{ isNightMode ? 'LAMBA: YANDI (AÇIK) 🔥' : 'LAMBA: SÖNDÜ (KAPALI) ❄️' }}
-          </span>
+        <!-- İKİYE AYRILAN KARAR OKLARI & SONUÇ KUTULARI -->
+        <div class="flex flex-col gap-4 w-full max-w-[280px]">
+          
+          <!-- ÜST KOL: EVET (Karanlık) ➔ Lambayı Yak! -->
+          <div class="flex items-center gap-3">
+            <!-- EVET Rozeti (Yeşil Ok Rozeti) -->
+            <div class="relative shrink-0">
+              <div class="px-3.5 py-1.5 rounded-full bg-[#86efac] border-2 border-slate-900 shadow-[0_3px_0_#15803d] text-slate-950 font-black text-xs flex items-center gap-1">
+                <span>EVET</span>
+                <span class="text-[10px] font-bold opacity-80">(Karanlık)</span>
+                <span>➔</span>
+              </div>
+            </div>
+
+            <!-- Sonuç Kutusu 1 (Kırmızı Yanan LED) -->
+            <div class="flex-1 bg-white rounded-[24px] border-[3px] border-slate-900 shadow-[0_4px_0_#0f172a] p-3.5 flex flex-col items-center text-center">
+              <!-- Parlayan Kırmızı LED İllüstrasyonu -->
+              <div class="relative w-12 h-12 flex items-center justify-center mb-1">
+                <!-- Kırmızı Hüzme Parıltısı -->
+                <div class="absolute inset-0 bg-rose-400 rounded-full blur-md opacity-70 animate-pulse"></div>
+                <svg class="w-10 h-10 relative z-10" viewBox="0 0 100 100">
+                  <path d="M 35 60 C 35 25, 65 25, 65 60 Z" fill="#ef4444" stroke="#991b1b" stroke-width="3" />
+                  <ellipse cx="50" cy="60" rx="15" ry="4" fill="#b91c1c" />
+                  <line x1="42" y1="64" x2="42" y2="85" stroke="#94a3b8" stroke-width="4" />
+                  <line x1="58" y1="64" x2="58" y2="85" stroke="#94a3b8" stroke-width="4" />
+                </svg>
+              </div>
+              <strong class="text-xs font-black text-slate-900">
+                {{ akisAdimi?.evet_sonucu || 'Lambayı Yak!' }}
+              </strong>
+            </div>
+          </div>
+
+          <!-- ALT KOL: HAYIR (Aydınlık) ➔ Lambayı Söndür! -->
+          <div class="flex items-center gap-3">
+            <!-- HAYIR Rozeti (Kırmızı/Mercan Ok Rozeti) -->
+            <div class="relative shrink-0">
+              <div class="px-3.5 py-1.5 rounded-full bg-[#fca5a5] border-2 border-slate-900 shadow-[0_3px_0_#9f1239] text-slate-950 font-black text-xs flex items-center gap-1">
+                <span>HAYIR</span>
+                <span class="text-[10px] font-bold opacity-80">(Aydınlık)</span>
+                <span>➔</span>
+              </div>
+            </div>
+
+            <!-- Sonuç Kutusu 2 (Uyuyan Ay ve Sönük LED) -->
+            <div class="flex-1 bg-white rounded-[24px] border-[3px] border-slate-900 shadow-[0_4px_0_#0f172a] p-3.5 flex flex-col items-center text-center">
+              <div class="flex items-center justify-center gap-1 w-12 h-12 mb-1">
+                <span class="text-2xl">🌙</span>
+                <!-- Sönük Gri LED -->
+                <svg class="w-8 h-8" viewBox="0 0 100 100">
+                  <path d="M 35 60 C 35 25, 65 25, 65 60 Z" fill="#cbd5e1" stroke="#64748b" stroke-width="3" />
+                  <ellipse cx="50" cy="60" rx="15" ry="4" fill="#94a3b8" />
+                  <line x1="42" y1="64" x2="42" y2="85" stroke="#94a3b8" stroke-width="4" />
+                  <line x1="58" y1="64" x2="58" y2="85" stroke="#94a3b8" stroke-width="4" />
+                </svg>
+              </div>
+              <strong class="text-xs font-black text-slate-900">
+                {{ akisAdimi?.hayir_sonucu || 'Lambayı Söndür!' }}
+              </strong>
+            </div>
+          </div>
+
         </div>
 
       </div>
 
-    </div>
-
-    <!-- Alt Çubuk: Kodu Gör Modalı ve Çalıştırmaya Geç -->
-    <div class="flex flex-col sm:flex-row items-center justify-between gap-3 pt-4 border-t border-slate-200">
-      
-      <!-- Meraklı Çocuklar İçin Kodu Gör Butonu -->
-      <button
-        type="button"
-        @click="$emit('open-code-modal')"
-        class="px-4 py-2.5 rounded-2xl border-2 border-slate-300 bg-white hover:bg-slate-100 text-slate-700 font-extrabold text-xs transition flex items-center gap-2 cursor-pointer shadow-xs"
-      >
-        <span>&lt;/&gt;</span>
-        <span>Perde Arkasındaki Arduino Kodunu Gör!</span>
-      </button>
-
-      <!-- İleri / Çalıştır Butonu -->
-      <div class="flex items-center gap-2 w-full sm:w-auto">
+      <!-- ALT KONTROL ÇUBUĞU (Referans Görsel 2 ile Birebir Aynı Butonlar) -->
+      <div class="relative z-10 flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t-2 border-slate-100">
+        
+        <!-- Sol: Mor 3D '</> Perde Arkasındaki Kodu Gör' Butonu -->
         <button
           type="button"
-          @click="$emit('prev-page')"
-          class="px-4 py-3 rounded-2xl border-2 border-slate-200 text-slate-700 font-extrabold text-xs hover:bg-slate-100 transition cursor-pointer"
+          @click="$emit('open-code-modal')"
+          class="px-5 py-2.5 rounded-full bg-[#c084fc] hover:bg-[#b06cf5] active:translate-y-1 active:shadow-none border-2 border-slate-900 shadow-[0_4px_0_#7e22ce] text-slate-950 font-black text-xs transition cursor-pointer flex items-center gap-2"
         >
-          ◀ Devreye Geri Dön
+          <span>&lt;/&gt;</span>
+          <span>Perde Arkasındaki Kodu Gör</span>
         </button>
 
-        <button
-          type="button"
-          @click="$emit('next-page')"
-          class="flex-1 sm:flex-initial px-7 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm shadow-md transition flex items-center justify-center gap-2 cursor-pointer"
-        >
-          <span>Devreyi Çalıştırmaya Geç ➔</span>
-        </button>
+        <!-- Sağ: Konfeti & Yıldız Süsleri İçinde Yeşil 3D 'Çalıştırmaya Geç ➔' Butonu -->
+        <div class="relative">
+          <!-- Uçuşan Çizgi Film Konfeti Süsleri -->
+          <span class="absolute -top-3.5 -left-3 text-rose-500 text-xs select-none">🎉</span>
+          <span class="absolute -bottom-2 -left-2 text-amber-500 text-xs select-none">⭐</span>
+          <span class="absolute -top-3.5 -right-2 text-sky-500 text-xs select-none">✨</span>
+          <span class="absolute -bottom-2 -right-3 text-purple-500 text-xs select-none">🎊</span>
+
+          <button
+            type="button"
+            @click="$emit('next-page')"
+            class="px-8 py-3 rounded-full bg-[#4ade80] hover:bg-[#22c55e] active:translate-y-1 active:shadow-none border-2 border-slate-900 shadow-[0_4px_0_#15803d] text-slate-950 font-black text-sm transition cursor-pointer flex items-center gap-2"
+          >
+            <span>Çalıştırmaya Geç</span>
+            <span class="text-base">➔</span>
+          </button>
+        </div>
+
       </div>
 
     </div>
@@ -233,10 +190,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
 import type { AkisAdimi } from '../types/project';
 
-const props = defineProps<{
+defineProps<{
   akisAdimi?: AkisAdimi;
   arduinoKodu?: string;
 }>();
@@ -246,11 +202,4 @@ defineEmits<{
   (e: 'prev-page'): void;
   (e: 'open-code-modal'): void;
 }>();
-
-// Simülatör Işık Değeri (0 - 1000): 400 altı karanlık / gece kabul edilir
-const sensorValue = ref(250);
-
-const isNightMode = computed(() => {
-  return sensorValue.value < 400;
-});
 </script>

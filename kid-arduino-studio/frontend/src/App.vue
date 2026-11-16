@@ -1,53 +1,52 @@
 <template>
-  <div class="min-h-screen bg-slate-100 flex flex-col font-sans text-slate-800 antialiased selection:bg-indigo-500 selection:text-white">
+  <div class="min-h-screen doodle-bg flex flex-col font-sans text-slate-800 antialiased selection:bg-indigo-500 selection:text-white pb-6">
     
-    <!-- 1. ÜST NAVİGASYON (Sihirbaz Adımları, Malzeme Çantam, Ayarlar) -->
+    <!-- 1. ÜST NAVİGASYON (Referans Görsellerle Birebir Uyumlu Çizgi Film Barı) -->
     <TopNavigation
       :currentStep="currentStep"
       :inventoryCount="selectedInventory.length"
       :activeModelName="activeModelLabel"
       @go-step="currentStep = $event"
-      @open-inventory="isInventoryOpen = true"
-      @open-settings="isSettingsOpen = true"
+      @open-modal="isSettingsOpen = true"
     />
 
-    <!-- Hızlı Demo Projeler & Durum Çubuğu -->
-    <div class="bg-white border-b border-slate-200 px-4 py-2 shadow-2xs">
-      <div class="max-w-6xl mx-auto flex flex-wrap items-center justify-between gap-2 text-xs">
-        <div class="flex items-center gap-2">
-          <span class="font-black text-slate-900">Aktif Proje:</span>
-          <span class="font-black text-indigo-700 bg-indigo-50 px-2.5 py-0.5 rounded-lg border border-indigo-200">
-            {{ currentProject.proje_adi }}
-          </span>
-        </div>
+    <!-- Hızlı Demo Projeler ve Durum Barı -->
+    <div class="max-w-6xl mx-auto w-full px-4 pt-3 pb-1 flex flex-wrap items-center justify-between gap-2 text-xs">
+      <div class="flex items-center gap-2">
+        <span class="font-black text-slate-900 bg-white/80 px-2.5 py-1 rounded-xl border-2 border-slate-900 shadow-[0_2px_0_#0f172a]">
+          Aktif Proje:
+        </span>
+        <span class="font-black text-slate-900 bg-[#fde047] px-3 py-1 rounded-xl border-2 border-slate-900 shadow-[0_2px_0_#ca8a04]">
+          {{ currentProject.proje_adi }}
+        </span>
+      </div>
 
-        <div class="flex items-center gap-1.5 text-xs">
-          <span class="text-slate-400 font-bold hidden sm:inline">Hızlı Demolar:</span>
-          <button
-            type="button"
-            @click="loadMockProject('gece_lambasi')"
-            :class="[
-              'px-2.5 py-1 rounded-lg font-black transition cursor-pointer',
-              currentProjectId === 'gece_lambasi'
-                ? 'bg-indigo-600 text-white shadow-xs'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-            ]"
-          >
-            🌙 Gece Lambası
-          </button>
-          <button
-            type="button"
-            @click="loadMockProject('park_sensoru')"
-            :class="[
-              'px-2.5 py-1 rounded-lg font-black transition cursor-pointer',
-              currentProjectId === 'park_sensoru'
-                ? 'bg-indigo-600 text-white shadow-xs'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-            ]"
-          >
-            🦇 Park Sensörü
-          </button>
-        </div>
+      <div class="flex items-center gap-1.5 text-xs">
+        <span class="text-slate-800 font-black hidden sm:inline">Hızlı Demolar:</span>
+        <button
+          type="button"
+          @click="loadMockProject('gece_lambasi')"
+          :class="[
+            'px-3 py-1 rounded-xl font-black transition cursor-pointer border-2 border-slate-900',
+            currentProjectId === 'gece_lambasi'
+              ? 'bg-[#fbbf24] text-slate-900 shadow-[0_2px_0_#ca8a04]'
+              : 'bg-white text-slate-700 hover:bg-slate-50 shadow-[0_2px_0_#0f172a]'
+          ]"
+        >
+          🌙 Gece Lambası
+        </button>
+        <button
+          type="button"
+          @click="loadMockProject('park_sensoru')"
+          :class="[
+            'px-3 py-1 rounded-xl font-black transition cursor-pointer border-2 border-slate-900',
+            currentProjectId === 'park_sensoru'
+              ? 'bg-[#fbbf24] text-slate-900 shadow-[0_2px_0_#ca8a04]'
+              : 'bg-white text-slate-700 hover:bg-slate-50 shadow-[0_2px_0_#0f172a]'
+          ]"
+        >
+          🦇 Park Sensörü
+        </button>
       </div>
     </div>
 
@@ -71,7 +70,7 @@
         @prev-page="currentStep = 1"
       />
 
-      <!-- SAYFA 3: NASIL ÇALIŞACAK? -->
+      <!-- SAYFA 3: NASIL ÇALIŞACAK? (Referans Görsel 2 ile Birebir Aynı) -->
       <Page3NasilCalisacak
         v-else-if="currentStep === 3"
         :akisAdimi="currentProject.akis_adimlari"
@@ -94,25 +93,13 @@
 
     </main>
 
-    <!-- 3. MODALLAR VE ÇEKMECELER -->
-
-    <!-- Malzeme Çantam Çekmecesi -->
-    <InventoryDrawer
-      :isOpen="isInventoryOpen"
-      v-model="selectedInventory"
-      @close="isInventoryOpen = false"
-    />
-
-    <!-- AI ve Model Ayarları Modalı -->
-    <AISettingsModal
+    <!-- 3. BİRLEŞİK MODAL (Referans Görsel 1: Malzeme Çantası & AI Ayarları) -->
+    <CombinedSettingsModal
       :isOpen="isSettingsOpen"
-      :ollamaActive="modelsData?.ollama_active || false"
       :currentModel="selectedModel"
-      :localModels="modelsData?.local_models || []"
-      :cloudModels="modelsData?.cloud_models || []"
+      :inventory="selectedInventory"
       @close="isSettingsOpen = false"
-      @save="onSaveSettings"
-      @refresh-models="fetchModels"
+      @save="onSaveCombinedSettings"
     />
 
     <!-- Meraklı Çocuklar İçin Kod İnceleme Modalı -->
@@ -126,23 +113,23 @@
     <!-- Yükleme Başarı ve Kutlama Modalı -->
     <div
       v-if="uploadResult"
-      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs"
+      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs"
       @click.self="uploadResult = null"
     >
-      <div class="bg-white border-2 border-slate-200 rounded-3xl p-6 sm:p-8 max-w-sm w-full shadow-2xl text-center flex flex-col items-center">
-        <div class="text-5xl mb-2 animate-bounce">
+      <div class="bg-white border-[3px] border-slate-900 rounded-[32px] p-6 sm:p-8 max-w-sm w-full shadow-[0_12px_0_rgba(15,23,42,0.25)] text-center flex flex-col items-center">
+        <div class="text-6xl mb-2 animate-bounce">
           {{ uploadResult.success ? '🎉' : '🔌' }}
         </div>
-        <h3 class="text-lg font-black text-slate-900 mb-1">
+        <h3 class="text-xl font-black text-slate-900 mb-1">
           {{ uploadResult.success ? 'Harika Bir Başarı!' : 'Bağlantı Kontrolü' }}
         </h3>
-        <p class="text-xs text-slate-600 font-medium mb-5 leading-relaxed">
+        <p class="text-xs text-slate-600 font-bold mb-5 leading-relaxed">
           {{ uploadResult.message }}
         </p>
         <button
           type="button"
           @click="uploadResult = null"
-          class="w-full py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs shadow-md transition cursor-pointer"
+          class="w-full py-3.5 rounded-full bg-[#4ade80] hover:bg-[#22c55e] border-2 border-slate-900 shadow-[0_4px_0_#15803d] active:translate-y-1 active:shadow-none text-slate-950 font-black text-sm transition cursor-pointer"
         >
           Harika, Teşekkürler! 🚀
         </button>
@@ -158,8 +145,7 @@ import confetti from 'canvas-confetti';
 
 import type { ProjeTasarimi, PortInfo, UploadResult, ModelsResponse } from './types/project';
 import TopNavigation from './components/TopNavigation.vue';
-import InventoryDrawer from './components/InventoryDrawer.vue';
-import AISettingsModal from './components/AISettingsModal.vue';
+import CombinedSettingsModal from './components/CombinedSettingsModal.vue';
 import Page1HayalEt from './components/Page1HayalEt.vue';
 import Page2DevreyiKur from './components/Page2DevreyiKur.vue';
 import Page3NasilCalisacak from './components/Page3NasilCalisacak.vue';
@@ -234,10 +220,10 @@ const defaultProject: ProjeTasarimi = {
     }
   ],
   akis_adimlari: {
-    gozlemle: "LDR sensörü odanın ışık miktarını her saniye ölçer.",
-    karar_ver: "Oda karardı mı diye sorar (ışık < 400).",
-    evet_sonucu: "Evet! D13'e elektrik ver ve Gece Lambasını Yak! 💡",
-    hayir_sonucu: "Hayır. Lambayı söndür ve bekle! ☀️"
+    gozlemle: "Odadaki ışığı her an takip et",
+    karar_ver: "Hava karardı mı diye sor",
+    evet_sonucu: "Lambayı Yak!",
+    hayir_sonucu: "Lambayı Söndür!"
   },
   arduino_kodu: `// Kid Arduino Studio - Akıllı Gece Lambası
 const int LDR_PIN = A0;
@@ -263,7 +249,7 @@ void loop() {
 };
 
 // Durumlar
-const currentStep = ref(1);
+const currentStep = ref(3); // Varsayılan olarak doğrudan Referans Görsel 2'deki '3. Nasıl Çalışacak?' sekmesi açık gelsin
 const currentProject = ref<ProjeTasarimi>(defaultProject);
 const currentProjectId = ref('gece_lambasi');
 const selectedInventory = ref<string[]>([
@@ -272,7 +258,6 @@ const selectedInventory = ref<string[]>([
   'LED_RED',
   'RESISTOR_220',
   'LDR_SENSOR',
-  'HCSR04',
   'BUZZER'
 ]);
 
@@ -282,17 +267,16 @@ const availablePorts = ref<PortInfo[]>([]);
 
 const isGenerating = ref(false);
 const isUploading = ref(false);
-const isInventoryOpen = ref(false);
 const isSettingsOpen = ref(false);
 const isCodeModalOpen = ref(false);
 const uploadResult = ref<UploadResult | null>(null);
 
 const activeModelLabel = computed(() => {
-  if (selectedModel.value.includes('qwen')) return 'qwen2.5-coder';
-  if (selectedModel.value.includes('gemini')) return 'Gemini';
+  if (selectedModel.value.includes('qwen')) return 'Local Model (Ollama)';
+  if (selectedModel.value.includes('gemini')) return 'Google Gemini';
   if (selectedModel.value.includes('gpt')) return 'OpenAI';
   if (selectedModel.value.includes('claude')) return 'Claude';
-  return 'Ollama';
+  return 'AI Modeli';
 });
 
 async function fetchModels() {
@@ -300,9 +284,6 @@ async function fetchModels() {
     const res = await fetch('/api/models');
     if (res.ok) {
       modelsData.value = await res.json();
-      if (modelsData.value?.default_model && !selectedModel.value) {
-        selectedModel.value = modelsData.value.default_model;
-      }
     }
   } catch (err) {
     console.log('Model listesi alınırken hata:', err);
@@ -329,7 +310,6 @@ async function loadMockProject(projectId: string) {
     const res = await fetch(`/api/mock-projects/${projectId}`);
     if (res.ok) {
       currentProject.value = await res.json();
-      currentStep.value = 2;
       return;
     }
   } catch {
@@ -355,9 +335,8 @@ async function handleGenerateProject(prompt: string) {
     if (res.ok) {
       const data = await res.json();
       currentProject.value = data;
-      currentStep.value = 2; // Devreyi kur sayfasına yönlendir
+      currentStep.value = 2;
     } else {
-      // Hata durumunda akıllı fallback
       if (prompt.toLowerCase().includes('park') || prompt.toLowerCase().includes('mesafe')) {
         await loadMockProject('park_sensoru');
       } else {
@@ -418,8 +397,9 @@ async function handleUpload(port: string) {
   }
 }
 
-function onSaveSettings(payload: { model: string; apiKey?: string }) {
+function onSaveCombinedSettings(payload: { model: string; inventory: string[]; apiKey?: string }) {
   selectedModel.value = payload.model;
+  selectedInventory.value = [...payload.inventory];
 }
 
 onMounted(() => {
