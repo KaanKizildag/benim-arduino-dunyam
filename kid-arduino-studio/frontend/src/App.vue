@@ -1,17 +1,19 @@
 <template>
   <div class="h-screen max-h-screen doodle-bg flex flex-col font-sans text-slate-800 antialiased selection:bg-indigo-500 selection:text-white overflow-hidden">
     
-    <!-- 1. ÜST NAVİGASYON (Referans Görsel 1 & 2 ile Birebir Uyumlu Çizgi Film Barı) -->
+    <!-- 1. ÜST NAVİGASYON (Referans Görsel 1 & 2 ile Birebir Çizgi Film Barı) -->
     <TopNavigation
       :currentStep="currentStep"
       :inventoryCount="selectedInventory.length"
       :activeModelName="activeModelLabel"
       @go-step="currentStep = $event"
-      @open-modal="handleOpenModal"
+      @open-inventory="isInventoryOpen = true"
+      @open-ai-model="isAIModelOpen = true"
+      @open-settings="isSettingsOpen = true"
       @reset-or-close="handleResetProject"
     />
 
-    <!-- Hızlı Demo Projeler ve Durum Barı -->
+    <!-- Proje Başlığı & Hızlı Proje Değiştirici -->
     <div class="w-full px-3 py-1 bg-white/40 border-b border-slate-900/10 flex items-center justify-between text-xs shrink-0 select-none">
       <div class="flex items-center gap-1.5 overflow-hidden">
         <span class="font-black text-slate-900 bg-white/90 px-2 py-0.5 rounded-lg border border-slate-900 text-[10px] shadow-xs">
@@ -51,76 +53,67 @@
       </div>
     </div>
 
-    <!-- 2. ANA İÇERİK: 4'LÜ STÜDYO DASHBOARD VEYA 4 ADIMLI SAYFALAR -->
-    <main class="flex-1 w-full overflow-hidden flex flex-col relative">
+    <!-- 2. ANA İÇERİK: 4 AYRI EKRAN (TAM EKRAN KULLANIMI, BOŞLUKSUZ) -->
+    <main class="flex-1 w-full overflow-y-auto flex flex-col items-center justify-start relative">
       
-      <!-- ADIM 0: 4'LÜ STÜDYO DASHBOARD (Referans Görsel 1'deki Tam Ekran Panel Düzeni!) -->
-      <StudioDashboard
-        v-if="currentStep === 0"
-        :currentProject="currentProject"
-        :inventoryCount="selectedInventory.length"
+      <!-- SAYFA 1: HAYAL ET (Yapay Zeka ile Tasarla!) -->
+      <Page1HayalEt
+        v-if="currentStep === 1"
         :isGenerating="isGenerating"
-        :isUploading="isUploading"
+        :inventoryCount="selectedInventory.length"
         @generate="handleGenerateProject"
-        @upload="handleUpload('auto')"
-        @open-code-modal="isCodeModalOpen = true"
-        @open-modal="handleOpenModal"
       />
 
-      <!-- SAYFA 1: HAYAL ET (Odaklanmış Görünüm) -->
-      <div v-else-if="currentStep === 1" class="flex-1 overflow-y-auto p-3 flex flex-col items-center">
-        <Page1HayalEt
-          :isGenerating="isGenerating"
-          :inventoryCount="selectedInventory.length"
-          @generate="handleGenerateProject"
-        />
-      </div>
+      <!-- SAYFA 2: DEVREYİ KUR (Breadboard ve Arduino Uno Bağlantı Kılavuzu) -->
+      <Page2DevreyiKur
+        v-else-if="currentStep === 2"
+        :baglantiAdimlari="currentProject.baglanti_adimlari"
+        :gerekliParcalar="currentProject.gerekli_parcalar"
+        @next-page="currentStep = 3"
+        @prev-page="currentStep = 1"
+      />
 
-      <!-- SAYFA 2: DEVREYİ KUR (Odaklanmış Devre Tahtası) -->
-      <div v-else-if="currentStep === 2" class="flex-1 overflow-y-auto p-3 flex flex-col items-center">
-        <Page2DevreyiKur
-          :baglantiAdimlari="currentProject.baglanti_adimlari"
-          :gerekliParcalar="currentProject.gerekli_parcalar"
-          @next-page="currentStep = 3"
-          @prev-page="currentStep = 0"
-        />
-      </div>
+      <!-- SAYFA 3: NASIL ÇALIŞACAK? (Referans Görsel 2 ile Birebir Sebep-Sonuç Akış Şeması) -->
+      <Page3NasilCalisacak
+        v-else-if="currentStep === 3"
+        :akisAdimi="currentProject.akis_adimlari"
+        :arduinoKodu="currentProject.arduino_kodu"
+        @next-page="currentStep = 4"
+        @prev-page="currentStep = 2"
+        @open-code-modal="isCodeModalOpen = true"
+      />
 
-      <!-- SAYFA 3: NASIL ÇALIŞACAK? (Referans Görsel 2 ile Birebir Akış Şeması) -->
-      <div v-else-if="currentStep === 3" class="flex-1 overflow-y-auto p-3 flex flex-col items-center">
-        <Page3NasilCalisacak
-          :akisAdimi="currentProject.akis_adimlari"
-          :arduinoKodu="currentProject.arduino_kodu"
-          @next-page="currentStep = 4"
-          @prev-page="currentStep = 2"
-          @open-code-modal="isCodeModalOpen = true"
-        />
-      </div>
-
-      <!-- SAYFA 4: ÇALIŞTIR (Karta Yükleme ve Canlı Gösterge) -->
-      <div v-else-if="currentStep === 4" class="flex-1 overflow-y-auto p-3 flex flex-col items-center">
-        <Page4Calistir
-          :isUploading="isUploading"
-          :availablePorts="availablePorts"
-          :arduinoCode="currentProject.arduino_kodu"
-          @prev-page="currentStep = 3"
-          @refresh-ports="fetchPorts"
-          @upload="handleUpload"
-        />
-      </div>
+      <!-- SAYFA 4: ÇALIŞTIR (Devreyi Kurdum, Çalıştır! + Canlı Sensör İbresi) -->
+      <Page4Calistir
+        v-else-if="currentStep === 4"
+        :isUploading="isUploading"
+        :availablePorts="availablePorts"
+        :arduinoCode="currentProject.arduino_kodu"
+        @prev-page="currentStep = 3"
+        @refresh-ports="fetchPorts"
+        @upload="handleUpload"
+      />
 
     </main>
 
-    <!-- 3. BİRLEŞİK MODAL (Referans Görsel 1: Malzeme Çantası & AI Ayarları) -->
-    <CombinedSettingsModal
-      :isOpen="isSettingsOpen"
-      :currentModel="selectedModel"
-      :inventory="selectedInventory"
-      @close="isSettingsOpen = false"
-      @save="onSaveCombinedSettings"
+    <!-- 3. ÖZEL AYRI MODALLAR -->
+    <!-- A) MALZEME ÇANTASI MODALI (40+ Zengin Parça ve Yeni Parça Ekleme Desteği) -->
+    <MalzemeCantasiModal
+      :isOpen="isInventoryOpen"
+      :selectedInventory="selectedInventory"
+      @close="isInventoryOpen = false"
+      @save="onSaveInventory"
     />
 
-    <!-- Meraklı Çocuklar İçin Kod İnceleme Modalı -->
+    <!-- B) AI ASİSTAN MODELİ MODALI (Yerel Ollama, Gemini, OpenAI, Claude Seçimi) -->
+    <AIModelModal
+      :isOpen="isAIModelOpen"
+      :currentModel="selectedModel"
+      @close="isAIModelOpen = false"
+      @save="onSaveAIModel"
+    />
+
+    <!-- C) Meraklı Çocuklar İçin Kod İnceleme Modalı -->
     <CodePeekModal
       :isOpen="isCodeModalOpen"
       :code="currentProject.arduino_kodu"
@@ -128,7 +121,7 @@
       @close="isCodeModalOpen = false"
     />
 
-    <!-- Yükleme Başarı ve Kutlama Modalı -->
+    <!-- D) Yükleme Başarı ve Kutlama Modalı -->
     <div
       v-if="uploadResult"
       class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs"
@@ -163,15 +156,15 @@ import confetti from 'canvas-confetti';
 
 import type { ProjeTasarimi, PortInfo, UploadResult, ModelsResponse } from './types/project';
 import TopNavigation from './components/TopNavigation.vue';
-import StudioDashboard from './components/StudioDashboard.vue';
-import CombinedSettingsModal from './components/CombinedSettingsModal.vue';
+import MalzemeCantasiModal from './components/MalzemeCantasiModal.vue';
+import AIModelModal from './components/AIModelModal.vue';
 import Page1HayalEt from './components/Page1HayalEt.vue';
 import Page2DevreyiKur from './components/Page2DevreyiKur.vue';
 import Page3NasilCalisacak from './components/Page3NasilCalisacak.vue';
 import Page4Calistir from './components/Page4Calistir.vue';
 import CodePeekModal from './components/CodePeekModal.vue';
 
-// Varsayılan Proje (Akıllı Gece Lambası)
+// Varsayılan Proje (Akıllı Gece Bekçisi Lambası)
 const defaultProject: ProjeTasarimi = {
   proje_adi: "Akıllı Gece Bekçisi Lambası 🌙",
   karsilama_mesaji: "Harika bir fikir! Odan karardığında sihir gibi kendiliğinden yanan akıllı bir gece lambası yapıyoruz. 🌙✨",
@@ -254,9 +247,8 @@ void loop() {
 `
 };
 
-// Uygulama Durumları
-// 0: 4'lü Stüdyo Dashboard (Default!), 1: Hayal Et, 2: Devreyi Kur, 3: Nasıl Çalışacak?, 4: Çalıştır
-const currentStep = ref(0);
+// Uygulama Durumları: 1: Hayal Et, 2: Devreyi Kur, 3: Nasıl Çalışacak?, 4: Çalıştır
+const currentStep = ref(1);
 const currentProjectId = ref('gece_lambasi');
 const currentProject = ref<ProjeTasarimi>(defaultProject);
 
@@ -273,6 +265,8 @@ const selectedModel = ref('ollama/qwen2.5-coder:1.5b');
 const availableModels = ref<string[]>([]);
 const availablePorts = ref<PortInfo[]>([]);
 
+const isInventoryOpen = ref(false);
+const isAIModelOpen = ref(false);
 const isSettingsOpen = ref(false);
 const isCodeModalOpen = ref(false);
 const isGenerating = ref(false);
@@ -287,14 +281,18 @@ const activeModelLabel = computed(() => {
   return selectedModel.value;
 });
 
-function handleOpenModal(tab?: string) {
-  isSettingsOpen.value = true;
-}
-
 function handleResetProject() {
   currentProject.value = defaultProject;
   currentProjectId.value = 'gece_lambasi';
-  currentStep.value = 0;
+  currentStep.value = 1;
+}
+
+function onSaveInventory(updated: string[]) {
+  selectedInventory.value = [...updated];
+}
+
+function onSaveAIModel(payload: { model: string; apiKey?: string }) {
+  selectedModel.value = payload.model;
 }
 
 async function fetchModels() {
@@ -302,9 +300,9 @@ async function fetchModels() {
     const res = await fetch('/api/models');
     if (res.ok) {
       const data: ModelsResponse = await res.json();
-      availableModels.value = data.models || [];
-      if (data.default && !selectedModel.value) {
-        selectedModel.value = data.default;
+      availableModels.value = (data.local_models || []).concat(data.cloud_models || []).map(m => m.id);
+      if (data.default_model && !selectedModel.value) {
+        selectedModel.value = data.default_model;
       }
     }
   } catch {
@@ -357,15 +355,18 @@ async function handleGenerateProject(prompt: string) {
     if (res.ok) {
       const data = await res.json();
       currentProject.value = data;
+      currentStep.value = 2; // Devre kurulumuna geç
     } else {
       if (prompt.toLowerCase().includes('park') || prompt.toLowerCase().includes('mesafe')) {
         await loadMockProject('park_sensoru');
       } else {
         await loadMockProject('gece_lambasi');
       }
+      currentStep.value = 2;
     }
   } catch {
     await loadMockProject('gece_lambasi');
+    currentStep.value = 2;
   } finally {
     isGenerating.value = false;
   }
@@ -414,11 +415,6 @@ async function handleUpload(port: string) {
   } finally {
     isUploading.value = false;
   }
-}
-
-function onSaveCombinedSettings(payload: { model: string; inventory: string[]; apiKey?: string }) {
-  selectedModel.value = payload.model;
-  selectedInventory.value = [...payload.inventory];
 }
 
 onMounted(() => {

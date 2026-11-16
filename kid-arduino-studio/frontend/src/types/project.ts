@@ -35,7 +35,9 @@ export interface InventoryItem {
   icon: string;
   tag: string;
   color?: string;
-  category?: 'board' | 'output' | 'sensor' | 'passive';
+  category?: 'board' | 'light_display' | 'sensor' | 'actuator_sound' | 'passive' | 'custom' | string;
+  description?: string;
+  isCustom?: boolean;
 }
 
 export interface PortInfo {

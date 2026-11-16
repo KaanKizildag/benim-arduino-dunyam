@@ -1,104 +1,107 @@
 <template>
-  <div class="max-w-4xl mx-auto w-full flex flex-col items-center gap-6 py-4 sm:py-8 px-4">
+  <div class="w-full max-w-5xl mx-auto flex-1 flex flex-col items-center justify-between gap-4 py-3 sm:py-5 px-3 sm:px-6 select-none">
     
-    <!-- Sevimli Robot Karakteri & Karşılama Balonu -->
-    <div class="flex flex-col sm:flex-row items-center gap-5 text-center sm:text-left">
-      <!-- Hareketli Sevimli Robot -->
+    <!-- 1. SEVİMLİ KARŞILAMA VE DİYALOG (Referans Görsel 1 Sol Üst Sohbet Stili) -->
+    <div class="w-full flex flex-col sm:flex-row items-center gap-4 bg-white rounded-3xl p-4 sm:p-5 border-[3px] border-slate-900 shadow-[0_4px_0_#0f172a]">
+      <!-- Sevimli Robot Başlığı -->
       <div class="relative shrink-0 group">
-        <div class="w-24 h-24 sm:w-28 sm:h-28 rounded-3xl bg-gradient-to-tr from-indigo-500 via-sky-400 to-emerald-400 p-1 shadow-xl flex items-center justify-center transform group-hover:scale-105 transition-transform duration-300">
-          <div class="w-full h-full bg-slate-900 rounded-[22px] flex items-center justify-center text-5xl">
-            🤖
-          </div>
+        <div class="w-20 h-20 sm:w-24 sm:h-24 rounded-3xl bg-[#38bdf8] border-[3px] border-slate-900 shadow-[0_4px_0_#0284c7] flex items-center justify-center text-4xl sm:text-5xl group-hover:rotate-6 transition-transform">
+          🤖
         </div>
-        <!-- Yanıp Sönen Sevimli Anten Işığı -->
-        <span class="absolute -top-1.5 -right-1.5 flex h-5 w-5">
-          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-          <span class="relative inline-flex rounded-full h-5 w-5 bg-emerald-500 border-2 border-white"></span>
-        </span>
+        <span class="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-emerald-400 border-2 border-slate-900 animate-ping"></span>
+        <span class="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-emerald-500 border-2 border-slate-900"></span>
       </div>
 
       <!-- Konuşma Balonu -->
-      <div class="bg-white rounded-3xl p-5 border-2 border-slate-200 shadow-md relative max-w-lg">
-        <div class="hidden sm:block absolute top-10 -left-3 w-4 h-4 bg-white border-l-2 border-b-2 border-slate-200 transform rotate-45"></div>
-        <h2 class="text-base sm:text-lg font-black text-slate-900 mb-1">
-          Merhaba Geleceğin Mucidi! 👋
-        </h2>
-        <p class="text-xs sm:text-sm text-slate-600 font-medium leading-relaxed">
-          Ben senin akıllı robot arkadaşınım. Bugün Arduino ile ne yapmak istersin? Bana aklındaki hayali sadece kendi cümlelerinle anlat!
+      <div class="flex-1 text-center sm:text-left">
+        <div class="flex items-center justify-center sm:justify-start gap-2 mb-1">
+          <h2 class="text-base sm:text-xl font-black text-slate-900">
+            Merhaba Geleceğin Mucidi! 👋
+          </h2>
+          <span class="px-2 py-0.5 rounded-full bg-amber-200 border border-slate-900 text-[10px] font-black text-slate-900">
+            AI Asistanın Hazır
+          </span>
+        </div>
+        <p class="text-xs sm:text-sm text-slate-600 font-bold leading-relaxed">
+          Ben senin yapay zeka devre asistanınım. Arduino ile yapmak istediğin şeyi bana kendi kelimelerinle anlat! Örneğin: <em>"Odam kararınca sarı gece lambam yansın, aydınlanınca sönsün."</em>
         </p>
       </div>
     </div>
 
-    <!-- Büyük Doğal Dil Sohbet / Fikir Giriş Kutusu -->
-    <div class="w-full bg-white rounded-3xl p-4 sm:p-6 border-2 border-slate-200 shadow-lg flex flex-col gap-4">
+    <!-- 2. BÜYÜK FİKİR GİRİŞ KUTUSU VE SESLİ GİRİŞ -->
+    <div class="w-full bg-white rounded-3xl p-4 sm:p-6 border-[3px] border-slate-900 shadow-[0_5px_0_#0f172a] flex flex-col gap-3">
       <div class="relative">
         <textarea
           v-model="promptText"
           rows="3"
-          placeholder="Örn: Odam karardığında kendiliğinden yanan sevimli bir gece lambası yapmak istiyorum..."
-          class="w-full p-4 sm:p-5 rounded-2xl border-2 border-slate-200 bg-slate-50 focus:bg-white focus:border-indigo-600 text-slate-900 font-extrabold text-sm sm:text-base outline-none transition resize-none placeholder:text-slate-400 placeholder:font-bold"
+          placeholder="Hayalindeki projeyi buraya yaz... (Örn: Biri 15 cm yaklaştığında buzzer ötsün ve kırmızı LED yansın)"
+          class="w-full p-4 sm:p-5 rounded-2xl border-2 border-slate-900 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-sky-400 text-slate-900 font-black text-sm sm:text-base outline-none transition resize-none placeholder:text-slate-400 placeholder:font-bold"
           @keydown.enter.prevent="handleGenerate"
         ></textarea>
 
-        <!-- Mikrofona Basma Simülasyonu Butonu -->
+        <!-- Mikrofona Basma Simülasyonu -->
         <button
           type="button"
           @click="simulateVoiceInput"
-          class="absolute bottom-3 right-3 p-2.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-100 text-slate-600 transition shadow-xs cursor-pointer flex items-center gap-1.5 text-xs font-bold"
+          class="absolute bottom-3 right-3 px-3 py-1.5 rounded-xl border-2 border-slate-900 bg-white hover:bg-slate-100 text-slate-800 transition shadow-[0_2px_0_#0f172a] active:translate-y-0.5 active:shadow-none cursor-pointer flex items-center gap-1.5 text-xs font-black"
           title="Sesli Konuş (Simüle)"
         >
           <span>🎙️</span>
-          <span class="hidden sm:inline">Konuş</span>
+          <span class="hidden sm:inline">Sesle Söyle</span>
         </button>
       </div>
 
       <!-- İlham Verici Hızlı Fikir Kartları -->
       <div>
-        <span class="text-xs font-extrabold text-slate-400 uppercase tracking-wider block mb-2">
-          💡 İlham Verici Fikirler (Tıkla ve Dene!):
-        </span>
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-black text-slate-500 uppercase tracking-wider">
+            💡 İlham Verici Popüler Projeler (Tıkla ve Dene!):
+          </span>
+        </div>
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
           <button
             v-for="(idea, idx) in inspirationIdeas"
             :key="idx"
             type="button"
             @click="selectIdea(idea.text)"
-            class="p-3 rounded-2xl border-2 border-slate-200 bg-slate-50/70 hover:bg-white hover:border-indigo-400 hover:shadow-xs transition text-left flex items-start gap-2.5 cursor-pointer group"
+            class="p-3 rounded-2xl border-2 border-slate-900 bg-slate-50 hover:bg-amber-50 hover:shadow-[0_3px_0_#ca8a04] active:translate-y-0.5 transition text-left flex items-start gap-2.5 cursor-pointer group shadow-[0_2px_0_#0f172a]"
           >
-            <span class="text-2xl p-1 bg-white rounded-xl shadow-xs border border-slate-100 group-hover:scale-110 transition-transform">
+            <span class="text-2xl p-1 bg-white rounded-xl border border-slate-900 shadow-xs group-hover:scale-110 transition-transform">
               {{ idea.icon }}
             </span>
             <div class="min-w-0">
-              <strong class="text-xs font-black text-slate-900 block truncate group-hover:text-indigo-600">
+              <strong class="text-xs font-black text-slate-900 block truncate group-hover:text-amber-800">
                 {{ idea.title }}
               </strong>
-              <p class="text-[11px] text-slate-500 font-medium line-clamp-2 leading-snug">
+              <p class="text-[11px] text-slate-600 font-bold line-clamp-2 leading-snug mt-0.5">
                 {{ idea.text }}
               </p>
             </div>
           </button>
         </div>
       </div>
+    </div>
 
-      <!-- Alt Buton: Büyük Yanıp Sönen Devreyi Tasarla Butonu -->
-      <div class="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-slate-100">
-        <div class="text-xs text-slate-500 font-bold flex items-center gap-2">
-          <span>🎒 Çantandaki Parçalar:</span>
-          <span class="text-indigo-600 font-extrabold">{{ inventoryCount }} Parça Seçili</span>
-        </div>
-
-        <button
-          type="button"
-          @click="handleGenerate"
-          :disabled="isGenerating || !promptText.trim()"
-          class="w-full sm:w-auto px-8 py-4 rounded-2xl bg-emerald-500 hover:bg-emerald-600 text-white font-black text-base shadow-lg shadow-emerald-200 hover:shadow-emerald-300 transition-all transform active:scale-98 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2.5 cursor-pointer group animate-pulse hover:animate-none"
-        >
-          <span v-if="isGenerating" class="animate-spin text-xl">⚙️</span>
-          <span v-else class="text-xl group-hover:translate-x-1 transition-transform">✨</span>
-          <span>{{ isGenerating ? 'Devre Tasarlanıyor...' : 'Devreyi Tasarla! ➔' }}</span>
-        </button>
+    <!-- 3. ALT ÇUBUK: ÇANTA BİLGİSİ VE BÜYÜK TASARLA BUTONU -->
+    <div class="w-full bg-white rounded-2xl p-3 sm:p-4 border-[3px] border-slate-900 shadow-[0_4px_0_#0f172a] flex flex-col sm:flex-row items-center justify-between gap-3">
+      <div class="flex items-center gap-2 text-xs font-black text-slate-700">
+        <span class="text-lg">🎒</span>
+        <span>Malzeme Çantam:</span>
+        <span class="px-2 py-0.5 rounded-lg bg-emerald-100 text-emerald-900 border border-slate-900">
+          {{ inventoryCount }} Elektronik Parça Hazır
+        </span>
       </div>
 
+      <button
+        type="button"
+        @click="handleGenerate"
+        :disabled="isGenerating || !promptText.trim()"
+        class="w-full sm:w-auto px-10 py-3.5 rounded-2xl bg-[#4ade80] hover:bg-[#22c55e] border-2 border-slate-900 shadow-[0_5px_0_#15803d] active:translate-y-1 active:shadow-[0_1px_0_#15803d] text-slate-950 font-black text-sm sm:text-base transition cursor-pointer flex items-center justify-center gap-2 group disabled:opacity-40 disabled:cursor-not-allowed"
+      >
+        <span v-if="isGenerating" class="animate-spin text-xl">⚙️</span>
+        <span v-else class="text-xl group-hover:rotate-12 transition-transform">🚀</span>
+        <span>{{ isGenerating ? 'Yapay Zeka Devreyi Tasarlıyor...' : 'Devreyi ve Kodu Tasarla! ➔' }}</span>
+      </button>
     </div>
 
   </div>
@@ -107,7 +110,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 
-const props = defineProps<{
+defineProps<{
   isGenerating: boolean;
   inventoryCount: number;
 }>();
@@ -116,23 +119,23 @@ const emit = defineEmits<{
   (e: 'generate', prompt: string): void;
 }>();
 
-const promptText = ref('Odam karardığında kendiliğinden yanan sevimli bir akıllı gece lambası yapmak istiyorum!');
+const promptText = ref('Odam kararınca sarı gece lambam yansın, aydınlanınca sönsün.');
 
 const inspirationIdeas = [
   {
-    title: 'Akıllı Gece Lambası',
     icon: '🌙',
-    text: 'Odam karardığında sihir gibi kendiliğinden yanan bir gece lambası yapalım.'
+    title: 'Akıllı Gece Lambası',
+    text: 'Odam karardığında sarı gece lambam yansın, sabah olunca otomatik sönsün.'
   },
   {
-    title: 'Yarasa Park Sensörü',
     icon: '🦇',
-    text: 'Önüne bir engel yaklaştığında tıpkı bir araba gibi bip bip öten park alarmı.'
+    title: 'Park ve Mesafe Radarı',
+    text: 'Biri 15 cm yaklaştığında buzzer hızlıca biplemeye başlasın ve kırmızı LED yansın.'
   },
   {
-    title: 'Gizli Kasa Alarmı',
     icon: '🚨',
-    text: 'Çekmecem açılıp ışık gördüğünde veya butona basıldığında korna çalan alarm.'
+    title: 'Hırsız Alarm Sistemi',
+    text: 'Işık aniden kesilirse veya biri geçerse buzzer siren çalarak alarm versin.'
   }
 ];
 
@@ -141,11 +144,11 @@ function selectIdea(text: string) {
 }
 
 function simulateVoiceInput() {
-  promptText.value = 'Harekete duyarlı ve biri yaklaşınca ışık saçan eğlenceli bir robot gözü yap!';
+  promptText.value = 'Odam karardığında sevimli gece lambam yansın, aydınlanınca sönsün.';
 }
 
 function handleGenerate() {
-  if (!promptText.value.trim() || props.isGenerating) return;
+  if (!promptText.value.trim()) return;
   emit('generate', promptText.value.trim());
 }
 </script>
