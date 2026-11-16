@@ -1,0 +1,20 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer utilities {
+  /* Kablo içinden elektrik akımı akış animasyonu */
+  @keyframes wire-flow {
+    from {
+      stroke-dashoffset: 24;
+    }
+    to {
+      stroke-dashoffset: 0;
+    }
+  }
+
+  .wire-flowing {
+    stroke-dasharray: 8, 4;
+    animation: wire-flow 0.8s linear infinite;
+  }
+}
