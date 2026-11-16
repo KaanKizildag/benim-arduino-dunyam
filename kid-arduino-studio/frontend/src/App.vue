@@ -1,36 +1,37 @@
 <template>
-  <div class="min-h-screen doodle-bg flex flex-col font-sans text-slate-800 antialiased selection:bg-indigo-500 selection:text-white pb-6">
+  <div class="h-screen max-h-screen doodle-bg flex flex-col font-sans text-slate-800 antialiased selection:bg-indigo-500 selection:text-white overflow-hidden">
     
-    <!-- 1. ÜST NAVİGASYON (Referans Görsellerle Birebir Uyumlu Çizgi Film Barı) -->
+    <!-- 1. ÜST NAVİGASYON (Referans Görsel 1 & 2 ile Birebir Uyumlu Çizgi Film Barı) -->
     <TopNavigation
       :currentStep="currentStep"
       :inventoryCount="selectedInventory.length"
       :activeModelName="activeModelLabel"
       @go-step="currentStep = $event"
-      @open-modal="isSettingsOpen = true"
+      @open-modal="handleOpenModal"
+      @reset-or-close="handleResetProject"
     />
 
     <!-- Hızlı Demo Projeler ve Durum Barı -->
-    <div class="max-w-6xl mx-auto w-full px-4 pt-3 pb-1 flex flex-wrap items-center justify-between gap-2 text-xs">
-      <div class="flex items-center gap-2">
-        <span class="font-black text-slate-900 bg-white/80 px-2.5 py-1 rounded-xl border-2 border-slate-900 shadow-[0_2px_0_#0f172a]">
+    <div class="w-full px-3 py-1 bg-white/40 border-b border-slate-900/10 flex items-center justify-between text-xs shrink-0 select-none">
+      <div class="flex items-center gap-1.5 overflow-hidden">
+        <span class="font-black text-slate-900 bg-white/90 px-2 py-0.5 rounded-lg border border-slate-900 text-[10px] shadow-xs">
           Aktif Proje:
         </span>
-        <span class="font-black text-slate-900 bg-[#fde047] px-3 py-1 rounded-xl border-2 border-slate-900 shadow-[0_2px_0_#ca8a04]">
+        <span class="font-black text-slate-900 bg-[#fde047] px-2.5 py-0.5 rounded-lg border border-slate-900 shadow-xs text-[11px] truncate">
           {{ currentProject.proje_adi }}
         </span>
       </div>
 
       <div class="flex items-center gap-1.5 text-xs">
-        <span class="text-slate-800 font-black hidden sm:inline">Hızlı Demolar:</span>
+        <span class="text-slate-800 font-black text-[10px] hidden sm:inline">Hızlı Projeler:</span>
         <button
           type="button"
           @click="loadMockProject('gece_lambasi')"
           :class="[
-            'px-3 py-1 rounded-xl font-black transition cursor-pointer border-2 border-slate-900',
+            'px-2.5 py-0.5 rounded-lg font-black transition cursor-pointer border border-slate-900 text-[10px]',
             currentProjectId === 'gece_lambasi'
-              ? 'bg-[#fbbf24] text-slate-900 shadow-[0_2px_0_#ca8a04]'
-              : 'bg-white text-slate-700 hover:bg-slate-50 shadow-[0_2px_0_#0f172a]'
+              ? 'bg-[#fbbf24] text-slate-900 shadow-xs'
+              : 'bg-white text-slate-700 hover:bg-slate-50'
           ]"
         >
           🌙 Gece Lambası
@@ -39,10 +40,10 @@
           type="button"
           @click="loadMockProject('park_sensoru')"
           :class="[
-            'px-3 py-1 rounded-xl font-black transition cursor-pointer border-2 border-slate-900',
+            'px-2.5 py-0.5 rounded-lg font-black transition cursor-pointer border border-slate-900 text-[10px]',
             currentProjectId === 'park_sensoru'
-              ? 'bg-[#fbbf24] text-slate-900 shadow-[0_2px_0_#ca8a04]'
-              : 'bg-white text-slate-700 hover:bg-slate-50 shadow-[0_2px_0_#0f172a]'
+              ? 'bg-[#fbbf24] text-slate-900 shadow-xs'
+              : 'bg-white text-slate-700 hover:bg-slate-50'
           ]"
         >
           🦇 Park Sensörü
@@ -50,46 +51,63 @@
       </div>
     </div>
 
-    <!-- 2. ANA İÇERİK: 4 ADIMLI SİHİRBAZ SAYFALARI -->
-    <main class="flex-1 flex flex-col items-center justify-start w-full">
+    <!-- 2. ANA İÇERİK: 4'LÜ STÜDYO DASHBOARD VEYA 4 ADIMLI SAYFALAR -->
+    <main class="flex-1 w-full overflow-hidden flex flex-col relative">
       
-      <!-- SAYFA 1: HAYAL ET -->
-      <Page1HayalEt
-        v-if="currentStep === 1"
-        :isGenerating="isGenerating"
+      <!-- ADIM 0: 4'LÜ STÜDYO DASHBOARD (Referans Görsel 1'deki Tam Ekran Panel Düzeni!) -->
+      <StudioDashboard
+        v-if="currentStep === 0"
+        :currentProject="currentProject"
         :inventoryCount="selectedInventory.length"
-        @generate="handleGenerateProject"
-      />
-
-      <!-- SAYFA 2: DEVREYİ KUR -->
-      <Page2DevreyiKur
-        v-else-if="currentStep === 2"
-        :baglantiAdimlari="currentProject.baglanti_adimlari"
-        :gerekliParcalar="currentProject.gerekli_parcalar"
-        @next-page="currentStep = 3"
-        @prev-page="currentStep = 1"
-      />
-
-      <!-- SAYFA 3: NASIL ÇALIŞACAK? (Referans Görsel 2 ile Birebir Aynı) -->
-      <Page3NasilCalisacak
-        v-else-if="currentStep === 3"
-        :akisAdimi="currentProject.akis_adimlari"
-        :arduinoKodu="currentProject.arduino_kodu"
-        @next-page="currentStep = 4"
-        @prev-page="currentStep = 2"
-        @open-code-modal="isCodeModalOpen = true"
-      />
-
-      <!-- SAYFA 4: ÇALIŞTIR -->
-      <Page4Calistir
-        v-else-if="currentStep === 4"
+        :isGenerating="isGenerating"
         :isUploading="isUploading"
-        :availablePorts="availablePorts"
-        :arduinoCode="currentProject.arduino_kodu"
-        @prev-page="currentStep = 3"
-        @refresh-ports="fetchPorts"
-        @upload="handleUpload"
+        @generate="handleGenerateProject"
+        @upload="handleUpload('auto')"
+        @open-code-modal="isCodeModalOpen = true"
+        @open-modal="handleOpenModal"
       />
+
+      <!-- SAYFA 1: HAYAL ET (Odaklanmış Görünüm) -->
+      <div v-else-if="currentStep === 1" class="flex-1 overflow-y-auto p-3 flex flex-col items-center">
+        <Page1HayalEt
+          :isGenerating="isGenerating"
+          :inventoryCount="selectedInventory.length"
+          @generate="handleGenerateProject"
+        />
+      </div>
+
+      <!-- SAYFA 2: DEVREYİ KUR (Odaklanmış Devre Tahtası) -->
+      <div v-else-if="currentStep === 2" class="flex-1 overflow-y-auto p-3 flex flex-col items-center">
+        <Page2DevreyiKur
+          :baglantiAdimlari="currentProject.baglanti_adimlari"
+          :gerekliParcalar="currentProject.gerekli_parcalar"
+          @next-page="currentStep = 3"
+          @prev-page="currentStep = 0"
+        />
+      </div>
+
+      <!-- SAYFA 3: NASIL ÇALIŞACAK? (Referans Görsel 2 ile Birebir Akış Şeması) -->
+      <div v-else-if="currentStep === 3" class="flex-1 overflow-y-auto p-3 flex flex-col items-center">
+        <Page3NasilCalisacak
+          :akisAdimi="currentProject.akis_adimlari"
+          :arduinoKodu="currentProject.arduino_kodu"
+          @next-page="currentStep = 4"
+          @prev-page="currentStep = 2"
+          @open-code-modal="isCodeModalOpen = true"
+        />
+      </div>
+
+      <!-- SAYFA 4: ÇALIŞTIR (Karta Yükleme ve Canlı Gösterge) -->
+      <div v-else-if="currentStep === 4" class="flex-1 overflow-y-auto p-3 flex flex-col items-center">
+        <Page4Calistir
+          :isUploading="isUploading"
+          :availablePorts="availablePorts"
+          :arduinoCode="currentProject.arduino_kodu"
+          @prev-page="currentStep = 3"
+          @refresh-ports="fetchPorts"
+          @upload="handleUpload"
+        />
+      </div>
 
     </main>
 
@@ -145,6 +163,7 @@ import confetti from 'canvas-confetti';
 
 import type { ProjeTasarimi, PortInfo, UploadResult, ModelsResponse } from './types/project';
 import TopNavigation from './components/TopNavigation.vue';
+import StudioDashboard from './components/StudioDashboard.vue';
 import CombinedSettingsModal from './components/CombinedSettingsModal.vue';
 import Page1HayalEt from './components/Page1HayalEt.vue';
 import Page2DevreyiKur from './components/Page2DevreyiKur.vue';
@@ -160,63 +179,43 @@ const defaultProject: ProjeTasarimi = {
   baglanti_adimlari: [
     {
       adim_no: 1,
-      talimat: "Arduino 5V pininden Breadboard Kırmızı Güç Hattına (RAIL_5V) kablo tak.",
-      ipucu: "Bu hat tüm devreye 5 Volt pozitif enerji dağıtacak.",
-      kaynak_parca: "ARDUINO_UNO",
-      kaynak_pin: "5V",
+      talimat: "Kırmızı LED'in uzun bacağını (Artı / Anot) Breadboard'un sol bölgesindeki E5 deliğine tak.",
+      ipucu: "Uzun bacak elektriğin geldiği bacaktır! Kısa bacağı ise bir yanındaki E6 deliğine tak.",
+      kaynak_parca: "LED_RED",
+      kaynak_pin: "ANODE",
       hedef_parca: "BREADBOARD",
-      hedef_pin: "RAIL_5V",
-      kablo_rengi: "#EF4444"
+      hedef_pin: "E5",
+      kablo_rengi: "#ef4444"
     },
     {
       adim_no: 2,
-      talimat: "Arduino GND pininden Breadboard Mavi Eksi Hattına (RAIL_GND) kablo tak.",
-      ipucu: "GND devrenin elektrik dönüş (eksi) yoludur.",
-      kaynak_parca: "ARDUINO_UNO",
-      kaynak_pin: "GND",
+      talimat: "220 Ohm koruyucu direncin bir ucunu LED'in kısa bacağının olduğu C6 deliğine, diğer ucunu C10 deliğine tak.",
+      ipucu: "Direnç LED'imizin yanmasını ve patlamasını engeller, bir süper kahraman kalkanı gibidir! 🛡️ (Asla aynı sütuna iki bacağını birden takma).",
+      kaynak_parca: "RESISTOR_220",
+      kaynak_pin: "PIN_1",
       hedef_parca: "BREADBOARD",
-      hedef_pin: "RAIL_GND",
-      kablo_rengi: "#1F2937"
+      hedef_pin: "C6",
+      kablo_rengi: "#f59e0b"
     },
     {
       adim_no: 3,
-      talimat: "Kırmızı LED'in uzun bacağını E5'e, kısa bacağını E6'ya tak. Arduino D13 pininden A5 deliğine kablo çek.",
-      ipucu: "D13'ten gelen elektrik A5'e girer ve aynı 5. sütundaki E5 deliğinde duran LED uzun bacağına ulaşır!",
-      kaynak_parca: "ARDUINO_UNO",
-      kaynak_pin: "D13",
-      hedef_parca: "BREADBOARD",
-      hedef_pin: "A5",
-      kablo_rengi: "#EF4444"
+      talimat: "Mavi bir kabloyla direncin ucu olan A10 deliğinden Arduino'nun GND (Eksi) pinine bağlantı yap.",
+      ipucu: "GND devrenin toprağıdır, elektrik yolculuğunu burada tamamlar.",
+      kaynak_parca: "BREADBOARD",
+      kaynak_pin: "A10",
+      hedef_parca: "ARDUINO_UNO",
+      hedef_pin: "GND",
+      kablo_rengi: "#3b82f6"
     },
     {
       adim_no: 4,
-      talimat: "220Ω Direncin bir ucunu C6'ya (LED kısa bacağı ile aynı sütuna!), diğer ucunu RAIL_GND hattına bağla.",
-      ipucu: "6. sütundaki LED kısa bacağı ile direnç breadboard içinde buluşur ve eksi hatta güvenle akar.",
+      talimat: "Kırmızı bir kablo al. Bir ucunu LED'in uzun bacağının olduğu A5 deliğine, diğer ucunu Arduino'nun D13 sinyal pinine tak.",
+      ipucu: "D13 pini Arduino'nun LED'e 'Şimdi Işık Ver!' emrini gönderdiği sihirli kapıdır.",
       kaynak_parca: "BREADBOARD",
-      kaynak_pin: "C6",
-      hedef_parca: "BREADBOARD",
-      hedef_pin: "RAIL_GND",
-      kablo_rengi: "#3B82F6"
-    },
-    {
-      adim_no: 5,
-      talimat: "LDR ışık sensörünün bacaklarını E12 ve E14 deliklerine tak. Arduino A0 pininden A12 deliğine kablo çek.",
-      ipucu: "A0 bilgi pini, odanın aydınlık seviyesini 12. sütundan dinler.",
-      kaynak_parca: "ARDUINO_UNO",
-      kaynak_pin: "A0",
-      hedef_parca: "BREADBOARD",
-      hedef_pin: "A12",
-      kablo_rengi: "#10B981"
-    },
-    {
-      adim_no: 6,
-      talimat: "LDR'ın diğer bacağı için A14 deliğinden Kırmızı Güç Hattına (RAIL_5V) kablo tak.",
-      ipucu: "LDR çalışmak için 5 Volt elektrik enerjisine ihtiyaç duyar.",
-      kaynak_parca: "BREADBOARD",
-      kaynak_pin: "A14",
-      hedef_parca: "BREADBOARD",
-      hedef_pin: "RAIL_5V",
-      kablo_rengi: "#EF4444"
+      kaynak_pin: "A5",
+      hedef_parca: "ARDUINO_UNO",
+      hedef_pin: "D13",
+      kablo_rengi: "#ef4444"
     }
   ],
   akis_adimlari: {
@@ -225,33 +224,42 @@ const defaultProject: ProjeTasarimi = {
     evet_sonucu: "Lambayı Yak!",
     hayir_sonucu: "Lambayı Söndür!"
   },
-  arduino_kodu: `// Kid Arduino Studio - Akıllı Gece Lambası
-const int LDR_PIN = A0;
-const int LED_PIN = 13;
-const int KARANLIK_ESIK = 400;
+  arduino_kodu: `// === Akıllı Gece Lambası Projesi ===
+// Çocuk Dostu Arduino Kodu 🚀
+
+const int ledPin = 13;      // Kırmızı LED D13 pinine takılı
+const int sensorPin = A0;   // LDR Işık sensörü A0 analog pinine takılı
+const int esikDegeri = 400; // Karanlık eşik değeri
 
 void setup() {
-  pinMode(LED_PIN, OUTPUT);
+  pinMode(ledPin, OUTPUT);
   Serial.begin(9600);
+  Serial.println("Gece Bekcisi Baslatildi! 🌙");
 }
 
 void loop() {
-  int isik = analogRead(LDR_PIN);
-  if (isik < KARANLIK_ESIK) {
-    digitalWrite(LED_PIN, HIGH);
+  int isikSeviyesi = analogRead(sensorPin);
+  Serial.print("Oda Isik Seviyesi: ");
+  Serial.println(isikSeviyesi);
+
+  // EĞER hava karardıysa (ışık azaldıysa):
+  if (isikSeviyesi < esikDegeri) {
+    digitalWrite(ledPin, HIGH); // LED'i Yak 💡
   } else {
-    digitalWrite(LED_PIN, LOW);
+    digitalWrite(ledPin, LOW);  // LED'i Söndür 🌑
   }
-  delay(100);
+
+  delay(200); // 0.2 saniye bekle
 }
-`,
-  guvenlik_notu: "LED'in zarar görmemesi için araya mutlaka 220 Ohm direnç koyduk."
+`
 };
 
-// Durumlar
-const currentStep = ref(3); // Varsayılan olarak doğrudan Referans Görsel 2'deki '3. Nasıl Çalışacak?' sekmesi açık gelsin
-const currentProject = ref<ProjeTasarimi>(defaultProject);
+// Uygulama Durumları
+// 0: 4'lü Stüdyo Dashboard (Default!), 1: Hayal Et, 2: Devreyi Kur, 3: Nasıl Çalışacak?, 4: Çalıştır
+const currentStep = ref(0);
 const currentProjectId = ref('gece_lambasi');
+const currentProject = ref<ProjeTasarimi>(defaultProject);
+
 const selectedInventory = ref<string[]>([
   'ARDUINO_UNO',
   'BREADBOARD',
@@ -262,31 +270,45 @@ const selectedInventory = ref<string[]>([
 ]);
 
 const selectedModel = ref('ollama/qwen2.5-coder:1.5b');
-const modelsData = ref<ModelsResponse | null>(null);
+const availableModels = ref<string[]>([]);
 const availablePorts = ref<PortInfo[]>([]);
 
-const isGenerating = ref(false);
-const isUploading = ref(false);
 const isSettingsOpen = ref(false);
 const isCodeModalOpen = ref(false);
+const isGenerating = ref(false);
+const isUploading = ref(false);
 const uploadResult = ref<UploadResult | null>(null);
 
 const activeModelLabel = computed(() => {
-  if (selectedModel.value.includes('qwen')) return 'Local Model (Ollama)';
+  if (selectedModel.value.includes('ollama') || selectedModel.value === 'local') return 'Yerel Robot (Ollama)';
   if (selectedModel.value.includes('gemini')) return 'Google Gemini';
-  if (selectedModel.value.includes('gpt')) return 'OpenAI';
-  if (selectedModel.value.includes('claude')) return 'Claude';
-  return 'AI Modeli';
+  if (selectedModel.value.includes('gpt')) return 'OpenAI GPT';
+  if (selectedModel.value.includes('claude')) return 'Anthropic Claude';
+  return selectedModel.value;
 });
+
+function handleOpenModal(tab?: string) {
+  isSettingsOpen.value = true;
+}
+
+function handleResetProject() {
+  currentProject.value = defaultProject;
+  currentProjectId.value = 'gece_lambasi';
+  currentStep.value = 0;
+}
 
 async function fetchModels() {
   try {
     const res = await fetch('/api/models');
     if (res.ok) {
-      modelsData.value = await res.json();
+      const data: ModelsResponse = await res.json();
+      availableModels.value = data.models || [];
+      if (data.default && !selectedModel.value) {
+        selectedModel.value = data.default;
+      }
     }
-  } catch (err) {
-    console.log('Model listesi alınırken hata:', err);
+  } catch {
+    availableModels.value = ['ollama/qwen2.5-coder:1.5b', 'gemini/gemini-2.0-flash', 'gpt-4o-mini', 'claude-3-5-haiku-20241022'];
   }
 }
 
@@ -335,18 +357,15 @@ async function handleGenerateProject(prompt: string) {
     if (res.ok) {
       const data = await res.json();
       currentProject.value = data;
-      currentStep.value = 2;
     } else {
       if (prompt.toLowerCase().includes('park') || prompt.toLowerCase().includes('mesafe')) {
         await loadMockProject('park_sensoru');
       } else {
         await loadMockProject('gece_lambasi');
       }
-      currentStep.value = 2;
     }
   } catch {
     await loadMockProject('gece_lambasi');
-    currentStep.value = 2;
   } finally {
     isGenerating.value = false;
   }
