@@ -300,7 +300,7 @@ import CircuitViewer from './components/CircuitViewer.vue';
 import LogicCards from './components/LogicCards.vue';
 import CodePeekModal from './components/CodePeekModal.vue';
 
-// Varsayılan Proje
+// Varsayılan Proje (Breadboard Fizik Kurallarına Uygun)
 const defaultProject: ProjectResponse = {
   proje_adi: "Akıllı Gece Bekçisi Lambası",
   karsilama_mesaji: "Odan karardığında kendiliğinden yanan akıllı bir gece lambası yapıyoruz. 🌙✨",
@@ -308,43 +308,51 @@ const defaultProject: ProjectResponse = {
   baglanti_adimlari: [
     {
       adim_no: 1,
-      talimat: "Kırmızı LED'in uzun bacağını Arduino D13 pinine tak.",
-      ipucu: "Uzun bacak her zaman artı (+) enerjidir.",
-      kaynak: { parca: "LED_RED", pin: "ANODE" },
-      hedef: { parca: "ARDUINO_UNO", pin: "D13" },
+      talimat: "Arduino 5V pininden Breadboard Kırmızı Güç Hattına (RAIL_5V) kablo tak.",
+      ipucu: "Bu hat tüm devreye 5 Volt pozitif enerji dağıtacak.",
+      kaynak: { parca: "ARDUINO_UNO", pin: "5V" },
+      hedef: { parca: "BREADBOARD", pin: "RAIL_5V" },
       kablo_rengi: "#EF4444"
     },
     {
       adim_no: 2,
-      talimat: "Kırmızı LED'in kısa bacağını 220 Ohm direncin bir ucuna bağla.",
-      ipucu: "Direnç LED'in zarar görmesini önler.",
-      kaynak: { parca: "LED_RED", pin: "CATHODE" },
-      hedef: { parca: "RESISTOR_220", pin: "PIN1" },
-      kablo_rengi: "#3B82F6"
-    },
-    {
-      adim_no: 3,
-      talimat: "Direncin diğer boş ucunu Arduino GND (Toprak) pinine bağla.",
-      ipucu: "GND, devrenin eksi (-) dönüş yoludur.",
-      kaynak: { parca: "RESISTOR_220", pin: "PIN2" },
-      hedef: { parca: "ARDUINO_UNO", pin: "GND" },
+      talimat: "Arduino GND pininden Breadboard Mavi Eksi Hattına (RAIL_GND) kablo tak.",
+      ipucu: "GND devrenin elektrik dönüş (eksi) yoludur.",
+      kaynak: { parca: "ARDUINO_UNO", pin: "GND" },
+      hedef: { parca: "BREADBOARD", pin: "RAIL_GND" },
       kablo_rengi: "#1F2937"
     },
     {
-      adim_no: 4,
-      talimat: "LDR ışık sensörünün bir bacağını Arduino 5V pinine bağla.",
-      ipucu: "LDR çalışmak için 5 Volt enerjiye ihtiyaç duyar.",
-      kaynak: { parca: "LDR_SENSOR", pin: "PIN1" },
-      hedef: { parca: "ARDUINO_UNO", pin: "5V" },
+      adim_no: 3,
+      talimat: "Kırmızı LED'in uzun bacağını E5'e, kısa bacağını E6'ya tak. Arduino D13 pininden A5 deliğine kablo çek.",
+      ipucu: "D13'ten gelen elektrik A5'e girer ve aynı 5. sütundaki E5 deliğinde duran LED uzun bacağına ulaşır!",
+      kaynak: { parca: "ARDUINO_UNO", pin: "D13" },
+      hedef: { parca: "BREADBOARD", pin: "A5" },
       kablo_rengi: "#EF4444"
     },
     {
+      adim_no: 4,
+      talimat: "220Ω Direncin bir ucunu C6'ya (LED kısa bacağı ile aynı sütuna!), diğer ucunu RAIL_GND hattına bağla.",
+      ipucu: "6. sütundaki LED kısa bacağı ile direnç breadboard içinde buluşur ve eksi hatta güvenle akar.",
+      kaynak: { parca: "BREADBOARD", pin: "C6" },
+      hedef: { parca: "BREADBOARD", pin: "RAIL_GND" },
+      kablo_rengi: "#3B82F6"
+    },
+    {
       adim_no: 5,
-      talimat: "LDR sensörünün diğer bacağını Arduino A0 bilgi pinine tak.",
-      ipucu: "A0 pini, odanın ışık seviyesini sayı olarak dinler.",
-      kaynak: { parca: "LDR_SENSOR", pin: "PIN2" },
-      hedef: { parca: "ARDUINO_UNO", pin: "A0" },
+      talimat: "LDR ışık sensörünün bacaklarını E12 ve E14 deliklerine tak. Arduino A0 pininden A12 deliğine kablo çek.",
+      ipucu: "A0 bilgi pini, odanın aydınlık seviyesini 12. sütundan dinler.",
+      kaynak: { parca: "ARDUINO_UNO", pin: "A0" },
+      hedef: { parca: "BREADBOARD", pin: "A12" },
       kablo_rengi: "#10B981"
+    },
+    {
+      adim_no: 6,
+      talimat: "LDR'ın diğer bacağı için A14 deliğinden Kırmızı Güç Hattına (RAIL_5V) kablo tak.",
+      ipucu: "LDR çalışmak için 5 Volt elektrik enerjisine ihtiyaç duyar.",
+      kaynak: { parca: "BREADBOARD", pin: "A14" },
+      hedef: { parca: "BREADBOARD", pin: "RAIL_5V" },
+      kablo_rengi: "#EF4444"
     }
   ],
   dusunme_adimlari: [
