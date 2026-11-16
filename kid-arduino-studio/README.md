@@ -1,13 +1,13 @@
-# 🤖 KidArduino Studio (MVP)
-### Çocuklar İçin AI Destekli Görsel Arduino Stüdyosu
+# 🤖 KidArduino Studio
+### Çocuklar İçin AI Destekli Görsel Arduino Stüdyosu (Yerel/Local & Bulut)
 
-8-14 yaş arası çocuklar için tasarlanmış; geleneksel C++ kodlama ve karmaşık devre şemaları yerine **doğal dil ile proje üretmeye, adım adım görsel devre kurmaya ve algoritmik düşünmeye** odaklanan web tabanlı bir Arduino IDE prototipidir.
+8-14 yaş arası çocuklar için tasarlanmış; geleneksel C++ kodlama ve karmaşık devre şemaları yerine **doğal dil ile proje üretmeye, adım adım görsel devre kurmaya ve interaktif sebep-sonuç algoritmalarına** odaklanan web tabanlı bir Arduino IDE'dir.
 
-Çocuk ne yapmak istediğini Türkçe yazar (*"Odam kararınca gece lambam yansın, biri yaklaşınca buzzer ötsün"*). Yapay zeka; çocuğun elindeki parçalara göre devreyi tasarlar, adım adım kabloları nereye takacağını interaktif ve animasyonlu bir SVG şema üzerinde gösterir, kodun mantığını Türkçe düşünme kartlarıyla açıklar ve tek tıkla USB üzerinden Arduino Uno'ya yükler.
+Çocuk ne yapmak istediğini Türkçe anlatır (*"Odam kararınca gece lambam yansın, biri yaklaşınca buzzer ötsün"*). Yapay zeka; çocuğun elindeki parçalara göre devreyi tasarlar, 30 sütunluk standart breadboard üzerinde adım adım kabloları nereye takacağını parıldayan pinlerle gösterir, bloksuz sebep-sonuç simülatörüyle mantığını çalıştırır ve tek tıkla Arduino Uno'ya yükler!
 
 ---
 
-## 🚀 3 Komutta Hızlı Başlatma
+## 🚀 3 Adımda Hızlı Başlatma
 
 ### 1. Backend Servisini Başlatın (Python 3.11+):
 ```bash
@@ -25,32 +25,54 @@ npm run dev
 ```
 *(Arayüz `http://localhost:5173` adresinde açılacaktır.)*
 
-### 3. Tarayıcınızda Açın ve Eğlenin:
+### 3. Tarayıcınızda Açın:
 Tarayıcınızdan **`http://localhost:5173`** adresine gidin.
-> 💡 **Not:** Herhangi bir API anahtarı girmeseniz dahi sistem içerisinde 2 adet zengin **Demo Proje** ("Akıllı Gece Lambası" ve "Park Sensörü") ve tam çalışan simülasyon modu mevcuttur!
+
+> 💡 **Not:** API anahtarı veya Ollama bağlantısı olmasa bile sistem içerisinde 2 adet tam teşekküllü **Demo Proje** ("Akıllı Gece Lambası" ve "Park Sensörü") ve canlı simülatör mevcuttur!
 
 ---
 
-## 🛠️ Arduino CLI Yapılandırması (Karta Tek Tıkla Yükleme İçin)
+## 🧠 Yapay Zeka Seçenekleri (Yerel ve Bulut)
 
-Gerçek bir Arduino Uno kartına USB üzerinden kod yüklemek için `arduino-cli` aracının kurulu olması önerilir. *(Kurulu değilse sistem otomatik olarak sanal simülasyon modunda doğrular).*
+KidArduino Studio, **LiteLLM** entegrasyonu sayesinde hem tamamen çevrimdışı (offline) hem de bulut modelleriyle çalışır:
 
-### Windows Kurulumu:
-1. `arduino-cli` en son sürümünü [resmi GitHub sayfasından](https://github.com/arduino/arduino-cli/releases) indirin veya komut satırından kurun:
-   ```powershell
-   winget install Arduino.ArduinoCLI
-   # veya scoop ile:
-   scoop install arduino-cli
+### A. Yerel Model ile İnternetsiz Çalışma (Ollama):
+1. Bilgisayarınızda [Ollama](https://ollama.ai)'yı kurun ve çalıştırın:
+   ```bash
+   ollama run qwen2.5-coder:1.5b
+   # veya
+   ollama run qwen2.5-coder:7b
    ```
-2. Arduino AVR çekirdeğini yükleyin:
-   ```powershell
-   arduino-cli core update-index
-   arduino-cli core install arduino:avr
-   ```
-3. Bağlı kartları test edin:
-   ```powershell
-   arduino-cli board list
-   ```
+2. Arayüzde sağ üstteki **Ayarlar (⚙️)** butonuna tıklayın. Sistem `http://127.0.0.1:11434` üzerindeki kurulu yerel modellerinizi otomatik algılayacaktır.
+
+### B. Bulut Modelleri ile Çalışma (Gemini, OpenAI, Claude):
+- Ayarlar penceresinden **Google Gemini (2.0 Flash / 1.5 Flash)**, **OpenAI (GPT-4o / GPT-4o Mini)** veya **Anthropic Claude (3.5 Haiku / Sonnet)** seçip API anahtarınızı girebilirsiniz. Anahtarınız tarayıcınızda yerel olarak saklanır.
+- Alternatif olarak `backend/.env` dosyasına anahtarınızı kaydedebilirsiniz:
+  ```env
+  GEMINI_API_KEY=AIzaSy...
+  OPENAI_API_KEY=sk-...
+  ANTHROPIC_API_KEY=sk-ant-...
+  ```
+
+---
+
+## ⚡ 4 Adımlı Mucit Serüveni
+
+1. **💭 1. Hayal Et (Page1HayalEt):** Akıllı robot arkadaşına hayalindeki projeyi yaz veya mikrofona söyle. İlham verici fikir kartlarıyla tek tıkla fikir edin.
+2. **🔌 2. Devreyi Kur (Page2DevreyiKur):** 30 sütunluk standart Breadboard ve kristal netliğinde Arduino Uno. Adım adım sadece aktif kablo ve hedef delikler parıldar, "Buraya Tak" ve "Tıkla" balonları yolu gösterir.
+3. **🧠 3. Nasıl Çalışacak? (Page3NasilCalisacak):** Karmaşık bloklar yok! Sol tarafta sensörü gündüz/gece kaydır, ortada pelerinli robot beynin karar verişini gör, sağda ise lambanın anlık olarak yanışını canlı izle!
+4. **🚀 4. Çalıştır (Page4Calistir):** Tek tıkla Arduino Uno'ya yükle! Yükleme bitince patlayan konfetilerle kutla, alttaki dairesel güneş/ay göstergesiyle Arduino'dan gelen canlı sensör verilerini takip et!
+
+---
+
+## 🛠️ Breadboard Fizik Kuralları & Doğrulayıcı
+
+Sistem, yapay zekanın hayal ürünü kısa devreler yapmasını engellemek için arka planda çalışan **deterministik bir Python doğrulayıcısına** (`validate_breadboard_steps`) sahiptir:
+- **Dikey İletkenlik:** A-B-C-D-E delikleri dikey olarak birbirine bağlıdır. Bir bileşenin iki bacağı asla aynı sütuna takılamaz.
+- **Hazır Bölge Slotları:**
+  - **Sol Bölge (Sütun 1–8):** LED'ler ve Dirençler
+  - **Orta Bölge (Sütun 10–18):** Buton ve Sensörler (LDR, HC-SR04)
+  - **Sağ Bölge (Sütun 20–28):** Buzzer ve Motorlar
 
 ---
 
@@ -59,37 +81,28 @@ Gerçek bir Arduino Uno kartına USB üzerinden kod yüklemek için `arduino-cli
 ```text
 kid-arduino-studio/
 ├── backend/
-│   ├── main.py              # FastAPI endpoints (/api/generate-project, /api/upload, /api/ports, /api/serial-stream)
-│   ├── ai_service.py        # LLM sistem promptu, Pydantic JSON şema ve Self-Healing mekanizması
-│   ├── arduino_service.py   # arduino-cli port algılama, geçici dizinde derleme ve karta yükleme
+│   ├── main.py              # FastAPI endpoints (/api/generate-project, /api/models, /api/upload, /api/ports, /api/serial-events)
+│   ├── ai_service.py        # LiteLLM tabanlı multi-provider (Ollama, Gemini, OpenAI, Claude) JSON üretici
+│   ├── schemas.py           # Ortak Pydantic v2 veri modelleri (ProjeTasarimi, BaglantiAdimi, AkisAdimi)
+│   ├── arduino_service.py   # arduino-cli port algılama, derleme, yükleme ve self-healing döngüsü
 │   ├── requirements.txt
-│   └── .env.example         # GEMINI_API_KEY, OPENAI_API_KEY, LLM_MODEL
+│   └── .env.example         # GEMINI_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY, OLLAMA_API_BASE
 ├── frontend/
 │   ├── src/
 │   │   ├── components/
-│   │   │   ├── InventorySelector.vue  # Çocuğun elindeki parçaları seçtiği renkli çekmece
-│   │   │   ├── PromptInput.vue        # Hayalindeki projeyi yazdığı sohbet kutusu ve hazır fikir hapları
-│   │   │   ├── CircuitViewer.vue      # Adım adım ilerleyen, pinleri parlatan Bezier kablo SVG motoru
-│   │   │   ├── LogicCards.vue         # C++ kodu yerine "EĞER / SÜREKLİ / YAP" Türkçe mantık kartları
-│   │   │   └── CodePeekModal.vue      # Meraklı çocuklar için "Perde Arkasındaki Gerçek Kod" penceresi
+│   │   │   ├── TopNavigation.vue       # Logo, 1-2-3-4 Adım sekmeleri, Malzeme Çantam ve Ayarlar butonları
+│   │   │   ├── InventoryDrawer.vue     # Açılır 'Malzeme Çantam' çekmecesi
+│   │   │   ├── AISettingsModal.vue     # 'Ayarlar' / AI Model Seçici (Ollama, Gemini, OpenAI, Claude)
+│   │   │   ├── Page1HayalEt.vue        # Fikir alma, robot asistan sohbeti ve 'Devreyi Tasarla' tetiği
+│   │   │   ├── Page2DevreyiKur.vue     # SVG Arduino + 30 Sütunlu Breadboard, adım adım parlayan pinler
+│   │   │   ├── Page3NasilCalisacak.vue # Sebep -> Sonuç akışı ve canlı interaktif simülatör
+│   │   │   ├── Page4Calistir.vue       # Karta yükleme, başarı/konfeti animasyonları, canlı dairesel sensör ibresi
+│   │   │   └── CodePeekModal.vue       # Meraklı çocuklar için '</> Perde Arkasındaki Kodu Gör' penceresi
 │   │   ├── constants/
-│   │   │   └── pinCoordinates.ts      # Arduino Uno ve tüm sensörlerin (x, y) pin koordinat haritası
+│   │   │   └── pinCoordinates.ts       # 30 sütun Breadboard ve Arduino Uno pin koordinat haritası
 │   │   ├── types/
-│   │   │   └── project.ts             # Backend JSON şeması ile birebir uyumlu TypeScript arayüzleri
-│   │   ├── App.vue                    # Ana uygulama ve üst kontrol barı
-│   │   └── main.ts
-│   ├── package.json
-│   ├── tailwind.config.js
-│   └── vite.config.ts
+│   │   │   └── project.ts              # Backend JSON şeması ile birebir uyumlu TypeScript arayüzleri
+│   │   └── App.vue
+│   └── package.json
 └── README.md
 ```
-
----
-
-## 🌟 Öne Çıkan Özellikler
-
-- **🔌 İnteraktif SVG Devre Motoru:** Çocuğun kafasını karıştırmamak için kablolar adım adım gösterilir. Aktif kablo parlak renk ve akan akım animasyonu (`stroke-dasharray`) ile canlandırılır, kaynak ve hedef pinlerde radar puls halkaları yanıp söner.
-- **🧠 Algoritmik Düşünme Kartları:** C++ sentaksı yerine `BASLANGIC (Hazırlık Yap)`, `DONGU (Sürekli Kontrol Et)`, `EGER (Karar Verme Anı)` ve `YAP (Harekete Geç)` blokları ile programlamanın mantığı öğretilir.
-- **🧙‍♂️ Self-Healing (Otomatik Kod İyileştirme):** `arduino-cli` derleme hatası verirse, backend hatayı yakalayıp yapay zekaya göndererek kodu arka planda otomatik onarır.
-- **🎉 Tek Tıkla Yükleme & Konfeti:** Yeşil "Devreyi Kurdum, Çalıştır! 🚀" butonu ile USB portu otomatik bulunur, derlenir ve yükleme bitince ekranda konfeti patlatılır.
-- **📡 Canlı Arduino Gözlemcisi:** SSE (Server-Sent Events) üzerinden Arduino'dan gelen seri mesajları web ekranında canlı bir bilgi şeridi olarak gösterir.
