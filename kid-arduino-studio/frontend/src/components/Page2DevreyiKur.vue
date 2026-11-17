@@ -99,8 +99,23 @@
         <span class="px-2.5 py-1 rounded-lg bg-slate-800/90 border border-slate-700 text-[11px] font-black tracking-wide text-amber-300">
           ⚡ NETLIST AUTO-LAYOUT MOTORU • Çakışmasız deterministik yerleşim
         </span>
-        <span class="px-2 py-0.5 rounded-lg bg-emerald-950/80 border border-emerald-500/50 text-[10px] font-bold text-emerald-300">
+        <span
+          v-if="layoutResult.errors.length === 0"
+          class="px-2 py-0.5 rounded-lg bg-emerald-950/80 border border-emerald-500/50 text-[10px] font-bold text-emerald-300"
+        >
           ✓ Elektriksel Doğrulama: 0 Kısa Devre, 0 Çakışma
+        </span>
+        <span
+          v-else
+          class="px-2 py-0.5 rounded-lg bg-rose-950/90 border border-rose-500/70 text-[10px] font-bold text-rose-300"
+        >
+          ⚠️ {{ layoutResult.errors[0] }}
+        </span>
+        <span
+          v-if="layoutResult.warnings.length > 0"
+          class="px-2 py-0.5 rounded-lg bg-amber-950/85 border border-amber-500/50 text-[10px] font-bold text-amber-200"
+        >
+          ℹ️ {{ layoutResult.warnings.length }} otomatik düzeltme uygulandı
         </span>
       </div>
 
@@ -163,7 +178,8 @@
         <div
           v-for="comp in offBoardComponents"
           :key="comp.id"
-          class="absolute left-[810px] top-[140px] z-10 p-2 rounded-2xl bg-slate-800/40 border border-slate-700/60 shadow-lg scale-[0.75] origin-top-left"
+          class="absolute z-10 p-2 rounded-2xl bg-slate-800/40 border border-slate-700/60 shadow-lg scale-[0.75] origin-top-left"
+          :style="{ left: `${comp.left}px`, top: `${comp.top}px` }"
         >
           <component :is="comp.type" v-bind="comp.props"></component>
           <div class="text-[10px] font-black text-center text-cyan-300 mt-1 pointer-events-none">
@@ -305,7 +321,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import type { CircuitNetlist, BaglantiAdimi } from '../types/project';
 import { compileNetlistToBreadboard, type AutoLayoutResult } from '../circuit';
 import { scenarioA, scenarioA_discrete, scenarioB, scenarioC } from '../circuit/testScenarios';
@@ -352,6 +368,10 @@ const layoutResult = computed<AutoLayoutResult>(() => {
     uno: { x: 48, y: 108 },
     bb: { x: 448, y: 108 }
   });
+});
+
+watch(activeNetlist, () => {
+  currentStepIndex.value = 0;
 });
 
 const mountedComponents = computed(() => {

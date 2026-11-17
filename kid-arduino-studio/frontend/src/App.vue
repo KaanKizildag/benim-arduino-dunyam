@@ -304,7 +304,10 @@ async function fetchModels() {
     if (res.ok) {
       const data: ModelsResponse = await res.json();
       availableModels.value = (data.local_models || []).concat(data.cloud_models || []).map(m => m.id);
-      if (data.default_model && !selectedModel.value) {
+      if (
+        data.default_model &&
+        (!selectedModel.value || !availableModels.value.includes(selectedModel.value))
+      ) {
         selectedModel.value = data.default_model;
       }
     }

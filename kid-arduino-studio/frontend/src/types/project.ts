@@ -10,6 +10,18 @@ export interface BaglantiAdimi {
   hedef_parca: string;
   hedef_pin: string;
   kablo_rengi: string;
+  kaynak?: { parca: string; pin: string };
+  hedef?: { parca: string; pin: string };
+}
+
+export type DusunmeTipi = 'gozlemle' | 'karar_ver' | 'eylem' | string;
+
+export interface DusunmeAdimi {
+  adim_no?: number;
+  tip: DusunmeTipi;
+  baslik: string;
+  aciklama: string;
+  ikon?: string;
 }
 
 export interface AkisAdimi {
@@ -28,6 +40,7 @@ export interface ProjeTasarimi {
   akis_adimlari: AkisAdimi;
   arduino_kodu: string;
   guvenlik_notu?: string;
+  uyarilar?: string[];
 }
 
 // Geriye dönük uyumluluk takma adı (alias)

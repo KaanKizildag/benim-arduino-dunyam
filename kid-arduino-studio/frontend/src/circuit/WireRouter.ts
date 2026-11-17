@@ -1,12 +1,19 @@
 /**
- * Katman 3: Akıllı Kablo Yönlendirme (WireRouter)
+ * Katman 3: Akıllı ve Net Tabanlı Kablo Yönlendirme (WireRouter)
  * 1. Bus Routing (Tek GND / 5V Ana Hat + Kısa Jumper'lar)
- * 2. Deterministik Lane Allocation (Şerit Yönlendirme ile Sıfır Çakışma)
- * 3. Yumuşatılmış Bezier & Kanal SVG Yolları
+ * 2. Net (Düğüm) Başına Minimum Kablo Üretimi (Union-Find net'leri üzerinden)
+ * 3. Simetrik from/to ve Off-Board Modül Desteği (bn.0 hatası olmadan boş ray sütunu tahsisi)
+ * 4. Çocuk dostu Türkçe ve delik isimli açıklamalar ("Arduino D13 → 4C deliği")
  */
 
-import type { CircuitNetlist, NetlistConnection, AllocatedPin, RoutedWire } from './types';
-import { getHoleCoords } from './BreadboardAllocator';
+import type {
+  CircuitNetlist,
+  AllocatedPin,
+  RoutedWire,
+  ElectricalNet
+} from './types';
+import { getHoleCoords, getStripKey, BREADBOARD_GEOMETRY } from './BreadboardAllocator';
+import { normalizeNetlist } from './normalizeNetlist';
 
 export interface RouterOffsets {
   uno: { x: number; y: number };
@@ -69,22 +76,26 @@ export class WireRouter {
 
   public route(
     netlist: CircuitNetlist,
-    allocatedPins: Record<string, AllocatedPin>
+    allocatedPins: Record<string, AllocatedPin>,
+    providedNets?: ElectricalNet[]
   ): RoutedWire[] {
     const wires: RoutedWire[] = [];
-    const connections = netlist.connections || [];
+    const nets = providedNets ?? normalizeNetlist(netlist).nets;
 
-    let hasGndBus = false;
-    let has5vBus = false;
-
-    // Bağlantılarda GND veya 5V var mı kontrol et
-    for (const conn of connections) {
-      if (conn.to === 'GND' || conn.from === 'GND') hasGndBus = true;
-      if (conn.to === '5V' || conn.from === '5V') has5vBus = true;
+    const compLabelMap = new Map<string, string>();
+    for (const c of netlist.components || []) {
+      compLabelMap.set(c.id, c.label || c.id);
     }
+
+    const hasGndBus = nets.some(n => n.powerRail === 'GND');
+    const has5vBus = nets.some(n => n.powerRail === '5V');
+
+    const usedGndRailCols = new Set<number>();
+    const used5vRailCols = new Set<number>();
 
     // 1. ANA GÜÇ RAYI HATLARI (Arduino ➔ Breadboard)
     if (hasGndBus) {
+      usedGndRailCols.add(1);
       const unoGnd = this.getUnoPinPos('GND.2');
       const bbGnd = this.getBreadboardPos(1, 'bp.-');
       wires.push({
@@ -93,13 +104,14 @@ export class WireRouter {
         to: { part: 'breadboard', pin: 'bn.1', holeName: 'bn.1', ...bbGnd },
         color: '#1e293b',
         laneIndex: 0,
-        path: this.buildPowerBusPath(unoGnd, bbGnd, 'bottom'),
+        path: this.buildPowerBusPath(unoGnd, bbGnd),
         isPowerBus: true,
-        description: "Arduino GND ➔ Breadboard Mavi Eksi (-) Rayı Ana Hattı"
+        description: 'Arduino GND → Breadboard Mavi Eksi (-) Rayı (bn.1 deliği)'
       });
     }
 
     if (has5vBus) {
+      used5vRailCols.add(1);
       const uno5v = this.getUnoPinPos('5V');
       const bb5v = this.getBreadboardPos(1, 'bp.+');
       wires.push({
@@ -108,126 +120,316 @@ export class WireRouter {
         to: { part: 'breadboard', pin: 'bp.1', holeName: 'bp.1', ...bb5v },
         color: '#ef4444',
         laneIndex: 1,
-        path: this.buildPowerBusPath(uno5v, bb5v, 'bottom'),
+        path: this.buildPowerBusPath(uno5v, bb5v),
         isPowerBus: true,
-        description: "Arduino 5V ➔ Breadboard Kırmızı Artı (+) Rayı Ana Hattı"
+        description: 'Arduino 5V → Breadboard Kırmızı Artı (+) Rayı (bp.1 deliği)'
       });
     }
 
-    // 2. DEVRE BAĞLANTILARI
+    // 2. NET BAZLI DEVRE BAĞLANTILARI
     let topLaneIndex = 0;
-    let bottomLaneIndex = 2; // 0 ve 1 güç raylarına ait
+    let bottomLaneIndex = 2;
+    let wireCounter = 1;
 
-    for (let i = 0; i < connections.length; i++) {
-      const conn = connections[i];
-      const fromStr = conn.from;
-      const toStr = conn.to;
+    for (const net of nets) {
+      const resolvedPins = net.componentPins
+        .map(key => ({ key, pin: allocatedPins[key] }))
+        .filter((item): item is { key: string; pin: AllocatedPin } => Boolean(item.pin));
 
-      // Durum A: GND'ye Bağlantı (Kısa Jumper ile en yakın alt ray deliğine)
-      if (toStr === 'GND') {
-        const pin = allocatedPins[fromStr];
-        if (pin) {
-          const col = pin.col;
-          const fromCoords = this.getBreadboardHolePos(col, pin.row);
-          // Doğrudan aynı sütunun alt eksi rayına (bn.col) kısa kavisli jumper
-          const toCoords = this.getBreadboardPos(col, 'bp.-');
-          wires.push({
-            id: `wire-${i}`,
-            from: { part: fromStr, pin: pin.pinName, holeName: pin.holeName, ...fromCoords },
-            to: { part: 'breadboard', pin: `bn.${col}`, holeName: `bn.${col}`, ...toCoords },
-            color: conn.color || '#1e293b',
-            laneIndex: 0,
-            path: this.buildLocalJumperPath(fromCoords, toCoords, 'down'),
-            isPowerBus: false,
-            description: `${fromStr} ➔ GND Rayı (Sütun ${col})`
-          });
+      const bbPins = resolvedPins.filter(
+        item => item.pin.col >= 1 && item.pin.col <= BREADBOARD_GEOMETRY.maxCols && item.pin.row !== 'offboard'
+      );
+      const offBoardPins = resolvedPins.filter(
+        item => item.pin.col === 0 || item.pin.row === 'offboard'
+      );
+
+      // Breadboard üzerindeki pinleri fiziksel sütun şeridine (col + yarı) göre grupla
+      const stripMap = new Map<string, Array<{ key: string; pin: AllocatedPin }>>();
+      for (const item of bbPins) {
+        const sKey = getStripKey(item.pin.col, item.pin.row);
+        if (!stripMap.has(sKey)) {
+          stripMap.set(sKey, []);
         }
-        continue;
+        stripMap.get(sKey)!.push(item);
       }
 
-      // Durum B: 5V'a Bağlantı (Kısa Jumper ile en yakın alt artı ray deliğine)
-      if (toStr === '5V') {
-        const pin = allocatedPins[fromStr];
-        if (pin) {
-          const col = pin.col;
-          const fromCoords = this.getBreadboardHolePos(col, pin.row);
-          const toCoords = this.getBreadboardPos(col, 'bp.+');
-          wires.push({
-            id: `wire-${i}`,
-            from: { part: fromStr, pin: pin.pinName, holeName: pin.holeName, ...fromCoords },
-            to: { part: 'breadboard', pin: `bp.${col}`, holeName: `bp.${col}`, ...toCoords },
-            color: conn.color || '#ef4444',
-            laneIndex: 0,
-            path: this.buildLocalJumperPath(fromCoords, toCoords, 'down'),
-            isPowerBus: false,
-            description: `${fromStr} ➔ 5V Güç Rayı (Sütun ${col})`
-          });
-        }
-        continue;
+      const stripGroups = Array.from(stripMap.entries()).map(([stripKey, items]) => ({
+        stripKey,
+        items,
+        repPin: items[0].pin,
+        label: items
+          .map(i => compLabelMap.get(i.pin.componentId) || i.pin.componentId)
+          .filter((v, idx, arr) => arr.indexOf(v) === idx)
+          .join(' & ')
+      }));
+
+      // 2a. Aynı net içinde birden fazla breadboard sütun şeridi varsa birbirine jumper ile bağla
+      for (let i = 0; i < stripGroups.length - 1; i++) {
+        const groupA = stripGroups[i];
+        const groupB = stripGroups[i + 1];
+        const pinA = groupA.repPin;
+        const pinB = groupB.repPin;
+        const fromCoords = this.getPinCanvasPos(pinA);
+        const toCoords = this.getPinCanvasPos(pinB);
+
+        wires.push({
+          id: `wire-${wireCounter++}`,
+          from: {
+            part: `${pinA.componentId}.${pinA.pinName}`,
+            pin: pinA.pinName,
+            holeName: pinA.holeName,
+            ...fromCoords
+          },
+          to: {
+            part: `${pinB.componentId}.${pinB.pinName}`,
+            pin: pinB.pinName,
+            holeName: pinB.holeName,
+            ...toCoords
+          },
+          color: net.color || '#f59e0b',
+          laneIndex: topLaneIndex++,
+          path: this.buildLocalJumperPath(fromCoords, toCoords, 'up'),
+          isPowerBus: false,
+          description: `${pinA.holeName} deliği (${groupA.label}) → ${pinB.holeName} deliği (${groupB.label})`
+        });
       }
 
-      // Durum C: İki Eleman Arası İç Bağlantı (Aynı sütunsa kablo çekme!)
-      const pinA = allocatedPins[fromStr];
-      const pinB = allocatedPins[toStr];
-      if (pinA && pinB) {
-        if (pinA.col === pinB.col) {
-          // Zaten breadboard dikey sütunu üzerinden bağlı! Kablo gerekmez.
-          continue;
-        } else {
-          // Farklı sütunlardaysa yatay jumper kablosu
-          const fromCoords = this.getBreadboardHolePos(pinA.col, pinA.row);
-          const toCoords = this.getBreadboardHolePos(pinB.col, pinB.row);
+      // 2b. Off-board pinleri varsa ve aynı net'te breadboard sütunu da varsa birbirine bağla
+      if (offBoardPins.length > 0 && stripGroups.length > 0) {
+        const targetGroup = stripGroups[0];
+        const targetPin = targetGroup.repPin;
+        const toCoords = this.getPinCanvasPos(targetPin);
+
+        for (const offItem of offBoardPins) {
+          const offPin = offItem.pin;
+          const fromCoords = this.getPinCanvasPos(offPin);
+          const offLabel = compLabelMap.get(offPin.componentId) || offPin.componentId;
+          const lane = bottomLaneIndex++;
+
           wires.push({
-            id: `wire-${i}`,
-            from: { part: fromStr, pin: pinA.pinName, holeName: pinA.holeName, ...fromCoords },
-            to: { part: toStr, pin: pinB.pinName, holeName: pinB.holeName, ...toCoords },
-            color: conn.color || '#f59e0b',
+            id: `wire-${wireCounter++}`,
+            from: {
+              part: `${offPin.componentId}.${offPin.pinName}`,
+              pin: offPin.pinName,
+              holeName: offPin.holeName,
+              ...fromCoords
+            },
+            to: {
+              part: `${targetPin.componentId}.${targetPin.pinName}`,
+              pin: targetPin.pinName,
+              holeName: targetPin.holeName,
+              ...toCoords
+            },
+            color: net.color || '#10b981',
+            laneIndex: lane,
+            path: this.buildHighwayPath(fromCoords, toCoords, 'bottom', lane),
+            isPowerBus: false,
+            description: `${offLabel} (${offPin.pinName}) → ${targetPin.holeName} deliği (${targetGroup.label})`
+          });
+        }
+      } else if (offBoardPins.length > 1) {
+        // Sadece off-board pinleri kendi aralarında bağlıysa zincirle
+        for (let i = 0; i < offBoardPins.length - 1; i++) {
+          const pinA = offBoardPins[i].pin;
+          const pinB = offBoardPins[i + 1].pin;
+          const fromCoords = this.getPinCanvasPos(pinA);
+          const toCoords = this.getPinCanvasPos(pinB);
+          const labelA = compLabelMap.get(pinA.componentId) || pinA.componentId;
+          const labelB = compLabelMap.get(pinB.componentId) || pinB.componentId;
+
+          wires.push({
+            id: `wire-${wireCounter++}`,
+            from: {
+              part: `${pinA.componentId}.${pinA.pinName}`,
+              pin: pinA.pinName,
+              holeName: pinA.holeName,
+              ...fromCoords
+            },
+            to: {
+              part: `${pinB.componentId}.${pinB.pinName}`,
+              pin: pinB.pinName,
+              holeName: pinB.holeName,
+              ...toCoords
+            },
+            color: net.color || '#10b981',
             laneIndex: topLaneIndex++,
             path: this.buildLocalJumperPath(fromCoords, toCoords, 'up'),
             isPowerBus: false,
-            description: `${pinA.holeName} ➔ ${pinB.holeName}`
+            description: `${labelA} (${pinA.pinName}) → ${labelB} (${pinB.pinName})`
           });
         }
-        continue;
       }
 
-      // Durum D: Arduino ➔ Breadboard Sinyal Kablosu (Örn: uno.D13 -> r1.1)
-      let unoPinName: string | null = null;
-      let targetPin: AllocatedPin | null = null;
-
-      if (fromStr.startsWith('uno.')) {
-        unoPinName = fromStr.replace('uno.', '');
-        targetPin = allocatedPins[toStr] || null;
-      } else if (toStr.startsWith('uno.')) {
-        unoPinName = toStr.replace('uno.', '');
-        targetPin = allocatedPins[fromStr] || null;
-      }
-
-      if (unoPinName && targetPin) {
+      // 2c. Arduino Sinyal Bağlantıları (Net başına 1 kablo ile temsilci noktaya bağlanır)
+      for (const unoPinFull of net.arduinoPins) {
+        const unoPinName = unoPinFull.replace(/^uno\./i, '');
         const unoPos = this.getUnoPinPos(unoPinName);
-        const targetRow = targetPin.row || 'A';
-        const bbPos = this.getBreadboardHolePos(targetPin.col, targetRow);
-
         const isTopHeader = unoPos.y < this.offsets.uno.y + 100;
         const lane = isTopHeader ? topLaneIndex++ : bottomLaneIndex++;
-        const path = isTopHeader
-          ? this.buildHighwayPath(unoPos, bbPos, 'top', lane)
-          : this.buildHighwayPath(unoPos, bbPos, 'bottom', lane);
+        const side = isTopHeader ? 'top' : 'bottom';
 
-        wires.push({
-          id: `wire-${i}`,
-          from: { part: 'uno', pin: unoPinName, ...unoPos },
-          to: { part: targetPin.componentId, pin: targetPin.pinName, holeName: `${targetPin.col}${targetRow}`, ...bbPos },
-          color: conn.color || '#3b82f6',
-          laneIndex: lane,
-          path,
-          isPowerBus: false,
-          description: `Arduino ${unoPinName} ➔ Breadboard ${targetPin.col}${targetRow} (${targetPin.componentId})`
-        });
+        if (stripGroups.length > 0) {
+          const targetGroup = stripGroups[0];
+          const targetPin = targetGroup.repPin;
+          const bbPos = this.getPinCanvasPos(targetPin);
+          const path = this.buildHighwayPath(unoPos, bbPos, side, lane);
+
+          wires.push({
+            id: `wire-${wireCounter++}`,
+            from: { part: 'uno', pin: unoPinName, ...unoPos },
+            to: {
+              part: `${targetPin.componentId}.${targetPin.pinName}`,
+              pin: targetPin.pinName,
+              holeName: targetPin.holeName,
+              ...bbPos
+            },
+            color: net.color || '#3b82f6',
+            laneIndex: lane,
+            path,
+            isPowerBus: false,
+            description: `Arduino ${unoPinName} → ${targetPin.holeName} deliği (${targetGroup.label})`
+          });
+        } else if (offBoardPins.length > 0) {
+          const targetPin = offBoardPins[0].pin;
+          const offPos = this.getPinCanvasPos(targetPin);
+          const offLabel = compLabelMap.get(targetPin.componentId) || targetPin.componentId;
+          const path = this.buildHighwayPath(unoPos, offPos, side, lane);
+
+          wires.push({
+            id: `wire-${wireCounter++}`,
+            from: { part: 'uno', pin: unoPinName, ...unoPos },
+            to: {
+              part: `${targetPin.componentId}.${targetPin.pinName}`,
+              pin: targetPin.pinName,
+              holeName: targetPin.holeName,
+              ...offPos
+            },
+            color: net.color || '#3b82f6',
+            laneIndex: lane,
+            path,
+            isPowerBus: false,
+            description: `Arduino ${unoPinName} → ${offLabel} (${targetPin.pinName} pini)`
+          });
+        }
+      }
+
+      // 2d. Güç Rayı (GND / 5V) Bağlantısı
+      if (net.powerRail === 'GND' || net.powerRail === '5V') {
+        const isGnd = net.powerRail === 'GND';
+        const usedSet = isGnd ? usedGndRailCols : used5vRailCols;
+        const railRow = isGnd ? 'bp.-' : 'bp.+';
+        const railPrefix = isGnd ? 'bn' : 'bp';
+        const defaultColor = isGnd ? '#1e293b' : '#ef4444';
+        const railTitle = isGnd ? 'Mavi GND (-) Rayı' : 'Kırmızı 5V (+) Rayı';
+
+        if (stripGroups.length > 0) {
+          const targetGroup = stripGroups[stripGroups.length - 1];
+          const pin = targetGroup.repPin;
+          const railCol = this.pickFreeRailCol(pin.col, usedSet);
+          const railHole = `${railPrefix}.${railCol}`;
+          const fromCoords = this.getPinCanvasPos(pin);
+          const toCoords = this.getBreadboardPos(railCol, railRow);
+
+          wires.push({
+            id: `wire-${wireCounter++}`,
+            from: {
+              part: `${pin.componentId}.${pin.pinName}`,
+              pin: pin.pinName,
+              holeName: pin.holeName,
+              ...fromCoords
+            },
+            to: {
+              part: 'breadboard',
+              pin: railHole,
+              holeName: railHole,
+              ...toCoords
+            },
+            color: net.color || defaultColor,
+            laneIndex: 0,
+            path: this.buildLocalJumperPath(fromCoords, toCoords, 'down'),
+            isPowerBus: false,
+            description: `${pin.holeName} deliği (${targetGroup.label}) → ${railTitle} (${railHole} deliği)`
+          });
+        } else if (offBoardPins.length > 0) {
+          const pin = offBoardPins[0].pin;
+          const offLabel = compLabelMap.get(pin.componentId) || pin.componentId;
+          const railCol = this.pickFreeRailCol(0, usedSet);
+          const railHole = `${railPrefix}.${railCol}`;
+          const fromCoords = this.getPinCanvasPos(pin);
+          const toCoords = this.getBreadboardPos(railCol, railRow);
+
+          wires.push({
+            id: `wire-${wireCounter++}`,
+            from: {
+              part: `${pin.componentId}.${pin.pinName}`,
+              pin: pin.pinName,
+              holeName: pin.holeName,
+              ...fromCoords
+            },
+            to: {
+              part: 'breadboard',
+              pin: railHole,
+              holeName: railHole,
+              ...toCoords
+            },
+            color: net.color || defaultColor,
+            laneIndex: bottomLaneIndex++,
+            path: this.buildLocalJumperPath(fromCoords, toCoords, 'down'),
+            isPowerBus: false,
+            description: `${offLabel} (${pin.pinName}) → ${railTitle} (${railHole} deliği)`
+          });
+        }
       }
     }
 
     return wires;
+  }
+
+  /**
+   * Güç rayı üzerinde 1..30 aralığında boş bir sütun seçer (Asla 0 döndürmez).
+   */
+  private pickFreeRailCol(preferredCol: number, usedCols: Set<number>): number {
+    const maxCols = BREADBOARD_GEOMETRY.maxCols;
+
+    if (preferredCol >= 1 && preferredCol <= maxCols && !usedCols.has(preferredCol)) {
+      usedCols.add(preferredCol);
+      return preferredCol;
+    }
+
+    if (preferredCol >= 1 && preferredCol <= maxCols) {
+      for (let delta = 1; delta <= maxCols; delta++) {
+        const right = preferredCol + delta;
+        if (right <= maxCols && !usedCols.has(right)) {
+          usedCols.add(right);
+          return right;
+        }
+        const left = preferredCol - delta;
+        if (left >= 1 && !usedCols.has(left)) {
+          usedCols.add(left);
+          return left;
+        }
+      }
+    }
+
+    // Off-board bileşenler (preferredCol === 0) için sağ uçtan (30'dan geriye) boş sütun tahsis et
+    for (let c = maxCols; c >= 2; c--) {
+      if (!usedCols.has(c)) {
+        usedCols.add(c);
+        return c;
+      }
+    }
+
+    return maxCols;
+  }
+
+  private getPinCanvasPos(pin: AllocatedPin): { x: number; y: number } {
+    if (pin.col === 0 || pin.row === 'offboard') {
+      return {
+        x: this.offsets.bb.x + pin.x,
+        y: this.offsets.bb.y + pin.y
+      };
+    }
+    return this.getBreadboardHolePos(pin.col, pin.row);
   }
 
   private getUnoPinPos(pin: string): { x: number; y: number } {
@@ -252,7 +454,7 @@ export class WireRouter {
   }
 
   /**
-   * Kademeli Şerit (Highway Lane) Yolu: Wires asla üst üste binmez!
+   * Kademeli Şerit (Highway Lane) Yolu: Kablolar üst üste binmez.
    */
   private buildHighwayPath(
     from: { x: number; y: number },
@@ -260,26 +462,32 @@ export class WireRouter {
     side: 'top' | 'bottom',
     laneIndex: number
   ): string {
-    const laneOffset = 18 + laneIndex * 14;
+    const laneOffset = 18 + laneIndex * 12;
 
     if (side === 'top') {
       const channelY = Math.min(from.y, to.y) - laneOffset;
       const r = 8;
-      return `M ${from.x} ${from.y} ` +
-             `L ${from.x} ${channelY + r} ` +
-             `Q ${from.x} ${channelY} ${from.x + r} ${channelY} ` +
-             `L ${to.x - r} ${channelY} ` +
-             `Q ${to.x} ${channelY} ${to.x} ${channelY + r} ` +
-             `L ${to.x} ${to.y}`;
+      const dirX = to.x >= from.x ? 1 : -1;
+      return (
+        `M ${from.x} ${from.y} ` +
+        `L ${from.x} ${channelY + r} ` +
+        `Q ${from.x} ${channelY} ${from.x + dirX * r} ${channelY} ` +
+        `L ${to.x - dirX * r} ${channelY} ` +
+        `Q ${to.x} ${channelY} ${to.x} ${channelY + r} ` +
+        `L ${to.x} ${to.y}`
+      );
     } else {
       const channelY = Math.max(from.y, to.y) + laneOffset;
       const r = 8;
-      return `M ${from.x} ${from.y} ` +
-             `L ${from.x} ${channelY - r} ` +
-             `Q ${from.x} ${channelY} ${from.x + r} ${channelY} ` +
-             `L ${to.x - r} ${channelY} ` +
-             `Q ${to.x} ${channelY} ${to.x} ${channelY - r} ` +
-             `L ${to.x} ${to.y}`;
+      const dirX = to.x >= from.x ? 1 : -1;
+      return (
+        `M ${from.x} ${from.y} ` +
+        `L ${from.x} ${channelY - r} ` +
+        `Q ${from.x} ${channelY} ${from.x + dirX * r} ${channelY} ` +
+        `L ${to.x - dirX * r} ${channelY} ` +
+        `Q ${to.x} ${channelY} ${to.x} ${channelY - r} ` +
+        `L ${to.x} ${to.y}`
+      );
     }
   }
 
@@ -288,12 +496,13 @@ export class WireRouter {
    */
   private buildPowerBusPath(
     from: { x: number; y: number },
-    to: { x: number; y: number },
-    side: 'bottom'
+    to: { x: number; y: number }
   ): string {
     const channelY = to.y + 18;
-    return `M ${from.x} ${from.y} ` +
-           `C ${from.x} ${channelY}, ${to.x - 20} ${channelY}, ${to.x} ${to.y}`;
+    return (
+      `M ${from.x} ${from.y} ` +
+      `C ${from.x} ${channelY}, ${to.x - 20} ${channelY}, ${to.x} ${to.y}`
+    );
   }
 
   /**
