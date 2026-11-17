@@ -205,8 +205,8 @@ export class WireRouter {
 
       if (unoPinName && targetPin) {
         const unoPos = this.getUnoPinPos(unoPinName);
-        // Breadboard üzerindeki bileşenin sütununun en üstteki 'A' sırasına jumper tak
-        const bbPos = this.getBreadboardHolePos(targetPin.col, 'A');
+        const targetRow = targetPin.row || 'A';
+        const bbPos = this.getBreadboardHolePos(targetPin.col, targetRow);
 
         const isTopHeader = unoPos.y < this.offsets.uno.y + 100;
         const lane = isTopHeader ? topLaneIndex++ : bottomLaneIndex++;
@@ -217,12 +217,12 @@ export class WireRouter {
         wires.push({
           id: `wire-${i}`,
           from: { part: 'uno', pin: unoPinName, ...unoPos },
-          to: { part: targetPin.componentId, pin: targetPin.pinName, holeName: `${targetPin.col}A`, ...bbPos },
+          to: { part: targetPin.componentId, pin: targetPin.pinName, holeName: `${targetPin.col}${targetRow}`, ...bbPos },
           color: conn.color || '#3b82f6',
           laneIndex: lane,
           path,
           isPowerBus: false,
-          description: `Arduino ${unoPinName} ➔ Breadboard ${targetPin.col}A (${targetPin.componentId})`
+          description: `Arduino ${unoPinName} ➔ Breadboard ${targetPin.col}${targetRow} (${targetPin.componentId})`
         });
       }
     }

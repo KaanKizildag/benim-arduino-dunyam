@@ -8,13 +8,13 @@
 import type { CircuitNetlist } from './types';
 import { compileNetlistToBreadboard } from './index';
 
-// Senaryo A: Tek LED + Direnç + LDR
+// Senaryo A1: 4 Pinli LDR Modülü (KY-018) + LED + Direnç
 export const scenarioA: CircuitNetlist = {
   board: 'arduino-uno',
   components: [
     { id: 'r1', type: 'wokwi-resistor', props: { value: '220' }, label: '220Ω Direnç' },
     { id: 'led1', type: 'wokwi-led', props: { color: 'red' }, label: 'Kırmızı LED' },
-    { id: 'ldr1', type: 'wokwi-photoresistor-sensor', label: 'LDR Işık Sensörü' }
+    { id: 'ldr1', type: 'wokwi-photoresistor-sensor', label: '4 Pin LDR Modülü' }
   ],
   connections: [
     { from: 'uno.D13', to: 'r1.1', color: 'orange' },
@@ -23,6 +23,26 @@ export const scenarioA: CircuitNetlist = {
     { from: 'ldr1.VCC', to: '5V', color: 'red' },
     { from: 'ldr1.GND', to: 'GND', color: 'black' },
     { from: 'ldr1.AO', to: 'uno.A0', color: 'green' }
+  ]
+};
+
+// Senaryo A2: 2 Bacaklı Klasik Foto-direnç + LED + Dirençler (Gerilim Bölücü)
+export const scenarioA_discrete: CircuitNetlist = {
+  board: 'arduino-uno',
+  components: [
+    { id: 'r1', type: 'wokwi-resistor', props: { value: '220' }, label: '220Ω Direnç' },
+    { id: 'led1', type: 'wokwi-led', props: { color: 'red' }, label: 'Kırmızı LED' },
+    { id: 'ldr1', type: 'wokwi-photoresistor', label: '2 Bacaklı LDR' },
+    { id: 'r2', type: 'wokwi-resistor', props: { value: '10000' }, label: '10kΩ Direnç' }
+  ],
+  connections: [
+    { from: 'uno.D13', to: 'r1.1', color: 'orange' },
+    { from: 'r1.2', to: 'led1.A', color: 'red' },
+    { from: 'led1.C', to: 'GND', color: 'black' },
+    { from: 'ldr1.1', to: '5V', color: 'red' },
+    { from: 'ldr1.2', to: 'uno.A0', color: 'green' },
+    { from: 'ldr1.2', to: 'r2.1', color: 'green' },
+    { from: 'r2.2', to: 'GND', color: 'black' }
   ]
 };
 
@@ -70,12 +90,19 @@ export const scenarioC: CircuitNetlist = {
 };
 
 export function runAllCircuitTests() {
-  console.log('=== SENARYO A: Tek LED + Direnç + LDR ===');
-  const resA = compileNetlistToBreadboard(scenarioA);
-  console.log('Bileşenler:', resA.components.map(c => `${c.label} (Sütun ${c.startCol}..${c.endCol})`));
-  console.log('Kablolar:', resA.wires.length, 'adet kablo oluşturuldu.');
-  console.log('Hatalar:', resA.errors);
-  console.log('Uyarılar:', resA.warnings);
+  console.log('=== SENARYO A1: 4 Pinli LDR Modülü + LED + Direnç ===');
+  const resA1 = compileNetlistToBreadboard(scenarioA);
+  console.log('Bileşenler:', resA1.components.map(c => `${c.label} (Sütun ${c.startCol}..${c.endCol})`));
+  console.log('Kablolar:', resA1.wires.length, 'adet kablo oluşturuldu.');
+  console.log('Hatalar:', resA1.errors);
+  console.log('Uyarılar:', resA1.warnings);
+
+  console.log('\n=== SENARYO A2: 2 Bacaklı Klasik LDR (Foto-direnç) + Gerilim Bölücü ===');
+  const resA2 = compileNetlistToBreadboard(scenarioA_discrete);
+  console.log('Bileşenler:', resA2.components.map(c => `${c.label} (Sütun ${c.startCol}..${c.endCol})`));
+  console.log('Kablolar:', resA2.wires.length, 'adet kablo oluşturuldu.');
+  console.log('Hatalar:', resA2.errors);
+  console.log('Uyarılar:', resA2.warnings);
 
   console.log('\n=== SENARYO B: 3 LED Trafik Lambası ===');
   const resB = compileNetlistToBreadboard(scenarioB);
@@ -89,5 +116,5 @@ export function runAllCircuitTests() {
   console.log('Kablolar:', resC.wires.length, 'adet kablo oluşturuldu.');
   console.log('Hatalar:', resC.errors);
 
-  return { resA, resB, resC };
+  return { resA1, resA2, resB, resC };
 }

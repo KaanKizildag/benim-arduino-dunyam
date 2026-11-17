@@ -66,6 +66,14 @@ export function validateNetlist(netlist: CircuitNetlist): ValidationReport {
         }
         break;
       }
+      case 'wokwi-photoresistor': {
+        const hasP1 = connectedPins.has('1') || connectedPins.has('PIN_1');
+        const hasP2 = connectedPins.has('2') || connectedPins.has('PIN_2');
+        if (!hasP1 || !hasP2) {
+          warnings.push(`'${comp.label || comp.id}' 2 bacaklı LDR'ın iki ucu da bağlı olmalıdır.`);
+        }
+        break;
+      }
       case 'wokwi-photoresistor-sensor': {
         const hasGnd = connectedPins.has('GND');
         const hasVcc = connectedPins.has('VCC');

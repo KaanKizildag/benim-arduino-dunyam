@@ -277,34 +277,69 @@ export class BreadboardAllocator {
         break;
       }
 
-      case 'wokwi-photoresistor-sensor': {
-        const vcc = getHoleCoords(col, 'E');
-        const gnd = getHoleCoords(col + 1, 'E');
-        const ao = getHoleCoords(col + 2, 'E');
+      case 'wokwi-photoresistor': {
+        // 2 Bacaklı Klasik LDR (Foto-direnç): Sütun col ve col+2, Satır E
+        const p1 = getHoleCoords(col, 'E');
+        const p2 = getHoleCoords(col + 2, 'E');
         const pins = {
-          'VCC': { componentId: comp.id, pinName: 'VCC', col, row: 'E', holeName: `${col}E`, ...vcc },
-          'GND': { componentId: comp.id, pinName: 'GND', col: col + 1, row: 'E', holeName: `${col + 1}E`, ...gnd },
-          'AO': { componentId: comp.id, pinName: 'AO', col: col + 2, row: 'E', holeName: `${col + 2}E`, ...ao },
-          'DO': { componentId: comp.id, pinName: 'DO', col: col + 3, row: 'E', holeName: `${col + 3}E`, ...getHoleCoords(col + 3, 'E') }
+          '1': { componentId: comp.id, pinName: '1', col, row: 'E', holeName: `${col}E`, ...p1 },
+          '2': { componentId: comp.id, pinName: '2', col: col + 2, row: 'E', holeName: `${col + 2}E`, ...p2 }
         };
         this.placedComponents.push({
           id: comp.id,
           type: comp.type,
           props: comp.props || {},
-          label: comp.label,
+          label: comp.label || 'LDR Foto-direnç',
           isBreadboardMounted: true,
-          left: vcc.x - 12,
-          top: vcc.y - 30,
-          labelX: vcc.x + 10,
+          left: p1.x - 8.5,
+          top: p1.y - 42,
+          labelX: p1.x + 9.5,
           labelY: -25,
           startCol: col,
-          endCol: col + 3,
+          endCol: col + 2,
           pins
         });
+        this.allocatedPins[`${comp.id}.1`] = pins['1'];
+        this.allocatedPins[`${comp.id}.2`] = pins['2'];
+        this.currentCol += 4;
+        break;
+      }
+
+      case 'wokwi-photoresistor-sensor': {
+        // 4 Pinli Kart LDR Sensör Modülü (KY-018):
+        // Wokwi elemanında 4 pin dikey olarak sağ kenardadır (x=172, y=16, 26, 35.8, 45.5).
+        // Bu pinler breadboard'un tek bir sütunundaki A, B, C, D deliklerine doğrudan oturur!
+        const vcc = getHoleCoords(col, 'A');
+        const gnd = getHoleCoords(col, 'B');
+        const doPin = getHoleCoords(col, 'C');
+        const ao = getHoleCoords(col, 'D');
+
+        const pins = {
+          'VCC': { componentId: comp.id, pinName: 'VCC', col, row: 'A', holeName: `${col}A`, ...vcc },
+          'GND': { componentId: comp.id, pinName: 'GND', col, row: 'B', holeName: `${col}B`, ...gnd },
+          'DO': { componentId: comp.id, pinName: 'DO', col, row: 'C', holeName: `${col}C`, ...doPin },
+          'AO': { componentId: comp.id, pinName: 'AO', col, row: 'D', holeName: `${col}D`, ...ao }
+        };
+
+        this.placedComponents.push({
+          id: comp.id,
+          type: comp.type,
+          props: comp.props || {},
+          label: comp.label || '4 Pin LDR Modülü',
+          isBreadboardMounted: true,
+          left: vcc.x - 172,
+          top: 32, // 32 + 16 = 48 (Satır A tam hizası)
+          labelX: vcc.x - 40,
+          labelY: -25,
+          startCol: col,
+          endCol: col,
+          pins
+        });
+
         for (const [k, v] of Object.entries(pins)) {
           this.allocatedPins[`${comp.id}.${k}`] = v;
         }
-        this.currentCol += 5;
+        this.currentCol += 2;
         break;
       }
 

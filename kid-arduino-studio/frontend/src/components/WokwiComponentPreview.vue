@@ -65,7 +65,10 @@
     </div>
 
     <!-- 9. Sensörler -->
-    <div v-else-if="itemId === 'LDR_SENSOR'" class="scale-[0.32] origin-center flex items-center justify-center">
+    <div v-else-if="itemId === 'LDR_DISCRETE' || itemId === 'LDR_SENSOR'" class="scale-[0.9] origin-center flex items-center justify-center">
+      <wokwi-photoresistor></wokwi-photoresistor>
+    </div>
+    <div v-else-if="itemId === 'LDR_MODULE' || itemId === 'LDR_4PIN'" class="scale-[0.32] origin-center flex items-center justify-center">
       <wokwi-photoresistor-sensor></wokwi-photoresistor-sensor>
     </div>
     <div v-else-if="itemId === 'HCSR04'" class="scale-[0.35] origin-center flex items-center justify-center">

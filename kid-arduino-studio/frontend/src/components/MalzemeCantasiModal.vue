@@ -293,6 +293,8 @@ const defaultElectronics: InventoryItem[] = [
   { id: 'SLIDE_SWITCH', name: 'Sürgülü Anahtar', icon: '🔛', tag: 'Aç/Kapa Switch', category: 'passive', color: 'bg-[#f1f5f9]' },
 
   // 5. Sensörler
+  { id: 'LDR_DISCRETE', name: 'Foto-direnç (2 Bacaklı LDR)', icon: '☀️', tag: 'Klasik Işığa Duyarlı Direnç', category: 'sensor', color: 'bg-[#fed7aa]' },
+  { id: 'LDR_MODULE', name: 'LDR Sensör Modülü (4 Pinli)', icon: '🎛️', tag: 'KY-018 Karşılaştırıcı Kart Modülü', category: 'sensor', color: 'bg-[#fed7aa]' },
   { id: 'LDR_SENSOR', name: 'Işık Sensörü (LDR)', icon: '☀️', tag: 'Oda Işığı Seviyesi Ölçer', category: 'sensor', color: 'bg-[#fed7aa]' },
   { id: 'HCSR04', name: 'HC-SR04 Mesafe Sensörü', icon: '🦇', tag: 'Ultrasonik Mesafe Ölçer', category: 'sensor', color: 'bg-[#bae6fd]' },
   { id: 'PIR_SENSOR', name: 'PIR Hareket Sensörü', icon: '🚶', tag: 'İnsan ve Vücut Isısı Algılayıcı', category: 'sensor', color: 'bg-[#fed7aa]' },

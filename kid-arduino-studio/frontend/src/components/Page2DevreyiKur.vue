@@ -308,7 +308,7 @@
 import { ref, computed } from 'vue';
 import type { CircuitNetlist, BaglantiAdimi } from '../types/project';
 import { compileNetlistToBreadboard, type AutoLayoutResult } from '../circuit';
-import { scenarioA, scenarioB, scenarioC } from '../circuit/testScenarios';
+import { scenarioA, scenarioA_discrete, scenarioB, scenarioC } from '../circuit/testScenarios';
 
 const props = defineProps<{
   netlist?: CircuitNetlist;
@@ -338,6 +338,9 @@ const activeNetlist = computed<CircuitNetlist>(() => {
   }
   if (partsStr.includes('SERVO') || partsStr.includes('PUSH_BUTTON') || partsStr.includes('BUTTON')) {
     return scenarioC;
+  }
+  if (partsStr.includes('LDR_DISCRETE')) {
+    return scenarioA_discrete;
   }
 
   return scenarioA;
