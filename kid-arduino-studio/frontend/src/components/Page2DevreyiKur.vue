@@ -24,17 +24,8 @@
         </div>
       </div>
 
-      <!-- Tümü / Adım Adım Modu & Sıfırla Butonları -->
+      <!-- Tümü / Adım Adım Modu Butonları -->
       <div class="flex items-center gap-2 shrink-0">
-        <button
-          type="button"
-          @click="resetComponentPositions"
-          class="px-2.5 py-1.5 rounded-xl text-xs font-black border-2 border-slate-900 bg-slate-100 hover:bg-slate-200 text-slate-700 transition flex items-center gap-1 cursor-pointer shadow-xs active:translate-y-0.5"
-          title="Parçaları varsayılan konuma getir"
-        >
-          <span>🔄 Konumları Sıfırla</span>
-        </button>
-
         <button
           type="button"
           @click="showAllWires = !showAllWires"
@@ -93,264 +84,280 @@
       </div>
     </div>
 
-    <!-- 3. @WOKWI/ELEMENTS İNTERAKTİF ÇALIŞMA ALANI (DRAGGABLE & DYNAMIC WIRING) -->
+    <!-- 3. SABİT VE DOĞRU BREADBOARD MİMARİSİ ÇALIŞMA ALANI -->
     <div
       ref="workspaceRef"
-      class="relative w-full flex-1 overflow-hidden bg-slate-900 rounded-3xl border-[3px] border-slate-900 shadow-[0_8px_0_rgba(15,23,42,0.2)] min-h-[520px] select-none"
-      @mousemove="handleDragMove"
-      @mouseup="handleDragEnd"
-      @mouseleave="handleDragEnd"
+      class="relative w-full flex-1 overflow-x-auto overflow-y-hidden bg-slate-900 rounded-3xl border-[3px] border-slate-900 shadow-[0_8px_0_rgba(15,23,42,0.2)] min-h-[500px] select-none p-4 flex items-center justify-center"
     >
       <!-- Arka Plan Grid Ağı -->
       <div class="absolute inset-0 pointer-events-none opacity-25" style="background-image: radial-gradient(#64748b 1px, transparent 1px); background-size: 20px 20px;"></div>
 
-      <!-- Bilgi Başlığı -->
-      <div class="absolute top-3 left-4 z-20 pointer-events-none flex items-center gap-2">
-        <span class="px-2.5 py-1 rounded-lg bg-slate-800/80 border border-slate-700 text-[11px] font-black tracking-wide text-slate-300">
-          ⚡ WOKWI SİMÜLATÖR MOTORU • Parçaları fareyle tutup sürükleyebilirsin!
+      <!-- Üst Bilgi Rozeti -->
+      <div class="absolute top-3 left-4 z-20 pointer-events-none flex flex-wrap items-center gap-2">
+        <span class="px-2.5 py-1 rounded-lg bg-slate-800/90 border border-slate-700 text-[11px] font-black tracking-wide text-amber-300">
+          ⚡ BREADBOARD İLETKENLİK MOTORU • Parçalar breadboard deliklerine takılıdır!
+        </span>
+        <span class="px-2 py-0.5 rounded-lg bg-emerald-950/80 border border-emerald-500/50 text-[10px] font-bold text-emerald-300">
+          Dikey Sütunlar (A-E) içeriden iletkendir
         </span>
       </div>
 
-      <!-- ======================================================== -->
-      <!-- A) BİLEŞENLER KATMANI (@wokwi/elements Web Components)     -->
-      <!-- ======================================================== -->
+      <!-- ÇALIŞMA ALANI İÇ KUTUSU (Genişlik ve Yükseklik Sabitlenmiş Doğru Yerleşim) -->
+      <div class="relative w-[920px] h-[460px] shrink-0">
 
-      <!-- 1. ARDUINO KARTI (Varsayılan Uno) -->
-      <div
-        id="comp-arduino"
-        class="absolute cursor-move select-none z-10 p-1 rounded-2xl hover:ring-2 hover:ring-sky-400/80 transition-shadow duration-150"
-        :style="{ left: `${positions.arduino.x}px`, top: `${positions.arduino.y}px` }"
-        @mousedown.stop="handleDragStart('arduino', $event)"
-      >
-        <wokwi-arduino-uno></wokwi-arduino-uno>
-        <div class="text-[10px] font-black text-center text-sky-400 mt-1 pointer-events-none">
-          Arduino Uno (D13, 5V, GND)
+        <!-- ======================================================== -->
+        <!-- A) ARDUINO UNO KARTI (Sol Tarafta Sabit)                 -->
+        <!-- ======================================================== -->
+        <div
+          id="comp-arduino"
+          class="absolute left-[40px] top-[100px] z-10 p-2 rounded-2xl bg-slate-800/40 border border-slate-700/60 shadow-lg pointer-events-auto"
+        >
+          <wokwi-arduino-uno></wokwi-arduino-uno>
+          <div class="text-[11px] font-black text-center text-sky-400 mt-1 pointer-events-none">
+            Arduino Uno (D13, 5V, GND)
+          </div>
         </div>
-      </div>
 
-      <!-- 2. BREADBOARD (Yarım Boy 30 Sütun) -->
-      <div
-        id="comp-breadboard"
-        class="absolute cursor-move select-none z-10 p-1 rounded-2xl hover:ring-2 hover:ring-amber-400/80 transition-shadow duration-150"
-        :style="{ left: `${positions.breadboard.x}px`, top: `${positions.breadboard.y}px` }"
-        @mousedown.stop="handleDragStart('breadboard', $event)"
-      >
-        <wokwi-breadboard-half></wokwi-breadboard-half>
-        <div class="text-[10px] font-black text-center text-amber-300 mt-1 pointer-events-none">
-          Breadboard (1A - 30J, +/ - Güç Hatları)
+        <!-- ======================================================== -->
+        <!-- B) BREADBOARD VE ÜZERİNE TAKILI BİLEŞENLER (Sağ Tarafta) -->
+        <!-- ======================================================== -->
+        <div
+          id="comp-breadboard-wrapper"
+          class="absolute left-[440px] top-[100px] z-10 p-2 rounded-2xl bg-slate-800/40 border border-slate-700/60 shadow-lg"
+        >
+          <!-- Breadboard Web Component'i (Aktif Sütunları İç İletkenlik Olarak Parlatır) -->
+          <wokwi-breadboard-half
+            id="comp-breadboard"
+            :highlighted-columns="activeColumnsStr"
+            :highlighted-rails="activeRailsStr"
+          ></wokwi-breadboard-half>
+
+          <!-- BREADBOARD ÜZERİNE TAKILI BİLEŞENLER (DELİKLERE HİZALANMIŞ) -->
+          
+          <!-- 1. Kırmızı LED (Kolon 5E ve Kolon 6E Deliklerine Takılı) -->
+          <div
+            v-if="hasComponent('LED')"
+            id="comp-led"
+            class="absolute pointer-events-none z-20"
+            style="left: 69px; top: 52px;"
+          >
+            <wokwi-led color="red" value="1"></wokwi-led>
+            <!-- LED İsim Rozeti -->
+            <div class="absolute -top-4 left-1/2 -translate-x-1/2 px-1.5 py-0.2 rounded-md bg-rose-600 text-[8px] font-black text-white shadow-xs whitespace-nowrap">
+              LED (5E ➔ 6E)
+            </div>
+          </div>
+
+          <!-- 2. 220Ω Direnç (Kolon 6C ve Kolon 12C Deliklerine Takılı) -->
+          <!-- Kolon 6: LED'in kısa bacağı ile direncin bacağı BREADBOARD İÇİNDEN BAĞLANIR! -->
+          <div
+            v-if="hasComponent('RESISTOR')"
+            id="comp-resistor"
+            class="absolute pointer-events-none z-20"
+            style="left: 93px; top: 70px;"
+          >
+            <wokwi-resistor value="220"></wokwi-resistor>
+            <!-- Direnç İsim Rozeti -->
+            <div class="absolute -top-4 left-1/2 -translate-x-1/2 px-1.5 py-0.2 rounded-md bg-amber-600 text-[8px] font-black text-white shadow-xs whitespace-nowrap">
+              220Ω (6C ➔ 12C)
+            </div>
+          </div>
+
+          <!-- 3. LDR Işık Sensörü (Kolon 18E ve Kolon 20E Deliklerine Takılı) -->
+          <div
+            v-if="hasComponent('LDR')"
+            id="comp-ldr"
+            class="absolute pointer-events-none z-20 scale-[0.6] origin-top-left"
+            style="left: 200px; top: 48px;"
+          >
+            <wokwi-photoresistor-sensor></wokwi-photoresistor-sensor>
+            <div class="absolute -top-4 left-1/2 -translate-x-1/2 px-1.5 py-0.2 rounded-md bg-emerald-600 text-[10px] font-black text-white shadow-xs whitespace-nowrap">
+              LDR Sensör
+            </div>
+          </div>
+
+          <!-- 4. Buzzer (Kolon 24F ve Kolon 26F Deliklerine Takılı) -->
+          <div
+            v-if="hasComponent('BUZZER')"
+            id="comp-buzzer"
+            class="absolute pointer-events-none z-20 scale-[0.65] origin-top-left"
+            style="left: 250px; top: 120px;"
+          >
+            <wokwi-buzzer></wokwi-buzzer>
+            <div class="absolute -top-3 left-1/2 -translate-x-1/2 px-1.5 py-0.2 rounded-md bg-yellow-500 text-[10px] font-black text-slate-950 shadow-xs whitespace-nowrap">
+              Buzzer (24F-26F)
+            </div>
+          </div>
+
+          <!-- Breadboard İletkenlik Açıklama Çubuğu -->
+          <div class="text-[10px] font-black text-center text-amber-300 mt-1 pointer-events-none">
+            Breadboard (Sütun 5, 6, 12 Devre İçi İletkendir)
+          </div>
         </div>
-      </div>
 
-      <!-- 3. KIRMIZI LED -->
-      <div
-        v-if="hasComponent('LED')"
-        id="comp-led"
-        class="absolute cursor-move select-none z-20 p-1 rounded-xl hover:ring-2 hover:ring-rose-400"
-        :style="{ left: `${positions.led.x}px`, top: `${positions.led.y}px` }"
-        @mousedown.stop="handleDragStart('led', $event)"
-      >
-        <wokwi-led color="red" value="1"></wokwi-led>
-        <div class="text-[9px] font-black text-center text-rose-300 pointer-events-none whitespace-nowrap">
-          Kırmızı LED
+        <!-- 5. Harici Sensörler (HC-SR04 Mesafe Sensörü Sağ Tarafta) -->
+        <div
+          v-if="hasComponent('HCSR') || hasComponent('MESAFE')"
+          id="comp-hcsr04"
+          class="absolute left-[810px] top-[140px] z-10 p-2 rounded-2xl bg-slate-800/40 border border-slate-700/60 shadow-lg scale-[0.7] origin-top-left"
+        >
+          <wokwi-hc-sr04></wokwi-hc-sr04>
+          <div class="text-[10px] font-black text-center text-cyan-300 mt-1 pointer-events-none">
+            HC-SR04 Sensör
+          </div>
         </div>
-      </div>
 
-      <!-- 4. 220 OHM DİRENÇ -->
-      <div
-        v-if="hasComponent('RESISTOR')"
-        id="comp-resistor"
-        class="absolute cursor-move select-none z-20 p-1 rounded-xl hover:ring-2 hover:ring-amber-400"
-        :style="{ left: `${positions.resistor.x}px`, top: `${positions.resistor.y}px` }"
-        @mousedown.stop="handleDragStart('resistor', $event)"
-      >
-        <wokwi-resistor value="220"></wokwi-resistor>
-        <div class="text-[9px] font-black text-center text-amber-300 pointer-events-none whitespace-nowrap">
-          220Ω Direnç
-        </div>
-      </div>
+        <!-- ======================================================== -->
+        <!-- C) KABLO BAĞLANTILARI VE PİN İŞARETÇİLERİ SVG KATMANI     -->
+        <!-- ======================================================== -->
+        <svg class="absolute inset-0 w-full h-full pointer-events-none z-30 overflow-visible">
+          <defs>
+            <filter id="wireShadow2" x="-20%" y="-20%" width="140%" height="140%">
+              <feDropShadow dx="0" dy="4" stdDeviation="3" flood-color="#000000" flood-opacity="0.6" />
+            </filter>
+          </defs>
 
-      <!-- 5. LDR IŞIK SENSÖRÜ -->
-      <div
-        v-if="hasComponent('LDR')"
-        id="comp-ldr"
-        class="absolute cursor-move select-none z-20 p-1 rounded-xl hover:ring-2 hover:ring-emerald-400"
-        :style="{ left: `${positions.ldr.x}px`, top: `${positions.ldr.y}px` }"
-        @mousedown.stop="handleDragStart('ldr', $event)"
-      >
-        <wokwi-photoresistor-sensor></wokwi-photoresistor-sensor>
-        <div class="text-[9px] font-black text-center text-emerald-300 pointer-events-none whitespace-nowrap">
-          LDR Işık Sensörü
-        </div>
-      </div>
-
-      <!-- 6. BUZZER -->
-      <div
-        v-if="hasComponent('BUZZER')"
-        id="comp-buzzer"
-        class="absolute cursor-move select-none z-20 p-1 rounded-xl hover:ring-2 hover:ring-yellow-400"
-        :style="{ left: `${positions.buzzer.x}px`, top: `${positions.buzzer.y}px` }"
-        @mousedown.stop="handleDragStart('buzzer', $event)"
-      >
-        <wokwi-buzzer></wokwi-buzzer>
-        <div class="text-[9px] font-black text-center text-yellow-300 pointer-events-none whitespace-nowrap">
-          Buzzer
-        </div>
-      </div>
-
-      <!-- 7. HC-SR04 ULTRASONİK MESAFE SENSÖRÜ -->
-      <div
-        v-if="hasComponent('HCSR') || hasComponent('MESAFE')"
-        id="comp-hcsr04"
-        class="absolute cursor-move select-none z-20 p-1 rounded-xl hover:ring-2 hover:ring-cyan-400"
-        :style="{ left: `${positions.hcsr04.x}px`, top: `${positions.hcsr04.y}px` }"
-        @mousedown.stop="handleDragStart('hcsr04', $event)"
-      >
-        <wokwi-hc-sr04></wokwi-hc-sr04>
-        <div class="text-[9px] font-black text-center text-cyan-300 pointer-events-none whitespace-nowrap">
-          HC-SR04 Mesafe Sensörü
-        </div>
-      </div>
-
-      <!-- 8. SG90 SERVO MOTOR -->
-      <div
-        v-if="hasComponent('SERVO')"
-        id="comp-servo"
-        class="absolute cursor-move select-none z-20 p-1 rounded-xl hover:ring-2 hover:ring-blue-400"
-        :style="{ left: `${positions.servo.x}px`, top: `${positions.servo.y}px` }"
-        @mousedown.stop="handleDragStart('servo', $event)"
-      >
-        <wokwi-servo></wokwi-servo>
-        <div class="text-[9px] font-black text-center text-blue-300 pointer-events-none whitespace-nowrap">
-          SG90 Servo
-        </div>
-      </div>
-
-      <!-- ======================================================== -->
-      <!-- B) KABLO BAĞLANTILARI VE PİN İŞARETÇİLERİ SVG KATMANI     -->
-      <!-- ======================================================== -->
-      <svg class="absolute inset-0 w-full h-full pointer-events-none z-30 overflow-visible">
-        <defs>
-          <filter id="wireShadow" x="-20%" y="-20%" width="140%" height="140%">
-            <feDropShadow dx="0" dy="4" stdDeviation="3" flood-color="#000000" flood-opacity="0.6" />
-          </filter>
-        </defs>
-
-        <!-- Kablolar -->
-        <g v-for="(wire, idx) in computedWires" :key="idx">
-          <!-- Kablo Gölgesi -->
-          <path
-            :d="wire.path"
-            fill="none"
-            stroke="#020617"
-            stroke-width="6"
-            stroke-linecap="round"
-            opacity="0.5"
-          />
-          <!-- Kablo Gövdesi -->
-          <path
-            :d="wire.path"
-            fill="none"
-            :stroke="wire.step.kablo_rengi || '#38bdf8'"
-            stroke-width="3.5"
-            stroke-linecap="round"
-            :class="{ 'wire-active-flow': idx === currentStepIndex || showAllWires }"
-          />
-
-          <!-- Başlangıç Ucu Pini (Küçük Halka) -->
-          <circle
-            :cx="wire.from.x"
-            :cy="wire.from.y"
-            r="4.5"
-            :fill="wire.step.kablo_rengi || '#38bdf8'"
-            stroke="#ffffff"
-            stroke-width="1.5"
-          />
-
-          <!-- Bitiş Ucu Pini (Küçük Halka) -->
-          <circle
-            :cx="wire.to.x"
-            :cy="wire.to.y"
-            r="4.5"
-            :fill="wire.step.kablo_rengi || '#38bdf8'"
-            stroke="#ffffff"
-            stroke-width="1.5"
-          />
-        </g>
-
-        <!-- Aktif Adım İçin Parlayan Pin Göstergesi ve "👇 Buraya Tak!" Balonu -->
-        <g v-if="activeTargetCoord">
-          <!-- Pulsing Target Glow Ring -->
-          <circle
-            :cx="activeTargetCoord.x"
-            :cy="activeTargetCoord.y"
-            r="12"
-            fill="#facc15"
-            opacity="0.6"
-            class="animate-ping"
-          />
-          <circle
-            :cx="activeTargetCoord.x"
-            :cy="activeTargetCoord.y"
-            r="6"
-            fill="#eab308"
-            stroke="#ffffff"
-            stroke-width="2"
-          />
-
-          <!-- "👇 Buraya Tak!" Çizgi Film Konuşma Baloncuğu -->
-          <g :transform="`translate(${activeTargetCoord.x}, ${activeTargetCoord.y - 34})`">
-            <rect
-              x="-52"
-              y="-15"
-              width="104"
-              height="26"
-              rx="9"
-              fill="#fde047"
-              stroke="#0f172a"
-              stroke-width="2.5"
-              filter="url(#wireShadow)"
+          <!-- 1. Breadboard İçi İletkenlik Bağlantı Hattı (Sütun 6: LED Katot ➔ Direnç) -->
+          <g v-if="hasComponent('LED') && hasComponent('RESISTOR')" opacity="0.8">
+            <line
+              x1="533"
+              y1="194"
+              x2="533"
+              y2="175"
+              stroke="#22c55e"
+              stroke-width="3"
+              stroke-dasharray="2,2"
             />
-            <!-- Balon İğnesi -->
-            <polygon
-              points="0,12 -6,17 6,17"
-              fill="#fde047"
-              stroke="#0f172a"
+            <circle cx="533" cy="194" r="3" fill="#22c55e" />
+            <circle cx="533" cy="175" r="3" fill="#22c55e" />
+          </g>
+
+          <!-- 2. Dinamik Jumper Kablolar (Arduino ➔ Breadboard Delikleri) -->
+          <g v-for="(wire, idx) in computedWires" :key="idx">
+            <!-- Kablo Gölgesi -->
+            <path
+              :d="wire.path"
+              fill="none"
+              stroke="#020617"
+              stroke-width="6"
+              stroke-linecap="round"
+              opacity="0.5"
+            />
+            <!-- Kablo Gövdesi -->
+            <path
+              :d="wire.path"
+              fill="none"
+              :stroke="wire.step.kablo_rengi || '#38bdf8'"
+              stroke-width="3.5"
+              stroke-linecap="round"
+              :class="{ 'wire-active-flow': idx === currentStepIndex || showAllWires }"
+            />
+
+            <!-- Başlangıç Ucu Pini (Küçük Halka) -->
+            <circle
+              :cx="wire.from.x"
+              :cy="wire.from.y"
+              r="4.5"
+              :fill="wire.step.kablo_rengi || '#38bdf8'"
+              stroke="#ffffff"
+              stroke-width="1.5"
+            />
+
+            <!-- Bitiş Ucu Pini (Küçük Halka) -->
+            <circle
+              :cx="wire.to.x"
+              :cy="wire.to.y"
+              r="4.5"
+              :fill="wire.step.kablo_rengi || '#38bdf8'"
+              stroke="#ffffff"
+              stroke-width="1.5"
+            />
+          </g>
+
+          <!-- 3. Aktif Adım Hedef Göstergesi ve "👇 Buraya Tak!" Baloncuğu -->
+          <g v-if="activeTargetCoord">
+            <!-- Pulsing Target Glow Ring -->
+            <circle
+              :cx="activeTargetCoord.x"
+              :cy="activeTargetCoord.y"
+              r="12"
+              fill="#facc15"
+              opacity="0.6"
+              class="animate-ping"
+            />
+            <circle
+              :cx="activeTargetCoord.x"
+              :cy="activeTargetCoord.y"
+              r="6"
+              fill="#eab308"
+              stroke="#ffffff"
               stroke-width="2"
             />
-            <text x="0" y="3" fill="#0f172a" font-size="11" font-weight="900" text-anchor="middle">
-              👇 Buraya Tak!
-            </text>
-          </g>
-        </g>
-      </svg>
 
+            <!-- "👇 Buraya Tak!" Çizgi Film Konuşma Baloncuğu -->
+            <g :transform="`translate(${activeTargetCoord.x}, ${activeTargetCoord.y - 34})`">
+              <rect
+                x="-52"
+                y="-15"
+                width="104"
+                height="26"
+                rx="9"
+                fill="#fde047"
+                stroke="#0f172a"
+                stroke-width="2.5"
+                filter="url(#wireShadow2)"
+              />
+              <!-- Balon İğnesi -->
+              <polygon
+                points="0,12 -6,17 6,17"
+                fill="#fde047"
+                stroke="#0f172a"
+                stroke-width="2"
+              />
+              <text x="0" y="3" fill="#0f172a" font-size="11" font-weight="900" text-anchor="middle">
+                👇 Buraya Tak!
+              </text>
+            </g>
+          </g>
+        </svg>
+
+      </div>
     </div>
 
-    <!-- 4. ALT DEVAM ET BUTONU -->
-    <div class="flex items-center justify-between pt-1">
-      <button
-        type="button"
-        @click="$emit('prev-page')"
-        class="px-4 py-2 rounded-xl border-2 border-slate-900 bg-white hover:bg-slate-50 text-slate-800 font-black text-xs transition cursor-pointer shadow-xs active:translate-y-0.5"
-      >
-        ◀ 1. Hayal Et'e Dön
-      </button>
+    <!-- 4. ALT DEVAM ET VE BİLGİ BANDI -->
+    <div class="bg-amber-50 rounded-2xl border-2 border-amber-300 p-2.5 flex items-center justify-between gap-3 text-xs">
+      <div class="flex items-center gap-2 text-amber-950 font-bold">
+        <span class="text-base">💡</span>
+        <span>
+          <strong>Breadboard Nasıl Çalışır?</strong> Aynı sütundaki dikey delikler (A, B, C, D, E) içeriden bağlıdır! Bu yüzden LED'in bacağı ile direnç 6. sütunda kablosuz buluşur.
+        </span>
+      </div>
 
-      <button
-        type="button"
-        @click="$emit('next-page')"
-        class="px-6 py-2.5 rounded-2xl border-2 border-slate-900 bg-[#4ade80] hover:bg-[#22c55e] text-slate-950 font-black text-xs sm:text-sm shadow-[0_4px_0_#15803d] active:translate-y-1 active:shadow-none transition cursor-pointer flex items-center gap-1.5"
-      >
-        <span>3. Nasıl Çalışacak'a Geç</span>
-        <span class="text-base">➔</span>
-      </button>
+      <div class="flex items-center gap-2 shrink-0">
+        <button
+          type="button"
+          @click="$emit('prev-page')"
+          class="px-3 py-1.5 rounded-xl border-2 border-slate-900 bg-white hover:bg-slate-50 text-slate-800 font-black text-xs transition cursor-pointer shadow-xs active:translate-y-0.5"
+        >
+          ◀ 1. Hayal Et
+        </button>
+
+        <button
+          type="button"
+          @click="$emit('next-page')"
+          class="px-5 py-2 rounded-2xl border-2 border-slate-900 bg-[#4ade80] hover:bg-[#22c55e] text-slate-950 font-black text-xs sm:text-sm shadow-[0_4px_0_#15803d] active:translate-y-1 active:shadow-none transition cursor-pointer flex items-center gap-1.5"
+        >
+          <span>3. Nasıl Çalışacak'a Geç</span>
+          <span class="text-base">➔</span>
+        </button>
+      </div>
     </div>
 
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, nextTick, watch } from 'vue';
+import { ref, computed, onMounted, nextTick, watch } from 'vue';
 import type { BaglantiAdimi } from '../types/project';
 import { resolveElementPin, createWirePath, type PinCoord } from '../utils/pinResolver';
 
@@ -368,34 +375,24 @@ const workspaceRef = ref<HTMLElement | null>(null);
 const currentStepIndex = ref(0);
 const showAllWires = ref(false);
 
-// Varsayılan bağlantı adımları (props boş gelse dahi devreyi kur ekranının boş çıkmaması için koruma)
+// Varsayılan bağlantı adımları (tamamen Breadboard mimarisine uygun)
 const defaultAdimlar: BaglantiAdimi[] = [
   {
     adim_no: 1,
-    talimat: "Kırmızı LED'in uzun bacağını Breadboard'un 5E deliğine tak.",
-    ipucu: "Uzun bacak (+) yani anot ucudur!",
+    talimat: "Kırmızı kabloyu Arduino D13 pininden Breadboard'un 5A deliğine tak.",
+    ipucu: "5A deliği içeriden LED'in uzun anot bacağına (5E) bağlıdır!",
     kaynak_parca: "ARDUINO_UNO",
     kaynak_pin: "D13",
     hedef_parca: "BREADBOARD",
-    hedef_pin: "5E",
+    hedef_pin: "5A",
     kablo_rengi: "#ef4444"
   },
   {
     adim_no: 2,
-    talimat: "220Ω Direncin bir ucunu LED'in kısa bacağının olduğu 5C deliğine tak.",
-    ipucu: "Direnç LED'imizin fazla akımdan yanmasını önler!",
+    talimat: "Mavi kabloyu Breadboard'un 12A deliğinden Arduino'nun GND pinine bağla.",
+    ipucu: "12A deliği içeriden 220Ω direncin diğer bacağına bağlıdır, devreyi tamamlar!",
     kaynak_parca: "BREADBOARD",
-    kaynak_pin: "5C",
-    hedef_parca: "BREADBOARD",
-    hedef_pin: "9C",
-    kablo_rengi: "#f59e0b"
-  },
-  {
-    adim_no: 3,
-    talimat: "Direncin diğer ucunu (9A) Arduino'nun GND (Toprak) pinine bağla.",
-    ipucu: "GND devreyi tamamlar ve akımın toprağa akmasını sağlar.",
-    kaynak_parca: "BREADBOARD",
-    kaynak_pin: "9A",
+    kaynak_pin: "12A",
     hedef_parca: "ARDUINO_UNO",
     hedef_pin: "GND",
     kablo_rengi: "#3b82f6"
@@ -415,59 +412,33 @@ const currentStep = computed(() => effectiveSteps.value[currentStepIndex.value])
 
 function hasComponent(keyword: string): boolean {
   const kw = keyword.toUpperCase();
-  if (kw === 'LED' || kw === 'RESISTOR') return true; // Temel parçalar her zaman mevcuttur
+  if (kw === 'LED' || kw === 'RESISTOR') return true;
   return props.gerekliParcalar?.some(p => p.toUpperCase().includes(kw)) ?? false;
 }
 
-// Bileşenlerin Çalışma Alanındaki (x, y) Konumları
-const defaultPositions = {
-  arduino: { x: 30, y: 160 },
-  breadboard: { x: 340, y: 160 },
-  led: { x: 410, y: 65 },
-  resistor: { x: 490, y: 75 },
-  ldr: { x: 580, y: 65 },
-  buzzer: { x: 710, y: 140 },
-  hcsr04: { x: 710, y: 280 },
-  servo: { x: 120, y: 400 },
-  pot: { x: 580, y: 390 }
-};
+// Sabit Konum Koordinatları (Piksel cinsinden)
+// comp-arduino wrapper: left: 40px, top: 100px (içindeki uno: p-2 ile ~8px ofset)
+const UNO_OFFSET = { x: 48, y: 108 };
+// comp-breadboard-wrapper: left: 440px, top: 100px (içindeki breadboard: p-2 ile ~8px ofset)
+const BB_OFFSET = { x: 448, y: 108 };
 
-const positions = reactive({ ...defaultPositions });
-
-function resetComponentPositions() {
-  Object.assign(positions, defaultPositions);
-  updateWires();
-}
-
-// DRAGGING STATE
-let activeDragTarget: string | null = null;
-let dragStartMouse = { x: 0, y: 0 };
-let dragStartPos = { x: 0, y: 0 };
-
-function handleDragStart(compKey: string, e: MouseEvent) {
-  activeDragTarget = compKey;
-  dragStartMouse = { x: e.clientX, y: e.clientY };
-  const current = (positions as any)[compKey] || { x: 0, y: 0 };
-  dragStartPos = { x: current.x, y: current.y };
-}
-
-function handleDragMove(e: MouseEvent) {
-  if (!activeDragTarget) return;
-  const dx = e.clientX - dragStartMouse.x;
-  const dy = e.clientY - dragStartMouse.y;
-
-  const target = (positions as any)[activeDragTarget];
-  if (target) {
-    target.x = Math.max(0, dragStartPos.x + dx);
-    target.y = Math.max(0, dragStartPos.y + dy);
-    // Real-time wire recalculation
-    updateWires();
+// Aktif Parıldayan Sütunlar ve Güç Hatları
+const activeColumnsStr = computed(() => {
+  const cols = new Set<number>([5, 6, 12]);
+  if (hasComponent('LDR')) {
+    cols.add(18);
+    cols.add(20);
   }
-}
+  if (hasComponent('BUZZER')) {
+    cols.add(24);
+    cols.add(26);
+  }
+  return Array.from(cols).join(',');
+});
 
-function handleDragEnd() {
-  activeDragTarget = null;
-}
+const activeRailsStr = computed(() => {
+  return 'top-+,top--';
+});
 
 function nextStep() {
   if (currentStepIndex.value < totalSteps.value - 1) {
@@ -483,7 +454,6 @@ function prevStep() {
   }
 }
 
-// DİNAMİK KABLO VE PİN HESAPLAMA MOTORU (.pinInfo üzerinden)
 interface WireData {
   step: BaglantiAdimi;
   from: PinCoord;
@@ -495,47 +465,44 @@ const computedWires = ref<WireData[]>([]);
 const activeTargetCoord = ref<PinCoord | null>(null);
 
 /**
- * Parça adı veya ID'sinden ilgili HTML/DOM elementini ve konumunu çözer.
+ * Parça ve pin sorgusundan tam tuval (x, y) koordinatını deterministik olarak hesaplar.
  */
-function resolveComponentElement(partIdentifier: string): { el: HTMLElement | null; pos: { x: number; y: number } } {
-  const query = (partIdentifier || '').toUpperCase();
+function getCanvasPin(part: string, pin: string): PinCoord {
+  const qPart = (part || '').toUpperCase();
+  const qPin = (pin || '').trim();
 
-  if (query.includes('ARDUINO') || query.includes('UNO') || query.includes('NANO') || query.includes('MEGA') || query.includes('ESP32')) {
-    const el = document.getElementById('comp-arduino');
-    return { el: (el?.firstElementChild as HTMLElement) || el, pos: positions.arduino };
-  }
-  if (query.includes('BREADBOARD')) {
-    const el = document.getElementById('comp-breadboard');
-    return { el: (el?.firstElementChild as HTMLElement) || el, pos: positions.breadboard };
-  }
-  if (query.includes('LED')) {
-    const el = document.getElementById('comp-led');
-    return { el: (el?.firstElementChild as HTMLElement) || el, pos: positions.led };
-  }
-  if (query.includes('RESISTOR') || query.includes('DIRENC')) {
-    const el = document.getElementById('comp-resistor');
-    return { el: (el?.firstElementChild as HTMLElement) || el, pos: positions.resistor };
-  }
-  if (query.includes('LDR')) {
-    const el = document.getElementById('comp-ldr');
-    return { el: (el?.firstElementChild as HTMLElement) || el, pos: positions.ldr };
-  }
-  if (query.includes('BUZZER')) {
-    const el = document.getElementById('comp-buzzer');
-    return { el: (el?.firstElementChild as HTMLElement) || el, pos: positions.buzzer };
-  }
-  if (query.includes('HCSR') || query.includes('MESAFE')) {
-    const el = document.getElementById('comp-hcsr04');
-    return { el: (el?.firstElementChild as HTMLElement) || el, pos: positions.hcsr04 };
-  }
-  if (query.includes('SERVO')) {
-    const el = document.getElementById('comp-servo');
-    return { el: (el?.firstElementChild as HTMLElement) || el, pos: positions.servo };
+  // 1. Arduino Pini
+  if (qPart.includes('ARDUINO') || qPart.includes('UNO')) {
+    const unoEl = document.querySelector('wokwi-arduino-uno') as HTMLElement;
+    if (unoEl) {
+      const p = resolveElementPin(unoEl, qPin);
+      return { x: UNO_OFFSET.x + p.x, y: UNO_OFFSET.y + p.y };
+    }
+    // Fallback: D13 pini
+    return { x: UNO_OFFSET.x + 125, y: UNO_OFFSET.y + 9 };
   }
 
-  // Fallback to breadboard
-  const el = document.getElementById('comp-breadboard');
-  return { el: (el?.firstElementChild as HTMLElement) || el, pos: positions.breadboard };
+  // 2. Breadboard Deliği veya Breadboard üzerindeki eleman
+  const bbEl = document.querySelector('wokwi-breadboard-half') as HTMLElement;
+  if (bbEl) {
+    // Eğer hedef pin "LED" veya "ANODE" denmişse breadboard 5A deliğine eşleştir
+    let mappedPin = qPin;
+    if (qPart.includes('LED') || qPin.toUpperCase().includes('ANODE')) {
+      mappedPin = '5A';
+    } else if (qPart.includes('RESISTOR') || qPin.toUpperCase().includes('DIRENC')) {
+      mappedPin = '12A';
+    } else if (qPart.includes('LDR')) {
+      mappedPin = '20A';
+    } else if (qPart.includes('BUZZER')) {
+      mappedPin = '24F';
+    }
+
+    const p = resolveElementPin(bbEl, mappedPin);
+    return { x: BB_OFFSET.x + p.x, y: BB_OFFSET.y + p.y };
+  }
+
+  // Fallback
+  return { x: BB_OFFSET.x + 76, y: BB_OFFSET.y + 48 };
 }
 
 function updateWires() {
@@ -547,45 +514,22 @@ function updateWires() {
     const s = steps[i];
     if (!s) continue;
 
-    const source = resolveComponentElement(s.kaynak_parca);
-    const target = resolveComponentElement(s.hedef_parca);
+    const fromCoord = getCanvasPin(s.kaynak_parca, s.kaynak_pin);
+    const toCoord = getCanvasPin(s.hedef_parca, s.hedef_pin);
 
-    if (source.el && target.el) {
-      const p1Offset = resolveElementPin(source.el, s.kaynak_pin);
-      const p2Offset = resolveElementPin(target.el, s.hedef_pin);
-
-      const p1Canvas: PinCoord = {
-        x: source.pos.x + p1Offset.x,
-        y: source.pos.y + p1Offset.y
-      };
-      const p2Canvas: PinCoord = {
-        x: target.pos.x + p2Offset.x,
-        y: target.pos.y + p2Offset.y
-      };
-
-      wires.push({
-        step: s,
-        from: p1Canvas,
-        to: p2Canvas,
-        path: createWirePath(p1Canvas, p2Canvas)
-      });
-    }
+    wires.push({
+      step: s,
+      from: fromCoord,
+      to: toCoord,
+      path: createWirePath(fromCoord, toCoord)
+    });
   }
 
   computedWires.value = wires;
 
-  // Aktif adımın hedef pin koordinatı
+  // Aktif adımın hedef ucu
   if (currentStep.value) {
-    const target = resolveComponentElement(currentStep.value.hedef_parca);
-    if (target.el) {
-      const p2Offset = resolveElementPin(target.el, currentStep.value.hedef_pin);
-      activeTargetCoord.value = {
-        x: target.pos.x + p2Offset.x,
-        y: target.pos.y + p2Offset.y
-      };
-    } else {
-      activeTargetCoord.value = null;
-    }
+    activeTargetCoord.value = getCanvasPin(currentStep.value.hedef_parca, currentStep.value.hedef_pin);
   } else {
     activeTargetCoord.value = null;
   }
@@ -597,7 +541,6 @@ watch(() => props.baglantiAdimlari, () => {
 }, { deep: true });
 
 onMounted(() => {
-  // custom elements ve shadow DOM tanımlandığında kabloları bağla
   nextTick(() => {
     setTimeout(() => {
       updateWires();
