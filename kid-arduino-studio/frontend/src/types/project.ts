@@ -34,6 +34,7 @@ export interface InventoryItem {
   name: string;
   icon: string;
   tag: string;
+  imageSrc?: string;
   color?: string;
   category?: 'board' | 'light_display' | 'sensor' | 'actuator_sound' | 'passive' | 'custom' | string;
   description?: string;
