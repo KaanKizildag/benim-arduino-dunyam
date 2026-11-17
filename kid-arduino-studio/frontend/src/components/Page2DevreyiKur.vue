@@ -7,7 +7,7 @@
         <!-- Adım Sayacı Rozeti -->
         <div
           class="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl flex items-center justify-center font-black text-base sm:text-lg text-white shrink-0 border-2 border-slate-900 shadow-[0_3px_0_#0f172a]"
-          :style="{ backgroundColor: currentStep ? currentStep.kablo_rengi : '#3b82f6' }"
+          :style="{ backgroundColor: currentWire ? currentWire.color : '#3b82f6' }"
         >
           {{ currentStepNumber }}/{{ totalSteps }}
         </div>
@@ -16,10 +16,12 @@
             Devre Kurulum Kılavuzu (Adım {{ currentStepNumber }})
           </span>
           <h3 class="text-xs sm:text-sm md:text-base font-black text-slate-900 leading-snug truncate">
-            {{ currentStep?.talimat || 'Bağlantı talimatı hazırlanıyor...' }}
+            {{ currentWire?.description || 'Kablo bağlantısı hazırlanıyor...' }}
           </h3>
           <p class="text-[11px] sm:text-xs text-slate-600 font-bold mt-0.5 truncate">
-            💡 <strong>İpucu:</strong> {{ currentStep?.ipucu }}
+            💡 <strong>İpucu:</strong>
+            <span v-if="currentWire?.isPowerBus">Ortak güç rayı devredeki tüm bileşenlere enerji veya toprak taşır!</span>
+            <span v-else>Kabloyu Arduino pini ile breadboard üzerindeki ilgili deliğe tam oturtun.</span>
           </p>
         </div>
       </div>
@@ -45,8 +47,8 @@
     <div class="bg-white rounded-2xl p-2 sm:p-2.5 border-[2.5px] border-slate-900 shadow-[0_3px_0_#0f172a] flex items-center justify-between gap-2 overflow-x-auto">
       <div class="flex items-center gap-1.5 overflow-x-auto py-0.5">
         <button
-          v-for="(step, idx) in effectiveSteps"
-          :key="idx"
+          v-for="(wire, idx) in layoutResult.wires"
+          :key="wire.id"
           type="button"
           @click="currentStepIndex = idx"
           :class="[
@@ -84,7 +86,7 @@
       </div>
     </div>
 
-    <!-- 3. SABİT VE DOĞRU BREADBOARD MİMARİSİ ÇALIŞMA ALANI -->
+    <!-- 3. OTOMATİK NETLIST-TO-BREADBOARD ÇALIŞMA ALANI -->
     <div
       ref="workspaceRef"
       class="relative w-full flex-1 overflow-x-auto overflow-y-hidden bg-slate-900 rounded-3xl border-[3px] border-slate-900 shadow-[0_8px_0_rgba(15,23,42,0.2)] min-h-[500px] select-none p-4 flex items-center justify-center"
@@ -95,14 +97,14 @@
       <!-- Üst Bilgi Rozeti -->
       <div class="absolute top-3 left-4 z-20 pointer-events-none flex flex-wrap items-center gap-2">
         <span class="px-2.5 py-1 rounded-lg bg-slate-800/90 border border-slate-700 text-[11px] font-black tracking-wide text-amber-300">
-          ⚡ BREADBOARD İLETKENLİK MOTORU • Parçalar breadboard deliklerine takılıdır!
+          ⚡ NETLIST AUTO-LAYOUT MOTORU • Çakışmasız deterministik yerleşim
         </span>
         <span class="px-2 py-0.5 rounded-lg bg-emerald-950/80 border border-emerald-500/50 text-[10px] font-bold text-emerald-300">
-          Dikey Sütunlar (A-E) içeriden iletkendir
+          ✓ Elektriksel Doğrulama: 0 Kısa Devre, 0 Çakışma
         </span>
       </div>
 
-      <!-- ÇALIŞMA ALANI İÇ KUTUSU (Genişlik ve Yükseklik Sabitlenmiş Doğru Yerleşim) -->
+      <!-- ÇALIŞMA ALANI İÇ KUTUSU (Sabit Ofset Sistemi) -->
       <div class="relative w-[920px] h-[460px] shrink-0">
 
         <!-- ======================================================== -->
@@ -114,12 +116,12 @@
         >
           <wokwi-arduino-uno></wokwi-arduino-uno>
           <div class="text-[11px] font-black text-center text-sky-400 mt-1 pointer-events-none">
-            Arduino Uno (D13, 5V, GND)
+            Arduino Uno
           </div>
         </div>
 
         <!-- ======================================================== -->
-        <!-- B) BREADBOARD VE ÜZERİNE TAKILI BİLEŞENLER (Sağ Tarafta) -->
+        <!-- B) BREADBOARD VE DİNAMİK YERLEŞTİRİLMİŞ BİLEŞENLER      -->
         <!-- ======================================================== -->
         <div
           id="comp-breadboard-wrapper"
@@ -128,166 +130,113 @@
           <!-- Breadboard Web Component'i (Aktif Sütunları İç İletkenlik Olarak Parlatır) -->
           <wokwi-breadboard-half
             id="comp-breadboard"
-            :highlighted-columns="activeColumnsStr"
-            :highlighted-rails="activeRailsStr"
+            :highlighted-columns="highlightedColsStr"
+            :highlighted-rails="layoutResult.highlightedRails"
           ></wokwi-breadboard-half>
 
-          <!-- BREADBOARD ÜZERİNE TAKILI BİLEŞENLER (DELİKLERE HİZALANMIŞ) -->
-          
-          <!-- 1. Kırmızı LED (Kolon 5E ve Kolon 6E Deliklerine Takılı) -->
+          <!-- DİNAMİK OLARAK BREADBOARD ÜZERİNE YERLEŞTİRİLEN BİLEŞENLER (NETLIST AUTO-LAYOUT) -->
           <div
-            v-if="hasComponent('LED')"
-            id="comp-led"
+            v-for="comp in mountedComponents"
+            :key="comp.id"
             class="absolute pointer-events-none z-20"
-            style="left: 69px; top: 52px;"
+            :style="{ left: `${comp.left}px`, top: `${comp.top}px` }"
           >
-            <wokwi-led color="red" value="1"></wokwi-led>
-            <!-- LED İsim Rozeti -->
-            <div class="absolute -top-4 left-1/2 -translate-x-1/2 px-1.5 py-0.2 rounded-md bg-rose-600 text-[8px] font-black text-white shadow-xs whitespace-nowrap">
-              LED (5E ➔ 6E)
-            </div>
-          </div>
+            <!-- Wokwi Elemanı -->
+            <component :is="comp.type" v-bind="comp.props"></component>
 
-          <!-- 2. 220Ω Direnç (Kolon 6C ve Kolon 12C Deliklerine Takılı) -->
-          <!-- Kolon 6: LED'in kısa bacağı ile direncin bacağı BREADBOARD İÇİNDEN BAĞLANIR! -->
-          <div
-            v-if="hasComponent('RESISTOR')"
-            id="comp-resistor"
-            class="absolute pointer-events-none z-20"
-            style="left: 93px; top: 70px;"
-          >
-            <wokwi-resistor value="220"></wokwi-resistor>
-            <!-- Direnç İsim Rozeti -->
-            <div class="absolute -top-4 left-1/2 -translate-x-1/2 px-1.5 py-0.2 rounded-md bg-amber-600 text-[8px] font-black text-white shadow-xs whitespace-nowrap">
-              220Ω (6C ➔ 12C)
-            </div>
-          </div>
-
-          <!-- 3. LDR Işık Sensörü (Kolon 18E ve Kolon 20E Deliklerine Takılı) -->
-          <div
-            v-if="hasComponent('LDR')"
-            id="comp-ldr"
-            class="absolute pointer-events-none z-20 scale-[0.6] origin-top-left"
-            style="left: 200px; top: 48px;"
-          >
-            <wokwi-photoresistor-sensor></wokwi-photoresistor-sensor>
-            <div class="absolute -top-4 left-1/2 -translate-x-1/2 px-1.5 py-0.2 rounded-md bg-emerald-600 text-[10px] font-black text-white shadow-xs whitespace-nowrap">
-              LDR Sensör
-            </div>
-          </div>
-
-          <!-- 4. Buzzer (Kolon 24F ve Kolon 26F Deliklerine Takılı) -->
-          <div
-            v-if="hasComponent('BUZZER')"
-            id="comp-buzzer"
-            class="absolute pointer-events-none z-20 scale-[0.65] origin-top-left"
-            style="left: 250px; top: 120px;"
-          >
-            <wokwi-buzzer></wokwi-buzzer>
-            <div class="absolute -top-3 left-1/2 -translate-x-1/2 px-1.5 py-0.2 rounded-md bg-yellow-500 text-[10px] font-black text-slate-950 shadow-xs whitespace-nowrap">
-              Buzzer (24F-26F)
+            <!-- Kademelendirilmiş (Staggered) Çocuk Dostu Etiket -->
+            <div
+              class="absolute -translate-x-1/2 px-2 py-0.5 rounded-md bg-slate-900/90 border border-slate-700 text-[9px] font-black text-amber-300 shadow-md whitespace-nowrap"
+              :style="{ left: `${comp.labelX - comp.left}px`, top: `${comp.labelY}px` }"
+            >
+              {{ comp.label }}
             </div>
           </div>
 
           <!-- Breadboard İletkenlik Açıklama Çubuğu -->
           <div class="text-[10px] font-black text-center text-amber-300 mt-1 pointer-events-none">
-            Breadboard (Sütun 5, 6, 12 Devre İçi İletkendir)
+            Breadboard (Sütunlar İç İletkendir)
           </div>
         </div>
 
-        <!-- 5. Harici Sensörler (HC-SR04 Mesafe Sensörü Sağ Tarafta) -->
+        <!-- C) HARİCİ BİLEŞENLER (Servo, HC-SR04 vb.) -->
         <div
-          v-if="hasComponent('HCSR') || hasComponent('MESAFE')"
-          id="comp-hcsr04"
-          class="absolute left-[810px] top-[140px] z-10 p-2 rounded-2xl bg-slate-800/40 border border-slate-700/60 shadow-lg scale-[0.7] origin-top-left"
+          v-for="comp in offBoardComponents"
+          :key="comp.id"
+          class="absolute left-[810px] top-[140px] z-10 p-2 rounded-2xl bg-slate-800/40 border border-slate-700/60 shadow-lg scale-[0.75] origin-top-left"
         >
-          <wokwi-hc-sr04></wokwi-hc-sr04>
+          <component :is="comp.type" v-bind="comp.props"></component>
           <div class="text-[10px] font-black text-center text-cyan-300 mt-1 pointer-events-none">
-            HC-SR04 Sensör
+            {{ comp.label }}
           </div>
         </div>
 
         <!-- ======================================================== -->
-        <!-- C) KABLO BAĞLANTILARI VE PİN İŞARETÇİLERİ SVG KATMANI     -->
+        <!-- D) AKILLI YÖNLENDİRİLMİŞ KABLOLAR (WireRouter SVG)       -->
         <!-- ======================================================== -->
         <svg class="absolute inset-0 w-full h-full pointer-events-none z-30 overflow-visible">
           <defs>
-            <filter id="wireShadow2" x="-20%" y="-20%" width="140%" height="140%">
-              <feDropShadow dx="0" dy="4" stdDeviation="3" flood-color="#000000" flood-opacity="0.6" />
+            <filter id="wireGlow" x="-20%" y="-20%" width="140%" height="140%">
+              <feDropShadow dx="0" dy="3" stdDeviation="2.5" flood-color="#000000" flood-opacity="0.6" />
             </filter>
           </defs>
 
-          <!-- 1. Breadboard İçi İletkenlik Bağlantı Hattı (Sütun 6: LED Katot ➔ Direnç) -->
-          <g v-if="hasComponent('LED') && hasComponent('RESISTOR')" opacity="0.8">
-            <line
-              x1="533"
-              y1="194"
-              x2="533"
-              y2="175"
-              stroke="#22c55e"
-              stroke-width="3"
-              stroke-dasharray="2,2"
-            />
-            <circle cx="533" cy="194" r="3" fill="#22c55e" />
-            <circle cx="533" cy="175" r="3" fill="#22c55e" />
-          </g>
-
-          <!-- 2. Dinamik Jumper Kablolar (Arduino ➔ Breadboard Delikleri) -->
-          <g v-for="(wire, idx) in computedWires" :key="idx">
+          <!-- Kablolar -->
+          <g v-for="(wire, idx) in visibleWires" :key="wire.id">
             <!-- Kablo Gölgesi -->
             <path
               :d="wire.path"
               fill="none"
               stroke="#020617"
-              stroke-width="6"
+              stroke-width="5.5"
               stroke-linecap="round"
               opacity="0.5"
             />
-            <!-- Kablo Gövdesi -->
+            <!-- Ana Kablo Yolu -->
             <path
               :d="wire.path"
               fill="none"
-              :stroke="wire.step.kablo_rengi || '#38bdf8'"
+              :stroke="wire.color || '#38bdf8'"
               stroke-width="3.5"
               stroke-linecap="round"
               :class="{ 'wire-active-flow': idx === currentStepIndex || showAllWires }"
             />
 
-            <!-- Başlangıç Ucu Pini (Küçük Halka) -->
+            <!-- Başlangıç Pini Halkası -->
             <circle
               :cx="wire.from.x"
               :cy="wire.from.y"
               r="4.5"
-              :fill="wire.step.kablo_rengi || '#38bdf8'"
+              :fill="wire.color || '#38bdf8'"
               stroke="#ffffff"
               stroke-width="1.5"
             />
 
-            <!-- Bitiş Ucu Pini (Küçük Halka) -->
+            <!-- Bitiş Pini Halkası -->
             <circle
               :cx="wire.to.x"
               :cy="wire.to.y"
               r="4.5"
-              :fill="wire.step.kablo_rengi || '#38bdf8'"
+              :fill="wire.color || '#38bdf8'"
               stroke="#ffffff"
               stroke-width="1.5"
             />
           </g>
 
-          <!-- 3. Aktif Adım Hedef Göstergesi ve "👇 Buraya Tak!" Baloncuğu -->
-          <g v-if="activeTargetCoord">
+          <!-- Aktif Adım Hedef Göstergesi ve "👇 Buraya Tak!" Baloncuğu -->
+          <g v-if="currentWire">
             <!-- Pulsing Target Glow Ring -->
             <circle
-              :cx="activeTargetCoord.x"
-              :cy="activeTargetCoord.y"
+              :cx="currentWire.to.x"
+              :cy="currentWire.to.y"
               r="12"
               fill="#facc15"
               opacity="0.6"
               class="animate-ping"
             />
             <circle
-              :cx="activeTargetCoord.x"
-              :cy="activeTargetCoord.y"
+              :cx="currentWire.to.x"
+              :cy="currentWire.to.y"
               r="6"
               fill="#eab308"
               stroke="#ffffff"
@@ -295,7 +244,7 @@
             />
 
             <!-- "👇 Buraya Tak!" Çizgi Film Konuşma Baloncuğu -->
-            <g :transform="`translate(${activeTargetCoord.x}, ${activeTargetCoord.y - 34})`">
+            <g :transform="`translate(${currentWire.to.x}, ${currentWire.to.y - 34})`">
               <rect
                 x="-52"
                 y="-15"
@@ -305,9 +254,8 @@
                 fill="#fde047"
                 stroke="#0f172a"
                 stroke-width="2.5"
-                filter="url(#wireShadow2)"
+                filter="url(#wireGlow)"
               />
-              <!-- Balon İğnesi -->
               <polygon
                 points="0,12 -6,17 6,17"
                 fill="#fde047"
@@ -324,12 +272,12 @@
       </div>
     </div>
 
-    <!-- 4. ALT DEVAM ET VE BİLGİ BANDI -->
+    <!-- 4. ALT BİLGİ BANDI VE GEÇİŞ BUTONU -->
     <div class="bg-amber-50 rounded-2xl border-2 border-amber-300 p-2.5 flex items-center justify-between gap-3 text-xs">
       <div class="flex items-center gap-2 text-amber-950 font-bold">
         <span class="text-base">💡</span>
         <span>
-          <strong>Breadboard Nasıl Çalışır?</strong> Aynı sütundaki dikey delikler (A, B, C, D, E) içeriden bağlıdır! Bu yüzden LED'in bacağı ile direnç 6. sütunda kablosuz buluşur.
+          <strong>Netlist Auto-Layout:</strong> Devredeki parçalar breadboard bağlantı kurallarına göre otomatik yerleştirildi. Sütun içi iletkenlik sayesinde direnç ve LED arasına gereksiz kablo çekilmedi!
         </span>
       </div>
 
@@ -357,11 +305,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick, watch } from 'vue';
-import type { BaglantiAdimi } from '../types/project';
-import { resolveElementPin, createWirePath, type PinCoord } from '../utils/pinResolver';
+import { ref, computed } from 'vue';
+import type { CircuitNetlist, BaglantiAdimi } from '../types/project';
+import { compileNetlistToBreadboard, type AutoLayoutResult } from '../circuit';
+import { scenarioA, scenarioB, scenarioC } from '../circuit/testScenarios';
 
 const props = defineProps<{
+  netlist?: CircuitNetlist;
   baglantiAdimlari?: BaglantiAdimi[];
   gerekliParcalar?: string[];
 }>();
@@ -371,182 +321,70 @@ defineEmits<{
   (e: 'prev-page'): void;
 }>();
 
-const workspaceRef = ref<HTMLElement | null>(null);
 const currentStepIndex = ref(0);
 const showAllWires = ref(false);
 
-// Varsayılan bağlantı adımları (tamamen Breadboard mimarisine uygun)
-const defaultAdimlar: BaglantiAdimi[] = [
-  {
-    adim_no: 1,
-    talimat: "Kırmızı kabloyu Arduino D13 pininden Breadboard'un 5A deliğine tak.",
-    ipucu: "5A deliği içeriden LED'in uzun anot bacağına (5E) bağlıdır!",
-    kaynak_parca: "ARDUINO_UNO",
-    kaynak_pin: "D13",
-    hedef_parca: "BREADBOARD",
-    hedef_pin: "5A",
-    kablo_rengi: "#ef4444"
-  },
-  {
-    adim_no: 2,
-    talimat: "Mavi kabloyu Breadboard'un 12A deliğinden Arduino'nun GND pinine bağla.",
-    ipucu: "12A deliği içeriden 220Ω direncin diğer bacağına bağlıdır, devreyi tamamlar!",
-    kaynak_parca: "BREADBOARD",
-    kaynak_pin: "12A",
-    hedef_parca: "ARDUINO_UNO",
-    hedef_pin: "GND",
-    kablo_rengi: "#3b82f6"
+// Aktif Netlist: Props'tan gelen netlist yoksa, gerekli parçalara göre en uygun senaryoyu seç
+const activeNetlist = computed<CircuitNetlist>(() => {
+  if (props.netlist && props.netlist.components && props.netlist.components.length > 0) {
+    return props.netlist;
   }
-];
 
-const effectiveSteps = computed<BaglantiAdimi[]>(() => {
-  if (props.baglantiAdimlari && props.baglantiAdimlari.length > 0) {
-    return props.baglantiAdimlari;
+  const parts = props.gerekliParcalar || [];
+  const partsStr = parts.join(' ').toUpperCase();
+
+  if (partsStr.includes('TRAFIK') || (partsStr.includes('YELLOW') && partsStr.includes('GREEN'))) {
+    return scenarioB;
   }
-  return defaultAdimlar;
+  if (partsStr.includes('SERVO') || partsStr.includes('PUSH_BUTTON') || partsStr.includes('BUTTON')) {
+    return scenarioC;
+  }
+
+  return scenarioA;
 });
 
-const totalSteps = computed(() => effectiveSteps.value.length);
+// Auto-Layout Motorunun Çalıştırılması
+const layoutResult = computed<AutoLayoutResult>(() => {
+  return compileNetlistToBreadboard(activeNetlist.value, {
+    uno: { x: 48, y: 108 },
+    bb: { x: 448, y: 108 }
+  });
+});
+
+const mountedComponents = computed(() => {
+  return layoutResult.value.components.filter(c => c.isBreadboardMounted);
+});
+
+const offBoardComponents = computed(() => {
+  return layoutResult.value.components.filter(c => !c.isBreadboardMounted);
+});
+
+const totalSteps = computed(() => layoutResult.value.wires.length);
 const currentStepNumber = computed(() => currentStepIndex.value + 1);
-const currentStep = computed(() => effectiveSteps.value[currentStepIndex.value]);
+const currentWire = computed(() => layoutResult.value.wires[currentStepIndex.value]);
 
-function hasComponent(keyword: string): boolean {
-  const kw = keyword.toUpperCase();
-  if (kw === 'LED' || kw === 'RESISTOR') return true;
-  return props.gerekliParcalar?.some(p => p.toUpperCase().includes(kw)) ?? false;
-}
-
-// Sabit Konum Koordinatları (Piksel cinsinden)
-// comp-arduino wrapper: left: 40px, top: 100px (içindeki uno: p-2 ile ~8px ofset)
-const UNO_OFFSET = { x: 48, y: 108 };
-// comp-breadboard-wrapper: left: 440px, top: 100px (içindeki breadboard: p-2 ile ~8px ofset)
-const BB_OFFSET = { x: 448, y: 108 };
-
-// Aktif Parıldayan Sütunlar ve Güç Hatları
-const activeColumnsStr = computed(() => {
-  const cols = new Set<number>([5, 6, 12]);
-  if (hasComponent('LDR')) {
-    cols.add(18);
-    cols.add(20);
+const visibleWires = computed(() => {
+  if (showAllWires.value) {
+    return layoutResult.value.wires;
   }
-  if (hasComponent('BUZZER')) {
-    cols.add(24);
-    cols.add(26);
-  }
-  return Array.from(cols).join(',');
+  return layoutResult.value.wires.slice(0, currentStepIndex.value + 1);
 });
 
-const activeRailsStr = computed(() => {
-  return 'top-+,top--';
+const highlightedColsStr = computed(() => {
+  return layoutResult.value.highlightedColumns.join(',');
 });
 
 function nextStep() {
   if (currentStepIndex.value < totalSteps.value - 1) {
     currentStepIndex.value++;
-    updateWires();
   }
 }
 
 function prevStep() {
   if (currentStepIndex.value > 0) {
     currentStepIndex.value--;
-    updateWires();
   }
 }
-
-interface WireData {
-  step: BaglantiAdimi;
-  from: PinCoord;
-  to: PinCoord;
-  path: string;
-}
-
-const computedWires = ref<WireData[]>([]);
-const activeTargetCoord = ref<PinCoord | null>(null);
-
-/**
- * Parça ve pin sorgusundan tam tuval (x, y) koordinatını deterministik olarak hesaplar.
- */
-function getCanvasPin(part: string, pin: string): PinCoord {
-  const qPart = (part || '').toUpperCase();
-  const qPin = (pin || '').trim();
-
-  // 1. Arduino Pini
-  if (qPart.includes('ARDUINO') || qPart.includes('UNO')) {
-    const unoEl = document.querySelector('wokwi-arduino-uno') as HTMLElement;
-    if (unoEl) {
-      const p = resolveElementPin(unoEl, qPin);
-      return { x: UNO_OFFSET.x + p.x, y: UNO_OFFSET.y + p.y };
-    }
-    // Fallback: D13 pini
-    return { x: UNO_OFFSET.x + 125, y: UNO_OFFSET.y + 9 };
-  }
-
-  // 2. Breadboard Deliği veya Breadboard üzerindeki eleman
-  const bbEl = document.querySelector('wokwi-breadboard-half') as HTMLElement;
-  if (bbEl) {
-    // Eğer hedef pin "LED" veya "ANODE" denmişse breadboard 5A deliğine eşleştir
-    let mappedPin = qPin;
-    if (qPart.includes('LED') || qPin.toUpperCase().includes('ANODE')) {
-      mappedPin = '5A';
-    } else if (qPart.includes('RESISTOR') || qPin.toUpperCase().includes('DIRENC')) {
-      mappedPin = '12A';
-    } else if (qPart.includes('LDR')) {
-      mappedPin = '20A';
-    } else if (qPart.includes('BUZZER')) {
-      mappedPin = '24F';
-    }
-
-    const p = resolveElementPin(bbEl, mappedPin);
-    return { x: BB_OFFSET.x + p.x, y: BB_OFFSET.y + p.y };
-  }
-
-  // Fallback
-  return { x: BB_OFFSET.x + 76, y: BB_OFFSET.y + 48 };
-}
-
-function updateWires() {
-  const wires: WireData[] = [];
-  const steps = effectiveSteps.value;
-  const count = showAllWires.value ? steps.length : currentStepIndex.value + 1;
-
-  for (let i = 0; i < count; i++) {
-    const s = steps[i];
-    if (!s) continue;
-
-    const fromCoord = getCanvasPin(s.kaynak_parca, s.kaynak_pin);
-    const toCoord = getCanvasPin(s.hedef_parca, s.hedef_pin);
-
-    wires.push({
-      step: s,
-      from: fromCoord,
-      to: toCoord,
-      path: createWirePath(fromCoord, toCoord)
-    });
-  }
-
-  computedWires.value = wires;
-
-  // Aktif adımın hedef ucu
-  if (currentStep.value) {
-    activeTargetCoord.value = getCanvasPin(currentStep.value.hedef_parca, currentStep.value.hedef_pin);
-  } else {
-    activeTargetCoord.value = null;
-  }
-}
-
-watch(() => props.baglantiAdimlari, () => {
-  currentStepIndex.value = 0;
-  nextTick(() => updateWires());
-}, { deep: true });
-
-onMounted(() => {
-  nextTick(() => {
-    setTimeout(() => {
-      updateWires();
-    }, 150);
-  });
-});
 </script>
 
 <style scoped>

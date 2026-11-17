@@ -1,3 +1,6 @@
+import type { CircuitNetlist, NetlistComponent, NetlistConnection } from '../circuit/types';
+export type { CircuitNetlist, NetlistComponent, NetlistConnection };
+
 export interface BaglantiAdimi {
   adim_no: number;
   talimat: string;
@@ -20,7 +23,8 @@ export interface ProjeTasarimi {
   proje_adi: string;
   karsilama_mesaji: string;
   gerekli_parcalar: string[];
-  baglanti_adimlari: BaglantiAdimi[];
+  netlist?: CircuitNetlist;
+  baglanti_adimlari?: BaglantiAdimi[];
   akis_adimlari: AkisAdimi;
   arduino_kodu: string;
   guvenlik_notu?: string;

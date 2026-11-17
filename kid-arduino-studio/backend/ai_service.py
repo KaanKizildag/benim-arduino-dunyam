@@ -5,124 +5,73 @@ from typing import List, Optional, Dict, Any
 import httpx
 from dotenv import load_dotenv
 
-from schemas import ProjeTasarimi, BaglantiAdimi, AkisAdimi
+from schemas import (
+    ProjeTasarimi,
+    BaglantiAdimi,
+    AkisAdimi,
+    CircuitNetlist,
+    NetlistComponent,
+    NetlistConnection
+)
 
 load_dotenv()
 
 # ---------------------------------------------------------
-# Breadboard Fizik Kontrolcüsü (Deterministic Validator)
-# ---------------------------------------------------------
-
-def get_breadboard_net(pin: str) -> str:
-    """Aynı elektrik hattına bağlı delikleri aynı 'net' ismine çevirir."""
-    p = (pin or "").upper().strip()
-    if "GND" in p or p.startswith("RAIL_GND") or p == "-":
-        return "RAIL_GND"
-    if "5V" in p or "3.3V" in p or p.startswith("RAIL_5V") or p == "+":
-        return "RAIL_5V"
-    
-    match = re.match(r"^([A-J])(\d+)$", p)
-    if not match:
-        return p
-    
-    row, col = match.groups()
-    half = "TOP" if row in "ABCDE" else "BOTTOM"
-    return f"BB_{half}_{col}"  # Örn: A5 ve E5 ikisi de 'BB_TOP_5' döner!
-
-
-def validate_breadboard_steps(steps: list) -> List[str]:
-    """
-    Breadboard üzerindeki adımları doğrular ve fiziksel kısa devreleri tespit eder.
-    """
-    errors = []
-    for s in steps:
-        step_dict = s if isinstance(s, dict) else (s.model_dump() if hasattr(s, "model_dump") else s.__dict__)
-        adim_no = step_dict.get("adim_no", "?")
-        k_parca = (step_dict.get("kaynak_parca") or "").upper().strip()
-        h_parca = (step_dict.get("hedef_parca") or "").upper().strip()
-        k_pin = (step_dict.get("kaynak_pin") or "").upper().strip()
-        h_pin = (step_dict.get("hedef_pin") or "").upper().strip()
-
-        # Breadboard içi aynı dikey hatta kısa devre kontrolü
-        if (k_parca == "BREADBOARD" or "BB" in k_parca) and (h_parca == "BREADBOARD" or "BB" in h_parca):
-            net1 = get_breadboard_net(k_pin)
-            net2 = get_breadboard_net(h_pin)
-            if net1 == net2:
-                errors.append(
-                    f"Adım {adim_no} HATALI: {k_pin} ve {h_pin} zaten breadboard içinde birbirine bağlı (Aynı hat: {net1}). Kısa devre oluşur! Farklı sütun numaraları kullan."
-                )
-    return errors
-
-
-# ---------------------------------------------------------
-# Hazır Mock Demo Projeler (ProjeTasarimi Şemasına Tam Uyumlu)
+# Hazır Mock Demo Projeler (Netlist Şemasına Tam Uyumlu)
 # ---------------------------------------------------------
 
 MOCK_PROJECTS: Dict[str, ProjeTasarimi] = {
+    # 1. Akıllı Gece Lambası (Senaryo A: LED + Direnç + LDR)
     "gece_lambasi": ProjeTasarimi(
         proje_adi="Akıllı Gece Bekçisi Lambası 🌙",
         karsilama_mesaji="Harika bir fikir! Odan karardığında sihir gibi kendiliğinden yanan akıllı bir gece lambası yapıyoruz. 🌙✨",
         gerekli_parcalar=["ARDUINO_UNO", "BREADBOARD", "LDR_SENSOR", "LED_RED", "RESISTOR_220"],
+        netlist=CircuitNetlist(
+            board="arduino-uno",
+            components=[
+                NetlistComponent(id="r1", type="wokwi-resistor", props={"value": "220"}, label="220Ω Direnç"),
+                NetlistComponent(id="led1", type="wokwi-led", props={"color": "red"}, label="Kırmızı LED"),
+                NetlistComponent(id="ldr1", type="wokwi-photoresistor-sensor", label="LDR Işık Sensörü")
+            ],
+            connections=[
+                NetlistConnection(from_pin="uno.D13", to_pin="r1.1", color="orange"),
+                NetlistConnection(from_pin="r1.2", to_pin="led1.A", color="red"),
+                NetlistConnection(from_pin="led1.C", to_pin="GND", color="black"),
+                NetlistConnection(from_pin="ldr1.VCC", to_pin="5V", color="red"),
+                NetlistConnection(from_pin="ldr1.GND", to_pin="GND", color="black"),
+                NetlistConnection(from_pin="ldr1.AO", to_pin="uno.A0", color="green")
+            ]
+        ),
         baglanti_adimlari=[
             BaglantiAdimi(
                 adim_no=1,
-                talimat="Arduino'nun 5V pininden Breadboard Kırmızı Güç Hattına (RAIL_5V) kablo tak.",
-                ipucu="Bu hat tüm devreye 5 Volt pozitif enerji dağıtacak.",
-                kaynak_parca="ARDUINO_UNO",
-                kaynak_pin="5V",
-                hedef_parca="BREADBOARD",
-                hedef_pin="RAIL_5V",
-                kablo_rengi="#EF4444"
-            ),
-            BaglantiAdimi(
-                adim_no=2,
-                talimat="Arduino'nun GND pininden Breadboard Mavi Eksi Hattına (RAIL_GND) kablo tak.",
-                ipucu="GND devrenin elektrik dönüş (eksi) yoludur.",
-                kaynak_parca="ARDUINO_UNO",
-                kaynak_pin="GND",
-                hedef_parca="BREADBOARD",
-                hedef_pin="RAIL_GND",
-                kablo_rengi="#1F2937"
-            ),
-            BaglantiAdimi(
-                adim_no=3,
-                talimat="Kırmızı LED'in uzun bacağını E5'e, kısa bacağını E6'ya tak. Arduino D13 pininden A5 deliğine kablo çek.",
-                ipucu="D13'ten gelen elektrik A5'e girer ve aynı sütundaki E5 deliğindeki LED uzun bacağına ulaşır!",
+                talimat="Arduino D13 pininden 220Ω Direncin 1. ucuna kablo bağla.",
+                ipucu="Direnç LED'in fazla akımdan yanmasını önler.",
                 kaynak_parca="ARDUINO_UNO",
                 kaynak_pin="D13",
                 hedef_parca="BREADBOARD",
-                hedef_pin="A5",
+                hedef_pin="2A",
+                kablo_rengi="#F97316"
+            ),
+            BaglantiAdimi(
+                adim_no=2,
+                talimat="220Ω Direnç ile Kırmızı LED anot bacağını breadboard üzerinde aynı sütunda buluştur.",
+                ipucu="Breadboard dikey sütunu üzerinden kablosuz bağlanırlar!",
+                kaynak_parca="BREADBOARD",
+                kaynak_pin="6C",
+                hedef_parca="BREADBOARD",
+                hedef_pin="6E",
                 kablo_rengi="#EF4444"
             ),
             BaglantiAdimi(
-                adim_no=4,
-                talimat="220Ω Direncin bir ucunu C6'ya (LED kısa bacağı ile aynı sütuna!), diğer ucunu RAIL_GND hattına bağla.",
-                ipucu="6. sütundaki LED kısa bacağı ile direnç breadboard içinde buluşur ve toprağa akar.",
+                adim_no=3,
+                talimat="LED'in katot (kısa) bacağını GND hattına bağla.",
+                ipucu="GND devreyi tamamlar.",
                 kaynak_parca="BREADBOARD",
-                kaynak_pin="C6",
+                kaynak_pin="7E",
                 hedef_parca="BREADBOARD",
-                hedef_pin="RAIL_GND",
-                kablo_rengi="#3B82F6"
-            ),
-            BaglantiAdimi(
-                adim_no=5,
-                talimat="LDR ışık sensörünün bacaklarını E12 ve E14 deliklerine tak. Arduino A0 pininden A12 deliğine kablo çek.",
-                ipucu="A0 analog bilgi pini, odanın ışık seviyesini 12. sütundan dinler.",
-                kaynak_parca="ARDUINO_UNO",
-                kaynak_pin="A0",
-                hedef_parca="BREADBOARD",
-                hedef_pin="A12",
-                kablo_rengi="#10B981"
-            ),
-            BaglantiAdimi(
-                adim_no=6,
-                talimat="LDR'ın diğer bacağı için A14 deliğinden Kırmızı Güç Hattına (RAIL_5V) kablo tak.",
-                ipucu="LDR çalışmak için 5 Volt elektrik enerjisine ihtiyaç duyar.",
-                kaynak_parca="BREADBOARD",
-                kaynak_pin="A14",
-                hedef_parca="BREADBOARD",
-                hedef_pin="RAIL_5V",
-                kablo_rengi="#EF4444"
+                hedef_pin="GND",
+                kablo_rengi="#1F2937"
             )
         ],
         akis_adimlari=AkisAdimi(
@@ -158,92 +107,91 @@ void loop() {
         guvenlik_notu="LED'in zarar görmemesi için araya mutlaka 220 Ohm direnç koyduk."
     ),
 
+    # 2. 3 LED'li Trafik Lambası (Senaryo B)
+    "trafik_isiklari": ProjeTasarimi(
+        proje_adi="Akıllı Şehir Trafik Lambası 🚦",
+        karsilama_mesaji="Sırayla yanan kırmızı, sarı ve yeşil lambalarla trafiği yöneteceğiz! 🚦🚗",
+        gerekli_parcalar=["ARDUINO_UNO", "BREADBOARD", "LED_RED", "LED_YELLOW", "LED_GREEN", "RESISTOR_220"],
+        netlist=CircuitNetlist(
+            board="arduino-uno",
+            components=[
+                NetlistComponent(id="r1", type="wokwi-resistor", props={"value": "220"}, label="Kırmızı Direnç"),
+                NetlistComponent(id="led1", type="wokwi-led", props={"color": "red"}, label="Kırmızı LED"),
+                NetlistComponent(id="r2", type="wokwi-resistor", props={"value": "220"}, label="Sarı Direnç"),
+                NetlistComponent(id="led2", type="wokwi-led", props={"color": "yellow"}, label="Sarı LED"),
+                NetlistComponent(id="r3", type="wokwi-resistor", props={"value": "220"}, label="Yeşil Direnç"),
+                NetlistComponent(id="led3", type="wokwi-led", props={"color": "green"}, label="Yeşil LED")
+            ],
+            connections=[
+                NetlistConnection(from_pin="uno.D12", to_pin="r1.1", color="red"),
+                NetlistConnection(from_pin="r1.2", to_pin="led1.A", color="red"),
+                NetlistConnection(from_pin="led1.C", to_pin="GND", color="black"),
+                NetlistConnection(from_pin="uno.D11", to_pin="r2.1", color="yellow"),
+                NetlistConnection(from_pin="r2.2", to_pin="led2.A", color="yellow"),
+                NetlistConnection(from_pin="led2.C", to_pin="GND", color="black"),
+                NetlistConnection(from_pin="uno.D10", to_pin="r3.1", color="green"),
+                NetlistConnection(from_pin="r3.2", to_pin="led3.A", color="green"),
+                NetlistConnection(from_pin="led3.C", to_pin="GND", color="black")
+            ]
+        ),
+        baglanti_adimlari=[],
+        akis_adimlari=AkisAdimi(
+            gozlemle="Trafik lambası zaman sayacını sürekli izler.",
+            karar_ver="Hangi lambanın yanma sırası geldi?",
+            evet_sonucu="Sırası gelen lambayı yak!",
+            hayir_sonucu="Diğer lambaları söndür ve bekle!"
+        ),
+        arduino_kodu="""// Kid Arduino Studio - Trafik Lambasi
+const int RED_LED = 12;
+const int YELLOW_LED = 11;
+const int GREEN_LED = 10;
+
+void setup() {
+  pinMode(RED_LED, OUTPUT);
+  pinMode(YELLOW_LED, OUTPUT);
+  pinMode(GREEN_LED, OUTPUT);
+}
+
+void loop() {
+  digitalWrite(RED_LED, HIGH);
+  delay(3000);
+  digitalWrite(YELLOW_LED, HIGH);
+  delay(1000);
+  digitalWrite(RED_LED, LOW);
+  digitalWrite(YELLOW_LED, LOW);
+  digitalWrite(GREEN_LED, HIGH);
+  delay(3000);
+  digitalWrite(GREEN_LED, LOW);
+}
+"""
+    ),
+
+    # 3. Akıllı Park Sensörü
     "park_sensoru": ProjeTasarimi(
         proje_adi="Yarasa Kulaklı Akıllı Park Sensörü 🦇",
         karsilama_mesaji="Süper bir fikir! Tıpkı yarasalar gibi ses dalgaları fırlatarak yaklaşan nesneleri fark eden bir alarm yapıyoruz! 🦇🚗",
         gerekli_parcalar=["ARDUINO_UNO", "BREADBOARD", "HCSR04", "BUZZER", "LED_RED"],
-        baglanti_adimlari=[
-            BaglantiAdimi(
-                adim_no=1,
-                talimat="Arduino 5V pininden Breadboard Kırmızı Güç Hattına (RAIL_5V) kablo tak.",
-                ipucu="Sensör ve korna enerjisini bu ortak hattan alacak.",
-                kaynak_parca="ARDUINO_UNO",
-                kaynak_pin="5V",
-                hedef_parca="BREADBOARD",
-                hedef_pin="RAIL_5V",
-                kablo_rengi="#EF4444"
-            ),
-            BaglantiAdimi(
-                adim_no=2,
-                talimat="Arduino GND pininden Breadboard Mavi Eksi Hattına (RAIL_GND) kablo tak.",
-                ipucu="Ortak eksi kutbu sağlayarak devreyi güvenle tamamlarız.",
-                kaynak_parca="ARDUINO_UNO",
-                kaynak_pin="GND",
-                hedef_parca="BREADBOARD",
-                hedef_pin="RAIL_GND",
-                kablo_rengi="#1F2937"
-            ),
-            BaglantiAdimi(
-                adim_no=3,
-                talimat="HC-SR04 sensörünü F14, F15, F16, F17 deliklerine tak. Arduino D9 pininden J15 (TRIG) deliğine kablo çek.",
-                ipucu="TRIG pini ses dalgalarını fırlatır.",
-                kaynak_parca="ARDUINO_UNO",
-                kaynak_pin="D9",
-                hedef_parca="BREADBOARD",
-                hedef_pin="J15",
-                kablo_rengi="#3B82F6"
-            ),
-            BaglantiAdimi(
-                adim_no=4,
-                talimat="Arduino D10 pininden J16 (ECHO) deliğine kablo çek.",
-                ipucu="ECHO pini yankılanan ses dalgalarını dinler.",
-                kaynak_parca="ARDUINO_UNO",
-                kaynak_pin="D10",
-                hedef_parca="BREADBOARD",
-                hedef_pin="J16",
-                kablo_rengi="#10B981"
-            ),
-            BaglantiAdimi(
-                adim_no=5,
-                talimat="Sensörün VCC bacağı için J14 deliğinden Kırmızı Güç Hattına (RAIL_5V) kablo tak.",
-                ipucu="Sensörün çalışması için 5V enerji verdik.",
-                kaynak_parca="BREADBOARD",
-                kaynak_pin="J14",
-                hedef_parca="BREADBOARD",
-                hedef_pin="RAIL_5V",
-                kablo_rengi="#EF4444"
-            ),
-            BaglantiAdimi(
-                adim_no=6,
-                talimat="Sensörün GND bacağı için J17 deliğinden Mavi Eksi Hattına (RAIL_GND) kablo tak.",
-                ipucu="Sensörün elektrik devresi tamamlandı.",
-                kaynak_parca="BREADBOARD",
-                kaynak_pin="J17",
-                hedef_parca="BREADBOARD",
-                hedef_pin="RAIL_GND",
-                kablo_rengi="#1F2937"
-            ),
-            BaglantiAdimi(
-                adim_no=7,
-                talimat="Buzzer'ın artı bacağını F22'ye tak. Arduino D8 pininden J22 deliğine kablo çek.",
-                ipucu="Buzzer korna gibi öterek yaklaşan nesneleri haber verir.",
-                kaynak_parca="ARDUINO_UNO",
-                kaynak_pin="D8",
-                hedef_parca="BREADBOARD",
-                hedef_pin="J22",
-                kablo_rengi="#F59E0B"
-            ),
-            BaglantiAdimi(
-                adim_no=8,
-                talimat="Buzzer'ın eksi bacağını F24'e tak ve J24 deliğinden Mavi Eksi Hattına (RAIL_GND) bağla.",
-                ipucu="Kornanın devresini tamamladık.",
-                kaynak_parca="BREADBOARD",
-                kaynak_pin="J24",
-                hedef_parca="BREADBOARD",
-                hedef_pin="RAIL_GND",
-                kablo_rengi="#1F2937"
-            )
-        ],
+        netlist=CircuitNetlist(
+            board="arduino-uno",
+            components=[
+                NetlistComponent(id="hcsr1", type="wokwi-hc-sr04", label="Mesafe Sensörü"),
+                NetlistComponent(id="buzzer1", type="wokwi-buzzer", label="Uyarı Buzzerı"),
+                NetlistComponent(id="r1", type="wokwi-resistor", props={"value": "220"}, label="220Ω Direnç"),
+                NetlistComponent(id="led1", type="wokwi-led", props={"color": "red"}, label="Kırmızı LED")
+            ],
+            connections=[
+                NetlistConnection(from_pin="hcsr1.VCC", to_pin="5V", color="red"),
+                NetlistConnection(from_pin="hcsr1.GND", to_pin="GND", color="black"),
+                NetlistConnection(from_pin="hcsr1.TRIG", to_pin="uno.D9", color="blue"),
+                NetlistConnection(from_pin="hcsr1.ECHO", to_pin="uno.D10", color="green"),
+                NetlistConnection(from_pin="buzzer1.1", to_pin="uno.D8", color="orange"),
+                NetlistConnection(from_pin="buzzer1.2", to_pin="GND", color="black"),
+                NetlistConnection(from_pin="uno.D13", to_pin="r1.1", color="red"),
+                NetlistConnection(from_pin="r1.2", to_pin="led1.A", color="red"),
+                NetlistConnection(from_pin="led1.C", to_pin="GND", color="black")
+            ]
+        ),
+        baglanti_adimlari=[],
         akis_adimlari=AkisAdimi(
             gozlemle="Ultrasonik sensör önüne gelen engellerin mesafesini santimetre olarak dinler.",
             karar_ver="Önünde bir engel çok yaklaştı mı? (Mesafe 15 cm'den az mı?)",
@@ -254,11 +202,13 @@ void loop() {
 const int TRIG_PIN = 9;
 const int ECHO_PIN = 10;
 const int BUZZER_PIN = 8;
+const int LED_PIN = 13;
 
 void setup() {
   pinMode(TRIG_PIN, OUTPUT);
   pinMode(ECHO_PIN, INPUT);
   pinMode(BUZZER_PIN, OUTPUT);
+  pinMode(LED_PIN, OUTPUT);
   Serial.begin(9600);
 }
 
@@ -272,87 +222,134 @@ void loop() {
   long sure = pulseIn(ECHO_PIN, HIGH);
   int mesafe = sure * 0.034 / 2;
 
-  Serial.print("Mesafe: ");
-  Serial.println(mesafe);
-
   if (mesafe > 0 && mesafe < 15) {
     digitalWrite(BUZZER_PIN, HIGH);
+    digitalWrite(LED_PIN, HIGH);
     delay(80);
     digitalWrite(BUZZER_PIN, LOW);
+    digitalWrite(LED_PIN, LOW);
     delay(80);
   } else {
     digitalWrite(BUZZER_PIN, LOW);
+    digitalWrite(LED_PIN, LOW);
     delay(100);
   }
 }
-""",
-        guvenlik_notu="HC-SR04 sensörünün bacakları hassastır, nazikçe takmayı unutma."
+"""
+    ),
+
+    # 4. Buton + Servo Motor (Senaryo C)
+    "buton_servo": ProjeTasarimi(
+        proje_adi="Otomatik Robotik Kapı Bariyeri 🦾",
+        karsilama_mesaji="Butona basıldığında açılan akıllı bir bariyer kolu tasarlıyoruz! 🦾✨",
+        gerekli_parcalar=["ARDUINO_UNO", "BREADBOARD", "PUSH_BUTTON", "RESISTOR_10K", "SERVO_SG90"],
+        netlist=CircuitNetlist(
+            board="arduino-uno",
+            components=[
+                NetlistComponent(id="btn1", type="wokwi-pushbutton", props={"color": "red"}, label="Açma Butonu"),
+                NetlistComponent(id="r1", type="wokwi-resistor", props={"value": "10000"}, label="10kΩ Pull-down Direnç"),
+                NetlistComponent(id="servo1", type="wokwi-servo", label="SG90 Servo Motor")
+            ],
+            connections=[
+                NetlistConnection(from_pin="btn1.1", to_pin="5V", color="red"),
+                NetlistConnection(from_pin="btn1.2", to_pin="uno.D2", color="blue"),
+                NetlistConnection(from_pin="btn1.2", to_pin="r1.1", color="blue"),
+                NetlistConnection(from_pin="r1.2", to_pin="GND", color="black"),
+                NetlistConnection(from_pin="servo1.V+", to_pin="5V", color="red"),
+                NetlistConnection(from_pin="servo1.GND", to_pin="GND", color="black"),
+                NetlistConnection(from_pin="servo1.PWM", to_pin="uno.D9", color="orange")
+            ]
+        ),
+        baglanti_adimlari=[],
+        akis_adimlari=AkisAdimi(
+            gozlemle="Butona basılıp basılmadığını sürekli gözlemle.",
+            karar_ver="Butona tıklandı mı?",
+            evet_sonucu="Evet! Servo motoru 90 derece döndür ve kapıyı aç! 🚪",
+            hayir_sonucu="Hayır, kapıyı kapalı tut (0 derece)."
+        ),
+        arduino_kodu="""// Kid Arduino Studio - Buton ve Servo Kapi
+#include <Servo.h>
+
+const int BUTTON_PIN = 2;
+const int SERVO_PIN = 9;
+Servo myServo;
+
+void setup() {
+  pinMode(BUTTON_PIN, INPUT);
+  myServo.attach(SERVO_PIN);
+  myServo.write(0);
+}
+
+void loop() {
+  int buttonState = digitalRead(BUTTON_PIN);
+  if (buttonState == HIGH) {
+    myServo.write(90);
+    delay(2000);
+    myServo.write(0);
+  }
+  delay(50);
+}
+"""
     )
 }
 
-
 # ---------------------------------------------------------
-# Pedagojik AI Sistem Promptu
+# Pedagojik AI Sistem Promptu (LLM Koordinat Yasağı ile Netlist)
 # ---------------------------------------------------------
 
 SYSTEM_PROMPT = """Sen 8-14 yaş arasındaki çocuklar için tasarlanmış bir 'Arduino Robot Arkadaşı'sın.
-GÖREVİN: Çocuğun hayalindeki projeyi ve elindeki parçaları inceleyerek Arduino Uno projesini JSON olarak tasarlamak.
+GÖREVİN: Çocuğun hayalindeki projeyi ve elindeki parçaları inceleyerek Arduino projesini standart Netlist JSON olarak tasarlamak.
 
-BREADBOARD PİN ADLANDIRMASI:
-- Üst Yarı Delikleri: A1..E30 (Örn: A5, B10, E12)
-- Alt Yarı Delikleri: F1..J30 (Örn: F14, J16, H22)
-- Güç Hatları: RAIL_5V (Kırmızı Artı Hattı), RAIL_GND (Mavi Eksi Hattı)
+KESİN KURAL (LLM KOORDİNAT YASAĞI):
+ASLA breadboard deliği (5A, 12C, A1 vb.) veya piksel koordinatı üretme! Fiziksel yerleşimi, sütun dağıtımını ve kablo çizimini sistemin deterministik Auto-Layout motoru yapacaktır. Sen yalnızca mantıksal bağlantıları (Netlist) üreteceksin.
 
-BREADBOARD FİZİKSEL BAĞLANTI KURALLARI (KESİNLİKLE UYULACAK):
-1. DİKEY İLETKENLİK (KISA DEVRE YASAĞI):
-   - Breadboard üzerinde AYNI SÜTUN NUMARASINA sahip A-B-C-D-E delikleri birbirine içeriden bağlıdır (Örn: A5, B5, C5, D5, E5 tek bir iletkendir).
-   - AYNI SÜTUN NUMARASINA sahip F-G-H-I-J delikleri de kendi içinde birbirine bağlıdır (Örn: F5, G5, H5, I5, J5 tek bir iletkendir).
-   - Orta oluk (E ile F arası) yalıtkandır, birbirine bağlı DEĞİLDİR.
-   - YASAK: Bir bileşenin (LED, Direnç, Buton) iki bacağını ASLA aynı sütun numarasına (Örn: A5 ve B5'e) takma! Bu kısa devre yapar.
+NETLIST ŞEMASI:
+1. "board": "arduino-uno"
+2. "components": Devredeki fiziksel parçalar:
+   - "id": Benzersiz kimlik (örn: led1, r1, ldr1, buzzer1, btn1, servo1)
+   - "type": Wokwi eleman tipi (wokwi-led, wokwi-resistor, wokwi-photoresistor-sensor, wokwi-buzzer, wokwi-pushbutton, wokwi-servo, wokwi-hc-sr04, wokwi-potentiometer)
+   - "props": Özellikler (örn: {"color": "red"}, {"value": "220"})
+   - "label": Çocuk dostu Türkçe isim (örn: "Kırmızı LED", "220Ω Direnç")
 
-2. BİLEŞEN YERLEŞİM FORMATI:
-   - LED Yerleşimi: Uzun bacak bir sütuna (örn: E5), kısa bacak farklı bir sütuna (örn: E6) takılır.
-   - Direnç Yerleşimi: Direncin bir ucu bileşenin olduğu sütuna (örn: C6), diğer ucu FARKLI bir sütuna veya doğrudan `RAIL_GND` hattına takılır. (Asla C6'dan D6'ya aynı sütun içinde bağlama!).
-   - Sinyal Kablosu: Arduino'dan gelen sinyal kablosu, ilgili bileşenin bacağıyla AYNI SÜTUNDAKİ boş bir deliğe takılır (Örn: LED E5'teyse, D13 kablosu A5'e takılır).
+3. "connections": Mantıksal pin bağlantıları (from -> to):
+   - Arduino pinleri: uno.D13, uno.D12, uno.D9, uno.D2, uno.A0
+   - Güç hatları: 5V, GND
+   - Bileşen pinleri:
+     - wokwi-resistor: r1.1, r1.2
+     - wokwi-led: led1.A (Anot), led1.C (Katot)
+     - wokwi-photoresistor-sensor: ldr1.VCC, ldr1.GND, ldr1.AO
+     - wokwi-buzzer: buzzer1.1, buzzer1.2
+     - wokwi-pushbutton: btn1.1, btn1.2
+     - wokwi-servo: servo1.V+, servo1.GND, servo1.PWM
+     - wokwi-hc-sr04: hcsr1.VCC, hcsr1.GND, hcsr1.TRIG, hcsr1.ECHO
 
-3. GÜÇ HATLARI:
-   - Arduino `GND` -> Breadboard `RAIL_GND` (Mavi eksi hattı).
-   - Arduino `5V` -> Breadboard `RAIL_5V` (Kırmızı artı hattı).
-   - Bileşenler enerji ve toprağı bu hatlardan alır.
-
-4. HAZIR BREADBOARD BÖLGE SLOTLARI:
-   - Sol Bölge (Sütun 1–8): LED'ler ve Dirençler
-   - Orta Bölge (Sütun 10–18): Butonlar ve Sensörler (LDR, HC-SR04)
-   - Sağ Bölge (Sütun 20–28): Buzzer ve Servo motor
-
-JSON ŞEMASI (KESİNLİKLE BU YAPIDA GEÇERLİ JSON DÖNDÜR):
+JSON ÇIKTI FORMATI:
 {
   "proje_adi": "string",
   "karsilama_mesaji": "string",
-  "gerekli_parcalar": ["ARDUINO_UNO", "BREADBOARD", "LED_RED", ...],
-  "baglanti_adimlari": [
-    {
-      "adim_no": 1,
-      "talimat": "string",
-      "ipucu": "string",
-      "kaynak_parca": "ARDUINO_UNO",
-      "kaynak_pin": "5V",
-      "hedef_parca": "BREADBOARD",
-      "hedef_pin": "RAIL_5V",
-      "kablo_rengi": "#EF4444"
-    }
-  ],
-  "akis_adimlari": {
-    "gozlemle": "string (Sensörün neyi izlediğini anlatır)",
-    "karar_ver": "string (Koşulu belirtir)",
-    "evet_sonucu": "string (Karar Evet ise ne olacak)",
-    "hayir_sonucu": "string (Karar Hayır ise ne olacak)"
+  "gerekli_parcalar": ["ARDUINO_UNO", "BREADBOARD", ...],
+  "netlist": {
+    "board": "arduino-uno",
+    "components": [
+      { "id": "r1", "type": "wokwi-resistor", "props": { "value": "220" }, "label": "220Ω Direnç" },
+      { "id": "led1", "type": "wokwi-led", "props": { "color": "red" }, "label": "Kırmızı LED" }
+    ],
+    "connections": [
+      { "from": "uno.D13", "to": "r1.1", "color": "orange" },
+      { "from": "r1.2", "to": "led1.A", "color": "red" },
+      { "from": "led1.C", "to": "GND", "color": "black" }
+    ]
   },
-  "arduino_kodu": "void setup() { ... } void loop() { ... }",
+  "akis_adimlari": {
+    "gozlemle": "string",
+    "karar_ver": "string",
+    "evet_sonucu": "string",
+    "hayir_sonucu": "string"
+  },
+  "arduino_kodu": "string",
   "guvenlik_notu": "string"
 }
 """
-
 
 def clean_llm_json_response(raw_text: str) -> str:
     """LLM çıktısından JSON'ı temiz bir şekilde ayıklar."""
@@ -367,7 +364,6 @@ def clean_llm_json_response(raw_text: str) -> str:
         return text[start:end+1]
         
     return text
-
 
 def get_installed_ollama_models(ollama_url: str = "http://127.0.0.1:11434") -> List[Dict[str, Any]]:
     """Yerel Ollama sunucusundaki kurulu modelleri döner."""
@@ -394,7 +390,6 @@ def get_installed_ollama_models(ollama_url: str = "http://127.0.0.1:11434") -> L
     except Exception:
         pass
     return []
-
 
 def get_all_available_models(ollama_url: str = "http://127.0.0.1:11434") -> Dict[str, Any]:
     """Tüm yerel ve bulut modelleri ve yapılandırma durumlarını listeler."""
@@ -429,122 +424,110 @@ def get_all_available_models(ollama_url: str = "http://127.0.0.1:11434") -> Dict
         "configured_keys": configured_keys
     }
 
-
 def generate_with_ollama(model_name: str, prompt: str, inventory: List[str], ollama_url: str = "http://127.0.0.1:11434") -> ProjeTasarimi:
-    """Yerel Ollama örneğine doğrudan HTTP çağrısı yapar ve breadboard kurallarını doğrular."""
     clean_model = model_name.replace("ollama/", "")
-    
     user_prompt = f"""KULLANICI PROJE HAYALİ:
 "{prompt}"
 
-ÇOCUĞUN ELİNDEKİ PARÇALAR (ENVANTER):
+KULLANICININ MALZEME ÇANTASI (ENVANTER):
 {json.dumps(inventory, ensure_ascii=False)}
 
-Lütfen belirtilen Breadboard Fiziksel Kurallarına harfiyen uygun bir Türkçe ProjeTasarimi JSON'ı üret."""
-
-    payload = {
-        "model": clean_model,
-        "prompt": f"{SYSTEM_PROMPT}\n\n{user_prompt}",
-        "format": "json",
-        "stream": False,
-        "options": {
-            "temperature": 0.2,
-            "top_p": 0.9
-        }
-    }
-
-    res = httpx.post(f"{ollama_url}/api/generate", json=payload, timeout=90.0)
-    if res.status_code != 200:
-        raise RuntimeError(f"Ollama hata döndürdü: {res.status_code} - {res.text}")
-
-    resp_json = res.json()
-    raw_content = resp_json.get("response", "")
-    clean_json_str = clean_llm_json_response(raw_content)
-
-    data = json.loads(clean_json_str)
-    proj = ProjeTasarimi(**data)
-
-    errors = validate_breadboard_steps(proj.baglanti_adimlari)
-    if errors:
-        print(f"[Breadboard Validator] Kısa devre tespit edildi: {errors}")
-        return MOCK_PROJECTS["park_sensoru"] if any(k in prompt.lower() for k in ["park", "mesafe", "yarasa"]) else MOCK_PROJECTS["gece_lambasi"]
-
-    return proj
-
-
-def generate_with_litellm(model_name: str, prompt: str, inventory: List[str], api_key: Optional[str] = None) -> ProjeTasarimi:
-    """LiteLLM üzerinden Gemini, OpenAI, Claude vb. çağrısı yapar ve breadboard kurallarını doğrular."""
-    import litellm
-
-    if api_key and api_key.strip():
-        if "gemini" in model_name.lower():
-            os.environ["GEMINI_API_KEY"] = api_key.strip()
-        elif "claude" in model_name.lower() or "anthropic" in model_name.lower():
-            os.environ["ANTHROPIC_API_KEY"] = api_key.strip()
-        else:
-            os.environ["OPENAI_API_KEY"] = api_key.strip()
-
-    user_content = f"""KULLANICI PROJE HAYALİ:
-"{prompt}"
-
-ÇOCUĞUN ELİNDEKİ PARÇALAR (ENVANTER):
-{json.dumps(inventory, ensure_ascii=False)}
-
-Lütfen Breadboard Fiziksel Kurallarına (dikey iletkenlik, kısa devre yasağı, güç hatları) harfiyen uyarak tam JSON üret."""
-
-    json_schema = ProjeTasarimi.model_json_schema()
-
-    response = litellm.completion(
-        model=model_name,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_content}
-        ],
-        response_format={"type": "json_object", "schema": json_schema},
-        temperature=0.2
-    )
-
-    content = response.choices[0].message.content
-    clean_json_str = clean_llm_json_response(content)
-    data = json.loads(clean_json_str)
-    proj = ProjeTasarimi(**data)
-
-    errors = validate_breadboard_steps(proj.baglanti_adimlari)
-    if errors:
-        print(f"[Breadboard Validator] Kısa devre tespit edildi: {errors}")
-        return MOCK_PROJECTS["park_sensoru"] if any(k in prompt.lower() for k in ["park", "mesafe", "yarasa"]) else MOCK_PROJECTS["gece_lambasi"]
-
-    return proj
-
-
-def generate_project_with_ai(
-    prompt: str,
-    inventory: List[str],
-    model: Optional[str] = None,
-    api_key: Optional[str] = None,
-    ollama_url: str = "http://127.0.0.1:11434"
-) -> ProjeTasarimi:
-    """Kullanıcının seçtiği modele göre projeyi üretir ve breadboard kurallarını doğrular."""
-    chosen_model = model or "ollama/qwen2.5-coder:1.5b"
-    print(f"[AI Service] Proje üretiliyor. Model: {chosen_model}")
-
-    if chosen_model.startswith("ollama/") or chosen_model in ["local", "qwen2.5-coder:1.5b", "qwen2.5-coder:3b"]:
-        try:
-            return generate_with_ollama(chosen_model, prompt, inventory, ollama_url)
-        except Exception as e:
-            print(f"[Ollama Hatası] Yerel model çağrısı başarısız oldu ({e}).")
-            if not api_key and not os.getenv("GEMINI_API_KEY") and not os.getenv("OPENAI_API_KEY"):
-                print("[AI Fallback] Mock şablona geçiliyor.")
-                return MOCK_PROJECTS["park_sensoru"] if any(k in prompt.lower() for k in ["park", "mesafe", "yarasa"]) else MOCK_PROJECTS["gece_lambasi"]
+Yukarıdaki hayali ve envanteri kullanarak standart Netlist şeması ile tam bir Arduino projesi tasarla."""
 
     try:
-        return generate_with_litellm(chosen_model, prompt, inventory, api_key)
+        res = httpx.post(
+            f"{ollama_url}/api/generate",
+            json={
+                "model": clean_model,
+                "prompt": f"{SYSTEM_PROMPT}\n\n{user_prompt}",
+                "stream": False,
+                "format": "json"
+            },
+            timeout=45.0
+        )
+        if res.status_code == 200:
+            raw_response = res.json().get("response", "")
+            cleaned = clean_llm_json_response(raw_response)
+            data = json.loads(cleaned)
+            return ProjeTasarimi(**data)
     except Exception as e:
-        print(f"[LiteLLM Hatası] Bulut model çağrısı başarısız oldu ({e}). Akıllı mock şablon dönülüyor.")
-        if any(w in prompt.lower() for w in ["mesafe", "park", "engel", "yarasa", "hcsr04", "korna"]):
-            return MOCK_PROJECTS["park_sensoru"]
-        return MOCK_PROJECTS["gece_lambasi"]
+        print(f"Ollama üretimi başarısız: {e}")
 
+    # Fallback to smart matching mock project
+    return select_best_mock_project(prompt)
+
+def generate_with_litellm(model_name: str, prompt: str, inventory: List[str], api_key: Optional[str] = None) -> ProjeTasarimi:
+    from litellm import completion
+
+    user_prompt = f"""KULLANICI PROJE HAYALİ:
+"{prompt}"
+
+KULLANICININ MALZEME ÇANTASI:
+{json.dumps(inventory, ensure_ascii=False)}
+
+Standart Netlist şeması ile tam bir Arduino projesi üret."""
+
+    try:
+        response = completion(
+            model=model_name,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": user_prompt}
+            ],
+            response_format={"type": "json_object"},
+            api_key=api_key,
+            temperature=0.3
+        )
+        content = response.choices[0].message.content
+        cleaned = clean_llm_json_response(content)
+        data = json.loads(cleaned)
+        return ProjeTasarimi(**data)
+    except Exception as e:
+        print(f"LiteLLM üretimi başarısız: {e}")
+
+    return select_best_mock_project(prompt)
+
+def select_best_mock_project(prompt: str) -> ProjeTasarimi:
+    p = (prompt or "").lower()
+    if any(k in p for k in ["trafik", "lamba", "isik", "kirmizi sari"]):
+        return MOCK_PROJECTS["trafik_isiklari"]
+    if any(k in p for k in ["park", "mesafe", "yarasa", "hcsr04", "korna", "engel"]):
+        return MOCK_PROJECTS["park_sensoru"]
+    if any(k in p for k in ["buton", "servo", "kapi", "bariyer", "motor"]):
+        return MOCK_PROJECTS["buton_servo"]
+    return MOCK_PROJECTS["gece_lambasi"]
+
+def generate_project_idea(
+    prompt: str,
+    inventory: List[str],
+    model: str = "default",
+    ollama_url: str = "http://127.0.0.1:11434",
+    api_key: Optional[str] = None
+) -> ProjeTasarimi:
+    models_info = get_all_available_models(ollama_url)
+    chosen_model = model if model != "default" and model is not None else models_info["default_model"]
+
+    if chosen_model.startswith("ollama/") or chosen_model == "local":
+        if models_info["ollama_active"]:
+            return generate_with_ollama(chosen_model, prompt, inventory, ollama_url)
+        else:
+            return select_best_mock_project(prompt)
+
+    if not api_key:
+        if "gemini" in chosen_model:
+            api_key = os.getenv("GEMINI_API_KEY")
+        elif "gpt" in chosen_model:
+            api_key = os.getenv("OPENAI_API_KEY")
+        elif "claude" in chosen_model:
+            api_key = os.getenv("ANTHROPIC_API_KEY")
+
+    if api_key:
+        return generate_with_litellm(chosen_model, prompt, inventory, api_key)
+
+    return select_best_mock_project(prompt)
+
+# Geriye dönük takma ad
+generate_project_with_ai = generate_project_idea
 
 def fix_arduino_code(code: str, error: str, project_context: str = "", model: Optional[str] = None) -> str:
     """Derleme veya yükleme hatasını analiz edip düzelten kendini iyileştirme fonksiyonu."""
@@ -577,3 +560,4 @@ PROJE BAĞLAMI:
     except Exception as e:
         print(f"[Self-Healing Hatası] Kod düzeltilemedi ({e}). Orijinal kod korunuyor.")
         return code
+

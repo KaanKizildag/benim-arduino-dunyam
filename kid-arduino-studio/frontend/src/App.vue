@@ -67,6 +67,7 @@
       <!-- SAYFA 2: DEVREYİ KUR (Breadboard ve Arduino Uno Bağlantı Kılavuzu) -->
       <Page2DevreyiKur
         v-else-if="currentStep === 2"
+        :netlist="currentProject.netlist"
         :baglantiAdimlari="currentProject.baglanti_adimlari"
         :gerekliParcalar="currentProject.gerekli_parcalar"
         @next-page="currentStep = 3"
@@ -163,12 +164,14 @@ import Page2DevreyiKur from './components/Page2DevreyiKur.vue';
 import Page3NasilCalisacak from './components/Page3NasilCalisacak.vue';
 import Page4Calistir from './components/Page4Calistir.vue';
 import CodePeekModal from './components/CodePeekModal.vue';
+import { scenarioA } from './circuit/testScenarios';
 
 // Varsayılan Proje (Akıllı Gece Bekçisi Lambası)
 const defaultProject: ProjeTasarimi = {
   proje_adi: "Akıllı Gece Bekçisi Lambası 🌙",
   karsilama_mesaji: "Harika bir fikir! Odan karardığında sihir gibi kendiliğinden yanan akıllı bir gece lambası yapıyoruz. 🌙✨",
   gerekli_parcalar: ["ARDUINO_UNO", "BREADBOARD", "LDR_SENSOR", "LED_RED", "RESISTOR_220"],
+  netlist: scenarioA,
   baglanti_adimlari: [
     {
       adim_no: 1,
