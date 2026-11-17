@@ -6,12 +6,12 @@
       @click.self="$emit('close')"
     >
       <!-- Modal Kutusu (Referans Görsel Tarzında 3D Çizgi Film Kutusu) -->
-      <div class="bg-white rounded-[32px] border-[3px] border-slate-900 shadow-[0_12px_0_rgba(15,23,42,0.3)] max-w-4xl w-full overflow-hidden flex flex-col max-h-[92vh] animate-in fade-in zoom-in-95 duration-150">
+      <div class="bg-white rounded-[32px] border-[3px] border-slate-900 shadow-[0_12px_0_rgba(15,23,42,0.3)] max-w-5xl w-full overflow-hidden flex flex-col max-h-[92vh] animate-in fade-in zoom-in-95 duration-150">
         
         <!-- ÜST BAŞLIK ÇUBUĞU (Nane Yeşili Banner) -->
         <div class="px-5 py-3.5 bg-[#a7f3d0] border-b-[3px] border-slate-900 flex items-center justify-between shrink-0">
           <div class="flex items-center gap-3">
-            <div class="w-9 h-9 rounded-xl bg-white/90 border-2 border-slate-900 flex items-center justify-center text-xl shadow-xs">
+            <div class="w-10 h-10 rounded-2xl bg-white/90 border-2 border-slate-900 flex items-center justify-center text-2xl shadow-xs">
               🧰
             </div>
             <div>
@@ -19,7 +19,7 @@
                 Malzeme Çantam
               </h2>
               <span class="text-[11px] font-bold text-slate-700">
-                Projende kullanabileceğin elektronikler ({{ selectedCount }} parça seçili)
+                Projende kullanabileceğin elektronikler ({{ selectedCount }} parça çantada)
               </span>
             </div>
           </div>
@@ -42,7 +42,7 @@
             <input
               v-model="searchQuery"
               type="text"
-              placeholder="Elektronik ara... (örn: servo, ldr, lcd, buzzer)"
+              placeholder="Elektronik ara... (örn: servo, ldr, lcd, buzzer, uno, nano)"
               class="w-full pl-8 pr-3 py-1.5 rounded-xl border-2 border-slate-900 text-xs font-bold bg-white focus:outline-hidden focus:ring-2 focus:ring-teal-400"
             />
           </div>
@@ -159,8 +159,8 @@
           />
         </div>
 
-        <!-- ELEKTRONİK PARÇALAR IZGARASI (Geniş Çeşitlilik) -->
-        <div class="flex-1 overflow-y-auto p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 bg-slate-50">
+        <!-- ELEKTRONİK PARÇALAR IZGARASI (Gerçek Wokwi Görsel Donanım Kataloğu) -->
+        <div class="flex-1 overflow-y-auto p-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 bg-slate-50">
           <div
             v-for="item in filteredElectronics"
             :key="item.id"
@@ -175,17 +175,14 @@
               v-if="item.isCustom"
               type="button"
               @click.stop="removeCustomPart(item.id)"
-              class="absolute top-1 left-1 w-4 h-4 rounded-full bg-rose-500 text-white text-[9px] font-black flex items-center justify-center hover:scale-110 cursor-pointer"
+              class="absolute top-1 left-1 w-5 h-5 rounded-full bg-rose-500 text-white text-[10px] font-black flex items-center justify-center hover:scale-110 cursor-pointer shadow-xs"
               title="Bu parçayı sil"
             >
               ✕
             </button>
 
-            <!-- İkon / SVG Temsili (Resmi Fritzing Görseli Varsa Onu Göster) -->
-            <div class="w-12 h-12 rounded-xl bg-white/90 border border-slate-900/20 flex items-center justify-center text-2xl mb-1.5 shadow-xs overflow-hidden p-1">
-              <img v-if="item.imageSrc" :src="item.imageSrc" class="w-full h-full object-contain pointer-events-none" :alt="item.name" />
-              <span v-else>{{ item.icon }}</span>
-            </div>
+            <!-- Gerçek Wokwi Web Bileşen Görseli -->
+            <WokwiComponentPreview :item-id="item.id" :icon="item.icon" class="mb-2" />
 
             <!-- İsim ve Etiket -->
             <div class="w-full">
@@ -200,7 +197,7 @@
             <!-- Seçili Onay Rozeti (Referans Görseldeki Yeşil Çember Tik) -->
             <span
               v-if="isSelected(item.id)"
-              class="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-emerald-500 border border-slate-900 text-white font-black text-[10px] flex items-center justify-center shadow-xs"
+              class="absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full bg-emerald-500 border-2 border-slate-900 text-white font-black text-xs flex items-center justify-center shadow-xs"
             >
               ✓
             </span>
@@ -243,6 +240,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import type { InventoryItem } from '../types/project';
+import WokwiComponentPreview from './WokwiComponentPreview.vue';
 
 const props = defineProps<{
   isOpen: boolean;
@@ -265,59 +263,52 @@ const newPartCategory = ref('sensor');
 const newPartIcon = ref('🧪');
 const newPartDesc = ref('');
 
-// 40+ Zengin Arduino ve Elektronik Parça Kütüphanesi (Tamamı Yerel Fritzing SVG'leri ile)
+// Gerçek Wokwi Web Bileşenleri ile Donatılmış Zengin Parça Listesi
 const defaultElectronics: InventoryItem[] = [
   // 1. Geliştirme Kartları
-  { id: 'ARDUINO_UNO', name: 'Arduino Uno R3', icon: '🟦', imageSrc: '/fritzing/arduino_uno.svg', tag: 'Ana Kontrol Kartı', category: 'board', color: 'bg-[#bbf7d0]' },
-  { id: 'ARDUINO_NANO', name: 'Arduino Nano', icon: '🎛️', imageSrc: '/fritzing/arduino_uno.svg', tag: 'Kompakt Kart', category: 'board', color: 'bg-[#bbf7d0]' },
-  { id: 'ARDUINO_MEGA', name: 'Arduino Mega 2560', icon: '🏢', imageSrc: '/fritzing/arduino_uno.svg', tag: '54 Pinli Kart', category: 'board', color: 'bg-[#bbf7d0]' },
-  { id: 'ESP32', name: 'ESP32 NodeMCU', icon: '📡', imageSrc: '/fritzing/arduino_uno.svg', tag: 'WiFi & Bluetooth', category: 'board', color: 'bg-[#bbf7d0]' },
-  { id: 'RASPBERRY_PICO', name: 'Raspberry Pi Pico', icon: '🍓', imageSrc: '/fritzing/arduino_uno.svg', tag: 'RP2040 Çipli Kart', category: 'board', color: 'bg-[#bbf7d0]' },
+  { id: 'ARDUINO_UNO', name: 'Arduino Uno R3', icon: '🟦', tag: 'Standart Geliştirme Kartı', category: 'board', color: 'bg-[#bbf7d0]' },
+  { id: 'ARDUINO_NANO', name: 'Arduino Nano', icon: '🎛️', tag: 'Kompakt Mini Kart', category: 'board', color: 'bg-[#bbf7d0]' },
+  { id: 'ARDUINO_MEGA', name: 'Arduino Mega 2560', icon: '🏢', tag: '54 Pinli Güçlü Kart', category: 'board', color: 'bg-[#bbf7d0]' },
+  { id: 'ESP32', name: 'ESP32 DevKit V1', icon: '📡', tag: 'WiFi & Bluetooth Modülü', category: 'board', color: 'bg-[#bbf7d0]' },
 
   // 2. Breadboard & Bağlantı
-  { id: 'BREADBOARD', name: 'Büyük Breadboard', icon: '🍞', imageSrc: '/fritzing/halfBreadboard.svg', tag: '830 Delikli Tahta', category: 'passive', color: 'bg-amber-50' },
-  { id: 'BREADBOARD_MINI', name: 'Mini Breadboard', icon: '🧇', imageSrc: '/fritzing/halfBreadboard.svg', tag: '400 Delikli Tahta', category: 'passive', color: 'bg-amber-50' },
+  { id: 'BREADBOARD', name: 'Breadboard (Devre Tahtası)', icon: '🍞', tag: '30 Sütun Lehimleme Gerektirmeyen Tahta', category: 'passive', color: 'bg-amber-50' },
 
-  // 3. Işıklar ve Ekranlar
-  { id: 'LED_RED', name: 'Kırmızı LED', icon: '🔴', imageSrc: '/fritzing/led_red.svg', tag: 'Temel Işık', category: 'light_display', color: 'bg-[#ffe4e6]' },
-  { id: 'LED_GREEN', name: 'Yeşil LED', icon: '🟢', imageSrc: '/fritzing/led_green.svg', tag: 'Temel Işık', category: 'light_display', color: 'bg-[#dcfce7]' },
-  { id: 'LED_BLUE', name: 'Mavi LED', icon: '🔵', imageSrc: '/fritzing/led_blue.svg', tag: 'Temel Işık', category: 'light_display', color: 'bg-[#dbeafe]' },
-  { id: 'LED_YELLOW', name: 'Sarı LED', icon: '🟡', imageSrc: '/fritzing/led_yellow.svg', tag: 'Temel Işık', category: 'light_display', color: 'bg-[#fef9c3]' },
-  { id: 'LED_RGB', name: 'RGB LED', icon: '🌈', imageSrc: '/fritzing/led_rgb.svg', tag: 'Çok Renkli Işık', category: 'light_display', color: 'bg-[#f3e8ff]' },
-  { id: 'NEOPIXEL_STRIP', name: 'NeoPixel Şerit LED', icon: '✨', imageSrc: '/fritzing/led_rgb.svg', tag: 'Adreslenebilir LED', category: 'light_display', color: 'bg-[#f3e8ff]' },
-  { id: 'LCD_16X2_I2C', name: '16x2 I2C LCD Ekran', icon: '📟', imageSrc: '/fritzing/lcd_16x2.svg', tag: 'Mavi Karakter Ekran', category: 'light_display', color: 'bg-[#e0f2fe]' },
-  { id: 'OLED_096_I2C', name: '0.96" OLED Ekran', icon: '📺', imageSrc: '/fritzing/lcd_16x2.svg', tag: 'Grafik Ekran', category: 'light_display', color: 'bg-[#e0f2fe]' },
-  { id: 'LED_MATRIX_8X8', name: '8x8 LED Matris', icon: '🏁', imageSrc: '/fritzing/led_matrix_8x8.svg', tag: 'MAX7219 Nokta Matris', category: 'light_display', color: 'bg-[#ffe4e6]' },
-  { id: 'SEVEN_SEGMENT', name: '7-Segment Ekran', icon: '8️⃣', imageSrc: '/fritzing/led_matrix_8x8.svg', tag: 'Sayısal Gösterge', category: 'light_display', color: 'bg-[#fef3c7]' },
+  // 3. Işıklar ve Göstergeler
+  { id: 'LED_RED', name: 'Kırmızı LED', icon: '🔴', tag: 'Parlak Kırmızı Işık', category: 'light_display', color: 'bg-[#ffe4e6]' },
+  { id: 'LED_GREEN', name: 'Yeşil LED', icon: '🟢', tag: 'Parlak Yeşil Işık', category: 'light_display', color: 'bg-[#dcfce7]' },
+  { id: 'LED_BLUE', name: 'Mavi LED', icon: '🔵', tag: 'Parlak Mavi Işık', category: 'light_display', color: 'bg-[#dbeafe]' },
+  { id: 'LED_YELLOW', name: 'Sarı LED', icon: '🟡', tag: 'Parlak Sarı Işık', category: 'light_display', color: 'bg-[#fef9c3]' },
+  { id: 'LED_RGB', name: 'RGB LED', icon: '🌈', tag: 'Her Rengi Yakan LED', category: 'light_display', color: 'bg-[#f3e8ff]' },
+  { id: 'LCD_16X2_I2C', name: '16x2 LCD Ekran', icon: '📟', tag: 'Mavi I2C Karakter Ekran', category: 'light_display', color: 'bg-[#e0f2fe]' },
+  { id: 'SEVEN_SEGMENT', name: '7-Segment Ekran', icon: '8️⃣', tag: 'Sayısal Gösterge', category: 'light_display', color: 'bg-[#fef3c7]' },
+  { id: 'OLED_096_I2C', name: '0.96" OLED Ekran', icon: '📺', tag: 'SSD1306 Grafik Ekran', category: 'light_display', color: 'bg-[#e0f2fe]' },
 
   // 4. Dirençler ve Pasifler
-  { id: 'RESISTOR_220', name: '220Ω Direnç', icon: '🟤', imageSrc: '/fritzing/resistor_220.svg', tag: 'LED Koruyucu', category: 'passive', color: 'bg-[#fef3c7]' },
-  { id: 'RESISTOR_1K', name: '1kΩ Direnç', icon: '🟤', imageSrc: '/fritzing/resistor_220.svg', tag: 'Sinyal Direnci', category: 'passive', color: 'bg-[#fef3c7]' },
-  { id: 'RESISTOR_10K', name: '10kΩ Direnç', icon: '🟤', imageSrc: '/fritzing/resistor_220.svg', tag: 'Pull-up / Sensör', category: 'passive', color: 'bg-[#fef3c7]' },
-  { id: 'POTENTIOMETER', name: '10kΩ Potansiyometre', icon: '🎚️', imageSrc: '/fritzing/potentiometer.svg', tag: 'Ayarlı Döner Direnç', category: 'passive', color: 'bg-[#e2e8f0]' },
-  { id: 'PUSH_BUTTON', name: 'Push Buton', icon: '🔘', imageSrc: '/fritzing/pushbutton.svg', tag: 'Tıklama Düğmesi', category: 'passive', color: 'bg-[#f1f5f9]' },
-  { id: 'SLIDE_SWITCH', name: 'Sürgülü Anahtar', icon: '🔛', imageSrc: '/fritzing/pushbutton.svg', tag: 'Aç/Kapa Switch', category: 'passive', color: 'bg-[#f1f5f9]' },
+  { id: 'RESISTOR_220', name: '220Ω Direnç', icon: '🟤', tag: 'LED Akım Koruyucu', category: 'passive', color: 'bg-[#fef3c7]' },
+  { id: 'RESISTOR_1K', name: '1kΩ Direnç', icon: '🟤', tag: 'Sinyal Direnci', category: 'passive', color: 'bg-[#fef3c7]' },
+  { id: 'RESISTOR_10K', name: '10kΩ Direnç', icon: '🟤', tag: 'Pull-up Sensör Direnci', category: 'passive', color: 'bg-[#fef3c7]' },
+  { id: 'POTENTIOMETER', name: '10kΩ Potansiyometre', icon: '🎚️', tag: 'Ayarlanabilir Döner Direnç', category: 'passive', color: 'bg-[#e2e8f0]' },
+  { id: 'PUSH_BUTTON', name: 'Push Buton', icon: '🔘', tag: 'Basmalı Düğme', category: 'passive', color: 'bg-[#f1f5f9]' },
+  { id: 'SLIDE_SWITCH', name: 'Sürgülü Anahtar', icon: '🔛', tag: 'Aç/Kapa Switch', category: 'passive', color: 'bg-[#f1f5f9]' },
 
   // 5. Sensörler
-  { id: 'LDR_SENSOR', name: 'Işık Sensörü (LDR)', icon: '☀️', imageSrc: '/fritzing/ldr.svg', tag: 'Oda Işığı Ölçer', category: 'sensor', color: 'bg-[#fed7aa]' },
-  { id: 'HCSR04', name: 'Ultrasonik Mesafe Sensörü', icon: '🦇', imageSrc: '/fritzing/hcsr04.svg', tag: 'HC-SR04 Mesafe', category: 'sensor', color: 'bg-[#bae6fd]' },
-  { id: 'PIR_SENSOR', name: 'PIR Hareket Sensörü', icon: '🚶', imageSrc: '/fritzing/hcsr04.svg', tag: 'İnsan Algılayıcı', category: 'sensor', color: 'bg-[#fed7aa]' },
-  { id: 'DHT11', name: 'DHT11 Sıcaklık & Nem', icon: '🌡️', imageSrc: '/fritzing/ldr.svg', tag: 'Hava Durumu Sensörü', category: 'sensor', color: 'bg-[#bae6fd]' },
-  { id: 'SOIL_MOISTURE', name: 'Toprak Nem Sensörü', icon: '🌱', imageSrc: '/fritzing/ldr.svg', tag: 'Bitki Sulama Sensörü', category: 'sensor', color: 'bg-[#dcfce7]' },
-  { id: 'RAIN_SENSOR', name: 'Yağmur Sensörü', icon: '🌧️', imageSrc: '/fritzing/ldr.svg', tag: 'Su Damlası Dedektörü', category: 'sensor', color: 'bg-[#e0f2fe]' },
-  { id: 'SOUND_SENSOR', name: 'Ses / Mikrofon Sensörü', icon: '🎤', imageSrc: '/fritzing/piezo_sensor.svg', tag: 'Alkış & Ses Algılar', category: 'sensor', color: 'bg-[#fed7aa]' },
-  { id: 'MQ2_GAS', name: 'MQ-2 Gaz & Duman Sensörü', icon: '💨', imageSrc: '/fritzing/ldr.svg', tag: 'Hava Kalitesi Dedektörü', category: 'sensor', color: 'bg-[#fef3c7]' },
-  { id: 'TCRT5000_LINE', name: 'TCRT5000 Çizgi Sensörü', icon: '🛣️', imageSrc: '/fritzing/pushbutton.svg', tag: 'Siyah/Beyaz Çizgi', category: 'sensor', color: 'bg-[#f1f5f9]' },
-  { id: 'FLAME_SENSOR', name: 'Alev Sensörü', icon: '🔥', imageSrc: '/fritzing/ldr.svg', tag: 'Yangın Algılayıcı', category: 'sensor', color: 'bg-[#fee2e2]' },
-  { id: 'JOYSTICK_MODULE', name: 'Analog Joystick', icon: '🕹️', imageSrc: '/fritzing/potentiometer.svg', tag: 'Oyun Kolu Kontrolcüsü', category: 'sensor', color: 'bg-[#e2e8f0]' },
+  { id: 'LDR_SENSOR', name: 'Işık Sensörü (LDR)', icon: '☀️', tag: 'Oda Işığı Seviyesi Ölçer', category: 'sensor', color: 'bg-[#fed7aa]' },
+  { id: 'HCSR04', name: 'HC-SR04 Mesafe Sensörü', icon: '🦇', tag: 'Ultrasonik Mesafe Ölçer', category: 'sensor', color: 'bg-[#bae6fd]' },
+  { id: 'PIR_SENSOR', name: 'PIR Hareket Sensörü', icon: '🚶', tag: 'İnsan ve Vücut Isısı Algılayıcı', category: 'sensor', color: 'bg-[#fed7aa]' },
+  { id: 'DHT11', name: 'DHT22 Sıcaklık & Nem', icon: '🌡️', tag: 'Hava Sıcaklığı ve Nem Ölçer', category: 'sensor', color: 'bg-[#bae6fd]' },
+  { id: 'JOYSTICK_MODULE', name: 'Analog Joystick Modülü', icon: '🕹️', tag: 'X/Y Eksenli Oyun Çubuğu', category: 'sensor', color: 'bg-[#e2e8f0]' },
+  { id: 'SOIL_MOISTURE', name: 'Toprak Nem Sensörü', icon: '🌱', tag: 'Bitki Toprak Nemi Ölçer', category: 'sensor', color: 'bg-[#dcfce7]' },
+  { id: 'RAIN_SENSOR', name: 'Yağmur Sensörü', icon: '🌧️', tag: 'Su Damlası Dedektörü', category: 'sensor', color: 'bg-[#e0f2fe]' },
+  { id: 'SOUND_SENSOR', name: 'Ses Mikrofon Modülü', icon: '🎤', tag: 'Alkış & Gürültü Algılar', category: 'sensor', color: 'bg-[#fed7aa]' },
+  { id: 'MQ2_GAS', name: 'MQ-2 Gaz & Duman', icon: '💨', tag: 'Duman ve Gaz Algılayıcı', category: 'sensor', color: 'bg-[#fef3c7]' },
 
   // 6. Motorlar, Ses ve Aktüatörler
-  { id: 'BUZZER', name: 'Pasif Buzzer', icon: '🔊', imageSrc: '/fritzing/piezo_sensor.svg', tag: 'Melodi & Ses Çalar', category: 'actuator_sound', color: 'bg-[#e2e8f0]' },
-  { id: 'ACTIVE_BUZZER', name: 'Aktif Buzzer', icon: '📢', imageSrc: '/fritzing/piezo_sensor.svg', tag: 'Bip Sesi Verici', category: 'actuator_sound', color: 'bg-[#e2e8f0]' },
-  { id: 'SERVO_SG90', name: 'SG90 Servo Motor', icon: '🦾', imageSrc: '/fritzing/servo.svg', tag: '0-180° Dönen Kol', category: 'actuator_sound', color: 'bg-[#bae6fd]' },
-  { id: 'DC_MOTOR_5V', name: '5V DC Motor', icon: '🌀', imageSrc: '/fritzing/stepper_motor.svg', tag: 'Pervane Döndürücü', category: 'actuator_sound', color: 'bg-[#fed7aa]' },
-  { id: 'STEPPER_28BYJ', name: '28BYJ-48 Step Motor', icon: '⚙️', imageSrc: '/fritzing/stepper_motor.svg', tag: 'Adım Adım Hassas Motor', category: 'actuator_sound', color: 'bg-[#e2e8f0]' },
-  { id: 'RELAY_5V', name: '5V Tekli Röle Modülü', icon: '⚡', imageSrc: '/fritzing/relay.svg', tag: 'Lamba / 220V Anahtarı', category: 'actuator_sound', color: 'bg-[#fee2e2]' }
+  { id: 'BUZZER', name: 'Piezo Buzzer (Hoparlör)', icon: '🔊', tag: 'Melodi, Alarm ve Bip Sesi', category: 'actuator_sound', color: 'bg-[#e2e8f0]' },
+  { id: 'ACTIVE_BUZZER', name: 'Aktif Buzzer', icon: '📢', tag: 'Sürekli Bip Sesi Verici', category: 'actuator_sound', color: 'bg-[#e2e8f0]' },
+  { id: 'SERVO_SG90', name: 'SG90 Servo Motor', icon: '🦾', tag: '0-180 Derece Dönen Kol', category: 'actuator_sound', color: 'bg-[#bae6fd]' },
+  { id: 'DC_MOTOR_5V', name: '5V DC Motor', icon: '🌀', tag: 'Pervane ve Tekerlek Döndürücü', category: 'actuator_sound', color: 'bg-[#fed7aa]' },
+  { id: 'RELAY_5V', name: '5V Röle Modülü', icon: '⚡', tag: 'Oda Lambası Anahtarı', category: 'actuator_sound', color: 'bg-[#fee2e2]' }
 ];
 
 const customElectronics = ref<InventoryItem[]>([]);
