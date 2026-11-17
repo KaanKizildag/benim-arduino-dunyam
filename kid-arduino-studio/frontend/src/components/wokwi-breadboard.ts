@@ -197,10 +197,12 @@ export class WokwiBreadboardHalfElement extends HTMLElement {
   }
 }
 
+export class WokwiBreadboardElement extends WokwiBreadboardHalfElement {}
+
 // Register both names if not already defined
 if (!customElements.get('wokwi-breadboard-half')) {
   customElements.define('wokwi-breadboard-half', WokwiBreadboardHalfElement);
 }
 if (!customElements.get('wokwi-breadboard')) {
-  customElements.define('wokwi-breadboard', WokwiBreadboardHalfElement);
+  customElements.define('wokwi-breadboard', WokwiBreadboardElement);
 }
