@@ -38,6 +38,26 @@ SUPPORTED_TYPES_AND_PINS: Dict[str, Set[str]] = {
     "wokwi-pushbutton": {"1", "2"},
     "wokwi-servo": {"V+", "GND", "PWM"},
     "wokwi-hc-sr04": {"VCC", "GND", "TRIG", "ECHO"},
+    "wokwi-hc-05": {"VCC", "GND", "TXD", "RXD", "EN", "STATE"},
+    "wokwi-hc-06": {"VCC", "GND", "TXD", "RXD"},
+    "wokwi-l293d": {"VCC1", "VCC2", "GND", "EN1", "EN2", "IN1", "IN2", "IN3", "IN4", "OUT1", "OUT2", "OUT3", "OUT4"},
+    "wokwi-l298n": {"VCC", "GND", "5V", "ENA", "ENB", "IN1", "IN2", "IN3", "IN4", "OUT1", "OUT2", "OUT3", "OUT4"},
+    "wokwi-dc-motor": {"1", "2"},
+    "wokwi-pir-motion-sensor": {"VCC", "GND", "OUT"},
+    "wokwi-dht22": {"VCC", "GND", "SDA"},
+    "wokwi-analog-joystick": {"VCC", "GND", "VERT", "HORZ", "SEL"},
+    "wokwi-relay-module": {"VCC", "GND", "IN", "COM", "NO", "NC"},
+    "wokwi-rgb-led": {"R", "G", "B", "COM"},
+    "wokwi-lcd1602": {"VCC", "GND", "SDA", "SCL"},
+    "wokwi-ssd1306": {"VCC", "GND", "SDA", "SCL"},
+    "wokwi-soil-moisture-sensor": {"VCC", "GND", "AO", "DO"},
+    "wokwi-rain-sensor": {"VCC", "GND", "AO", "DO"},
+    "wokwi-water-sensor": {"VCC", "GND", "AO", "DO"},
+    "wokwi-gas-sensor": {"VCC", "GND", "AO", "DO"},
+    "wokwi-flame-sensor": {"VCC", "GND", "AO", "DO"},
+    "wokwi-small-sound-sensor": {"VCC", "GND", "AO", "DO"},
+    "wokwi-ir-receiver": {"VCC", "GND", "DAT"},
+    "wokwi-ntc-temperature-sensor": {"VCC", "GND", "OUT"},
 }
 
 TYPE_ALIASES: Dict[str, str] = {
@@ -55,6 +75,11 @@ TYPE_ALIASES: Dict[str, str] = {
     "led_blue": "wokwi-led",
     "led-blue": "wokwi-led",
     "blue-led": "wokwi-led",
+    "wokwi-rgb-led": "wokwi-rgb-led",
+    "rgb-led": "wokwi-rgb-led",
+    "rgb_led": "wokwi-rgb-led",
+    "led_rgb": "wokwi-rgb-led",
+    "rgb": "wokwi-rgb-led",
     "wokwi-resistor": "wokwi-resistor",
     "resistor": "wokwi-resistor",
     "res": "wokwi-resistor",
@@ -94,6 +119,126 @@ TYPE_ALIASES: Dict[str, str] = {
     "hc-sr04": "wokwi-hc-sr04",
     "hcsr04": "wokwi-hc-sr04",
     "ultrasonic": "wokwi-hc-sr04",
+    # Bluetooth HC-05 / HC-06
+    "wokwi-hc-05": "wokwi-hc-05",
+    "wokwi-hc05": "wokwi-hc-05",
+    "hc-05": "wokwi-hc-05",
+    "hc05": "wokwi-hc-05",
+    "bluetooth": "wokwi-hc-05",
+    "bluetooth_hc05": "wokwi-hc-05",
+    "bt": "wokwi-hc-05",
+    "wokwi-hc-06": "wokwi-hc-06",
+    "wokwi-hc06": "wokwi-hc-06",
+    "hc-06": "wokwi-hc-06",
+    "hc06": "wokwi-hc-06",
+    "bluetooth_hc06": "wokwi-hc-06",
+    # Motor Sürücü L293D / L298N
+    "wokwi-l293d": "wokwi-l293d",
+    "l293d": "wokwi-l293d",
+    "l293": "wokwi-l293d",
+    "motor_driver": "wokwi-l293d",
+    "motor_driver_l293d": "wokwi-l293d",
+    "motor-driver": "wokwi-l293d",
+    "wokwi-l298n": "wokwi-l298n",
+    "l298n": "wokwi-l298n",
+    "l298": "wokwi-l298n",
+    "motor_driver_l298n": "wokwi-l298n",
+    # DC Motor
+    "wokwi-dc-motor": "wokwi-dc-motor",
+    "wokwi-dcmotor": "wokwi-dc-motor",
+    "dc-motor": "wokwi-dc-motor",
+    "dc_motor": "wokwi-dc-motor",
+    "dcmotor": "wokwi-dc-motor",
+    "dc_motor_5v": "wokwi-dc-motor",
+    "motor": "wokwi-dc-motor",
+    # PIR, DHT, Joystick, Relay, LCD, OLED ve diğer sensörler
+    "wokwi-pir-motion-sensor": "wokwi-pir-motion-sensor",
+    "pir": "wokwi-pir-motion-sensor",
+    "pir_sensor": "wokwi-pir-motion-sensor",
+    "pir-sensor": "wokwi-pir-motion-sensor",
+    "motion_sensor": "wokwi-pir-motion-sensor",
+    "wokwi-dht22": "wokwi-dht22",
+    "wokwi-dht11": "wokwi-dht22",
+    "dht11": "wokwi-dht22",
+    "dht22": "wokwi-dht22",
+    "dht": "wokwi-dht22",
+    "wokwi-analog-joystick": "wokwi-analog-joystick",
+    "joystick": "wokwi-analog-joystick",
+    "joystick_module": "wokwi-analog-joystick",
+    "analog-joystick": "wokwi-analog-joystick",
+    "wokwi-relay-module": "wokwi-relay-module",
+    "wokwi-relay": "wokwi-relay-module",
+    "relay": "wokwi-relay-module",
+    "relay_5v": "wokwi-relay-module",
+    "relay-module": "wokwi-relay-module",
+    "wokwi-lcd1602": "wokwi-lcd1602",
+    "lcd1602": "wokwi-lcd1602",
+    "lcd": "wokwi-lcd1602",
+    "lcd_16x2_i2c": "wokwi-lcd1602",
+    "wokwi-ssd1306": "wokwi-ssd1306",
+    "ssd1306": "wokwi-ssd1306",
+    "oled": "wokwi-ssd1306",
+    "oled_096_i2c": "wokwi-ssd1306",
+    "wokwi-soil-moisture-sensor": "wokwi-soil-moisture-sensor",
+    "soil_moisture": "wokwi-soil-moisture-sensor",
+    "soil-moisture": "wokwi-soil-moisture-sensor",
+    "soil_sensor": "wokwi-soil-moisture-sensor",
+    "wokwi-rain-sensor": "wokwi-rain-sensor",
+    "rain_sensor": "wokwi-rain-sensor",
+    "rain-sensor": "wokwi-rain-sensor",
+    "wokwi-water-sensor": "wokwi-water-sensor",
+    "water_sensor": "wokwi-water-sensor",
+    "water-sensor": "wokwi-water-sensor",
+    "wokwi-gas-sensor": "wokwi-gas-sensor",
+    "gas_sensor": "wokwi-gas-sensor",
+    "mq2": "wokwi-gas-sensor",
+    "mq2_gas": "wokwi-gas-sensor",
+    "wokwi-flame-sensor": "wokwi-flame-sensor",
+    "flame_sensor": "wokwi-flame-sensor",
+    "flame-sensor": "wokwi-flame-sensor",
+    "wokwi-small-sound-sensor": "wokwi-small-sound-sensor",
+    "wokwi-big-sound-sensor": "wokwi-small-sound-sensor",
+    "sound_sensor": "wokwi-small-sound-sensor",
+    "sound-sensor": "wokwi-small-sound-sensor",
+    "microphone": "wokwi-small-sound-sensor",
+    "wokwi-ir-receiver": "wokwi-ir-receiver",
+    "ir_receiver": "wokwi-ir-receiver",
+    "ir-receiver": "wokwi-ir-receiver",
+    "wokwi-ntc-temperature-sensor": "wokwi-ntc-temperature-sensor",
+    "ntc": "wokwi-ntc-temperature-sensor",
+    "temperature_sensor": "wokwi-ntc-temperature-sensor",
+}
+
+_ANALOG_4PIN_ALIASES: Dict[str, str] = {
+    "VCC": "VCC", "5V": "VCC", "3.3V": "VCC", "V+": "VCC", "+": "VCC", "1": "VCC",
+    "GND": "GND", "-": "GND", "0V": "GND", "GROUND": "GND", "2": "GND",
+    "DO": "DO", "D0": "DO", "DOUT": "DO", "DIGITAL": "DO", "3": "DO",
+    "AO": "AO", "A0": "AO", "AOUT": "AO", "OUT": "AO", "SIG": "AO", "SIGNAL": "AO", "S": "AO", "4": "AO",
+}
+
+_BLUETOOTH_PIN_ALIASES: Dict[str, str] = {
+    "VCC": "VCC", "5V": "VCC", "+5V": "VCC", "3.3V": "VCC", "V+": "VCC", "+": "VCC",
+    "GND": "GND", "-": "GND", "0V": "GND", "GROUND": "GND",
+    "TXD": "TXD", "TX": "TXD", "DOUT": "TXD", "OUT": "TXD",
+    "RXD": "RXD", "RX": "RXD", "DIN": "RXD", "IN": "RXD",
+    "EN": "EN", "KEY": "EN", "ENABLE": "EN",
+    "STATE": "STATE", "STAT": "STATE",
+}
+
+_MOTOR_DRIVER_PIN_ALIASES: Dict[str, str] = {
+    "VCC1": "VCC1", "VCC": "VCC1", "5V": "VCC1", "VSS": "VCC1", "LOGIC_VCC": "VCC1",
+    "VCC2": "VCC2", "12V": "VCC2", "VM": "VCC2", "VMOT": "VCC2", "VS": "VCC2", "V+": "VCC2",
+    "GND": "GND", "GND1": "GND", "GND2": "GND", "GND3": "GND", "GND4": "GND", "-": "GND", "0V": "GND",
+    "EN1": "EN1", "ENA": "EN1", "EN1,2": "EN1", "1,2EN": "EN1", "ENABLE1": "EN1", "ENABLEA": "EN1",
+    "EN2": "EN2", "ENB": "EN2", "EN3,4": "EN2", "3,4EN": "EN2", "ENABLE2": "EN2", "ENABLEB": "EN2",
+    "IN1": "IN1", "1A": "IN1", "INPUT1": "IN1", "A1": "IN1",
+    "IN2": "IN2", "2A": "IN2", "INPUT2": "IN2", "A2": "IN2",
+    "IN3": "IN3", "3A": "IN3", "INPUT3": "IN3", "B1": "IN3",
+    "IN4": "IN4", "4A": "IN4", "INPUT4": "IN4", "B2": "IN4",
+    "OUT1": "OUT1", "1Y": "OUT1", "OUTPUT1": "OUT1", "M1A": "OUT1", "MOTOR1_A": "OUT1",
+    "OUT2": "OUT2", "2Y": "OUT2", "OUTPUT2": "OUT2", "M1B": "OUT2", "MOTOR1_B": "OUT2",
+    "OUT3": "OUT3", "3Y": "OUT3", "OUTPUT3": "OUT3", "M2A": "OUT3", "MOTOR2_A": "OUT3",
+    "OUT4": "OUT4", "4Y": "OUT4", "OUTPUT4": "OUT4", "M2B": "OUT4", "MOTOR2_B": "OUT4",
 }
 
 PIN_ALIASES: Dict[str, Dict[str, str]] = {
@@ -109,12 +254,13 @@ PIN_ALIASES: Dict[str, Dict[str, str]] = {
         "1": "1", "PIN1": "1", "PIN_1": "1", "P1": "1", "A": "1", "VCC": "1", "+": "1",
         "2": "2", "PIN2": "2", "PIN_2": "2", "P2": "2", "B": "2", "GND": "2", "-": "2", "OUT": "2", "SIG": "2", "AO": "2",
     },
-    "wokwi-photoresistor-sensor": {
-        "VCC": "VCC", "5V": "VCC", "V+": "VCC", "+": "VCC", "1": "VCC",
-        "GND": "GND", "-": "GND", "0V": "GND", "2": "GND",
-        "DO": "DO", "D0": "DO", "DOUT": "DO", "3": "DO",
-        "AO": "AO", "A0": "AO", "AOUT": "AO", "OUT": "AO", "SIG": "AO", "SIGNAL": "AO", "4": "AO",
-    },
+    "wokwi-photoresistor-sensor": _ANALOG_4PIN_ALIASES,
+    "wokwi-soil-moisture-sensor": _ANALOG_4PIN_ALIASES,
+    "wokwi-rain-sensor": _ANALOG_4PIN_ALIASES,
+    "wokwi-water-sensor": _ANALOG_4PIN_ALIASES,
+    "wokwi-gas-sensor": _ANALOG_4PIN_ALIASES,
+    "wokwi-flame-sensor": _ANALOG_4PIN_ALIASES,
+    "wokwi-small-sound-sensor": _ANALOG_4PIN_ALIASES,
     "wokwi-potentiometer": {
         "GND": "GND", "1": "GND", "A": "GND", "-": "GND", "PIN1": "GND", "PIN_1": "GND",
         "SIG": "SIG", "2": "SIG", "B": "SIG", "OUT": "SIG", "WIPER": "SIG", "AO": "SIG", "A0": "SIG", "SIGNAL": "SIG", "PIN2": "SIG", "PIN_2": "SIG",
@@ -138,6 +284,67 @@ PIN_ALIASES: Dict[str, Dict[str, str]] = {
         "TRIG": "TRIG", "TRIGGER": "TRIG", "TRG": "TRIG", "2": "TRIG",
         "ECHO": "ECHO", "ECH": "ECHO", "OUT": "ECHO", "SIG": "ECHO", "3": "ECHO",
         "GND": "GND", "-": "GND", "GROUND": "GND", "4": "GND",
+    },
+    "wokwi-hc-05": _BLUETOOTH_PIN_ALIASES,
+    "wokwi-hc-06": _BLUETOOTH_PIN_ALIASES,
+    "wokwi-l293d": _MOTOR_DRIVER_PIN_ALIASES,
+    "wokwi-l298n": _MOTOR_DRIVER_PIN_ALIASES,
+    "wokwi-dc-motor": {
+        "1": "1", "+": "1", "POS": "1", "A": "1", "M+": "1", "IN1": "1", "PIN1": "1", "PIN_1": "1", "RED": "1", "VCC": "1",
+        "2": "2", "-": "2", "NEG": "2", "B": "2", "M-": "2", "IN2": "2", "PIN2": "2", "PIN_2": "2", "BLACK": "2", "GND": "2",
+    },
+    "wokwi-pir-motion-sensor": {
+        "VCC": "VCC", "5V": "VCC", "V+": "VCC", "+": "VCC", "1": "VCC",
+        "GND": "GND", "-": "GND", "0V": "GND", "GROUND": "GND", "2": "GND",
+        "OUT": "OUT", "SIG": "OUT", "SIGNAL": "OUT", "D0": "OUT", "DO": "OUT", "DATA": "OUT", "3": "OUT",
+    },
+    "wokwi-dht22": {
+        "VCC": "VCC", "5V": "VCC", "3.3V": "VCC", "V+": "VCC", "+": "VCC", "1": "VCC",
+        "SDA": "SDA", "DATA": "SDA", "OUT": "SDA", "SIG": "SDA", "SIGNAL": "SDA", "DAT": "SDA", "2": "SDA",
+        "GND": "GND", "-": "GND", "0V": "GND", "GROUND": "GND", "4": "GND", "3": "GND",
+    },
+    "wokwi-analog-joystick": {
+        "VCC": "VCC", "5V": "VCC", "+5V": "VCC", "V+": "VCC",
+        "GND": "GND", "-": "GND", "0V": "GND",
+        "VERT": "VERT", "VRX": "VERT", "X": "VERT", "Y": "VERT", "VRY": "VERT",
+        "HORZ": "HORZ", "H": "HORZ",
+        "SEL": "SEL", "SW": "SEL", "BTN": "SEL", "BUTTON": "SEL",
+    },
+    "wokwi-relay-module": {
+        "VCC": "VCC", "5V": "VCC", "V+": "VCC", "+": "VCC",
+        "GND": "GND", "-": "GND", "0V": "GND",
+        "IN": "IN", "SIG": "IN", "SIGNAL": "IN", "S": "IN", "IN1": "IN",
+        "COM": "COM", "COMMON": "COM",
+        "NO": "NO",
+        "NC": "NC",
+    },
+    "wokwi-rgb-led": {
+        "R": "R", "RED": "R", "1": "R",
+        "G": "G", "GREEN": "G", "3": "G",
+        "B": "B", "BLUE": "B", "4": "B",
+        "COM": "COM", "C": "COM", "GND": "COM", "VCC": "COM", "CATHODE": "COM", "ANODE": "COM", "2": "COM",
+    },
+    "wokwi-lcd1602": {
+        "VCC": "VCC", "5V": "VCC", "VDD": "VCC",
+        "GND": "GND", "VSS": "GND", "-": "GND",
+        "SDA": "SDA", "DATA": "SDA",
+        "SCL": "SCL", "CLK": "SCL",
+    },
+    "wokwi-ssd1306": {
+        "VCC": "VCC", "5V": "VCC", "3.3V": "VCC", "VDD": "VCC",
+        "GND": "GND", "-": "GND",
+        "SDA": "SDA", "DATA": "SDA",
+        "SCL": "SCL", "CLK": "SCL",
+    },
+    "wokwi-ir-receiver": {
+        "VCC": "VCC", "5V": "VCC", "V+": "VCC",
+        "GND": "GND", "-": "GND",
+        "DAT": "DAT", "OUT": "DAT", "SIG": "DAT", "DATA": "DAT", "S": "DAT",
+    },
+    "wokwi-ntc-temperature-sensor": {
+        "VCC": "VCC", "5V": "VCC",
+        "GND": "GND", "-": "GND",
+        "OUT": "OUT", "AO": "OUT", "SIG": "OUT", "A0": "OUT",
     },
 }
 
@@ -523,6 +730,22 @@ def extract_arduino_code_pins(code: str) -> Set[str]:
         resolved = resolve_token_to_uno_pin(arg1, is_analog_read=(fn_name == "analogRead"))
         if resolved:
             used_pins.add(resolved)
+
+    # 3. SoftwareSerial, DHT, Ultrasonic vb. kurucu çağrılarını tara: SoftwareSerial bt(RX_PIN, TX_PIN); veya DHT dht(DHT_PIN, DHT22);
+    for m in re.finditer(
+        r"\b(?:SoftwareSerial|DHT|Ultrasonic)\s+[A-Za-z_]\w*\s*\(\s*([A-Za-z0-9_]+)(?:\s*,\s*([A-Za-z0-9_]+))?",
+        clean_code
+    ):
+        for grp in (m.group(1), m.group(2)):
+            if grp:
+                resolved = resolve_token_to_uno_pin(grp)
+                if resolved:
+                    used_pins.add(resolved)
+
+    # 4. I2C modülleri (Wire.h, LiquidCrystal_I2C, Adafruit_SSD1306) varsa uno.A4 ve uno.A5 pinlerini de kullanılan pinlere dahil et
+    if any(k in clean_code for k in ("Wire.h", "LiquidCrystal_I2C", "Adafruit_SSD1306", "SSD1306")):
+        used_pins.add("uno.A4")
+        used_pins.add("uno.A5")
 
     return used_pins
 
@@ -1315,29 +1538,49 @@ Kullanıcının proje isteğine göre TEK BİR JSON nesnesi içinde:
 
 KESİN KURALLAR:
 1. SADECE İSTENEN PARÇALARI EKLE! Kullanıcının istemediği buton, buzzer, servo veya sensörü ASLA ekleme.
+   - ÖNEMLİ: Eğer kullanıcı "araba", "DC motor", "tekerlek" istiyorsa `wokwi-l293d` (veya `wokwi-l298n`) motor sürücü ve `wokwi-dc-motor` kullan; kullanıcı açıkça "servo" istemedikçe araba projesine `wokwi-servo` EKLEME!
+   - Kullanıcı açıkça "servo motor" veya "günebakan / bariyer / robot kol" isterse `wokwi-servo` ekle.
 2. ÇOKLU PARÇA VE GERİLİM BÖLÜCÜ KURALI:
-   - Kullanıcı "2 tane LDR", "çift LDR", "3 tane LED" gibi birden fazla parça isterse ya da "günebakan" gibi sağ/sol karşılaştırmalı bir proje isterse istenen sayıda ayrı bileşen ekle (`ldr1`, `ldr2` vb.).
-   - Her 2 bacaklı LDR (`wokwi-photoresistor`) için MUTLAKA ayrı bir `10kΩ` direnç (`r1`, `r2` vb.) ekle ve gerilim bölücü kur (`ldr1.1 -> 5V`, `ldr1.2 -> uno.A0`, `ldr1.2 -> r1.1`, `r1.2 -> GND` ve `ldr2.1 -> 5V`, `ldr2.2 -> uno.A1`, `ldr2.2 -> r2.1`, `r2.2 -> GND`).
+   - Kullanıcı "2 tane LDR", "çift LDR", "2 motorlu araba" gibi birden fazla parça isterse istenen sayıda ayrı bileşen ekle (`ldr1`, `ldr2` veya `motor1`, `motor2` vb.).
+   - Her 2 bacaklı LDR (`wokwi-photoresistor`) için MUTLAKA ayrı bir `10kΩ` direnç (`r1`, `r2` vb.) ekle ve gerilim bölücü kur (`ldr1.1 -> 5V`, `ldr1.2 -> uno.A0`, `ldr1.2 -> r1.1`, `r1.2 -> GND`).
    - Her LED (`wokwi-led`) için seri bir `220Ω` koruma direnci ekle.
-3. İstek içinde "servo", "motor", "dönsün", "hareket etsin" geçiyorsa `servo1` (`wokwi-servo`) bileşenini ve `servo1.V+ -> 5V`, `servo1.GND -> GND`, `uno.D9 -> servo1.PWM` bağlantılarını MUTLAKA `netlist` içine ekle! Kodda kullandığın hiçbir parçayı `netlist` dışında bırakma!
-4. Asla breadboard delik koordinatı (5A, 12C vb.) yazma. Sadece şu standart tipleri ve pinleri kullan:
+3. Asla breadboard pin koordinatı (5A, 12C vb.) yazma. Sadece şu standart tipleri ve pinleri kullan:
 - wokwi-resistor: r1.1, r1.2 (props:{"value":"220"} veya {"value":"10000"})
 - wokwi-led: led1.A, led1.C (props:{"color":"red"|"green"|"yellow"|"blue"})
+- wokwi-rgb-led: rgb1.R, rgb1.G, rgb1.B, rgb1.COM
 - wokwi-photoresistor (2 bacaklı LDR): ldr1.1, ldr1.2
 - wokwi-photoresistor-sensor (4 pinli modül LDR): ldr1.VCC, ldr1.GND, ldr1.AO, ldr1.DO
 - wokwi-potentiometer: pot1.GND, pot1.SIG, pot1.VCC
 - wokwi-buzzer: buzzer1.1, buzzer1.2
 - wokwi-pushbutton: btn1.1, btn1.2
 - wokwi-servo: servo1.V+, servo1.GND, servo1.PWM
-- wokwi-hc-sr04: hcsr1.VCC, hcsr1.GND, hcsr1.TRIG, hcsr1.ECHO
-5. Güç bağlantılarını her zaman "to":"5V" veya "to":"GND" yönünde yaz. Arduino pinlerini "uno.D2".."uno.D13", "uno.A0".."uno.A5" yaz.
-6. "arduino_kodu" içindeki pinler ile "connections" içindeki "uno.*" pinleri BİREBİR AYNI olmalı.
+- wokwi-hc-sr04 (Ultrasonik Mesafe): hcsr1.VCC, hcsr1.GND, hcsr1.TRIG, hcsr1.ECHO
+- wokwi-hc-05 (Bluetooth HC-05): hc05.VCC, hc05.GND, hc05.TXD, hc05.RXD
+- wokwi-hc-06 (Bluetooth HC-06): hc06.VCC, hc06.GND, hc06.TXD, hc06.RXD
+- wokwi-l293d (Motor Sürücü L293D): l293d.VCC1, l293d.VCC2, l293d.GND, l293d.EN1, l293d.EN2, l293d.IN1, l293d.IN2, l293d.IN3, l293d.IN4, l293d.OUT1, l293d.OUT2, l293d.OUT3, l293d.OUT4
+- wokwi-l298n (Motor Sürücü L298N): l298n.VCC, l298n.GND, l298n.ENA, l298n.ENB, l298n.IN1, l298n.IN2, l298n.IN3, l298n.IN4, l298n.OUT1, l298n.OUT2, l298n.OUT3, l298n.OUT4
+- wokwi-dc-motor (DC Motor): motor1.1, motor1.2 (L293D/L298N OUT1-OUT2 veya OUT3-OUT4 pinlerine ya da röleye bağlanır)
+- wokwi-pir-motion-sensor (PIR Hareket): pir1.VCC, pir1.GND, pir1.OUT
+- wokwi-dht22 (DHT11/DHT22 Sıcaklık & Nem): dht1.VCC, dht1.GND, dht1.SDA
+- wokwi-analog-joystick (Joystick): joy1.VCC, joy1.GND, joy1.VERT, joy1.HORZ, joy1.SEL
+- wokwi-relay-module (5V Röle): relay1.VCC, relay1.GND, relay1.IN
+- wokwi-lcd1602 (I2C 16x2 LCD): lcd1.VCC, lcd1.GND, lcd1.SDA (uno.A4), lcd1.SCL (uno.A5)
+- wokwi-ssd1306 (I2C OLED Ekran): oled1.VCC, oled1.GND, oled1.SDA (uno.A4), oled1.SCL (uno.A5)
+- wokwi-soil-moisture-sensor (Toprak Nem): soil1.VCC, soil1.GND, soil1.AO, soil1.DO
+- wokwi-rain-sensor (Yağmur Sensörü): rain1.VCC, rain1.GND, rain1.AO, rain1.DO
+- wokwi-water-sensor (Su Seviye Sensörü): water1.VCC, water1.GND, water1.AO, water1.DO
+- wokwi-gas-sensor (MQ-2 Gaz/Duman): gas1.VCC, gas1.GND, gas1.AO, gas1.DO
+- wokwi-flame-sensor (Alev Sensörü): flame1.VCC, flame1.GND, flame1.AO, flame1.DO
+- wokwi-small-sound-sensor (Ses/Mikrofon): sound1.VCC, sound1.GND, sound1.AO, sound1.DO
+- wokwi-ir-receiver (IR Alıcı): ir1.VCC, ir1.GND, ir1.DAT
+4. Güç bağlantılarını her zaman "to":"5V" veya "to":"GND" yönünde yaz. Arduino pinlerini "uno.D2".."uno.D13", "uno.A0".."uno.A5" yaz.
+5. "arduino_kodu" içindeki pinler ile "connections" içindeki "uno.*" pinleri BİREBİR AYNI olmalı.
 
-ÖRNEK 1 (Tek 2 Bacaklı LDR + 10k Direnç + Servo):
-{"proje_adi":"Işığa Duyarlı Servo Projesi","karsilama_mesaji":"Işık şiddetine göre açısı değişen akıllı servo devresi!","gerekli_parcalar":["ARDUINO_UNO","BREADBOARD","LDR_DISCRETE","RESISTOR_10K","SERVO_SG90"],"netlist":{"board":"arduino-uno","components":[{"id":"ldr1","type":"wokwi-photoresistor","props":{},"label":"2 Bacaklı LDR"},{"id":"r1","type":"wokwi-resistor","props":{"value":"10000"},"label":"10kΩ Direnç"},{"id":"servo1","type":"wokwi-servo","props":{},"label":"SG90 Servo Motor"}],"connections":[{"from":"ldr1.1","to":"5V","color":"red"},{"from":"ldr1.2","to":"uno.A0","color":"green"},{"from":"ldr1.2","to":"r1.1","color":"green"},{"from":"r1.2","to":"GND","color":"black"},{"from":"servo1.V+","to":"5V","color":"red"},{"from":"servo1.GND","to":"GND","color":"black"},{"from":"uno.D9","to":"servo1.PWM","color":"orange"}]},"akis_adimlari":{"gozlemle":"2 Bacaklı LDR (A0 pini) ortamdaki ışık seviyesini (0-1023) ölçer.","karar_ver":"Ölçülen ışık değeri eşik değerden (500) büyük mü?","evet_sonucu":"Işık güçlü! SG90 Servo Motoru (D9) 120 dereceye döndür.","hayir_sonucu":"Işık azaldı. SG90 Servo Motoru (D9) 30 dereceye getir."},"arduino_kodu":"#include <Servo.h>\\n\\nconst int LDR_PIN = A0;\\nconst int SERVO_PIN = 9;\\nServo myServo;\\n\\nvoid setup() {\\n  Serial.begin(9600);\\n  myServo.attach(SERVO_PIN);\\n  myServo.write(90);\\n}\\n\\nvoid loop() {\\n  int isik = analogRead(LDR_PIN);\\n  if (isik > 500) {\\n    myServo.write(120);\\n  } else {\\n    myServo.write(30);\\n  }\\n  delay(100);\\n}","guvenlik_notu":"2 bacaklı LDR ile doğru okuma yapmak için 10kΩ direnç ile gerilim bölücü kurduk."}
-
-ÖRNEK 2 (2 Adet 2 Bacaklı LDR + 2 Adet 10k Direnç + Servo ile Günebakan):
+ÖRNEK 1 (2 Adet 2 Bacaklı LDR + 2 Adet 10k Direnç + Servo ile Günebakan):
 {"proje_adi":"Çift LDR ile Günebakan Servo Projesi","karsilama_mesaji":"İki LDR sensöründen hangisine daha çok ışık geliyorsa servo motoru o yöne çeviren günebakan devresi!","gerekli_parcalar":["ARDUINO_UNO","BREADBOARD","LDR_DISCRETE","RESISTOR_10K","SERVO_SG90"],"netlist":{"board":"arduino-uno","components":[{"id":"ldr1","type":"wokwi-photoresistor","props":{},"label":"Sol LDR (2 Bacaklı)"},{"id":"r1","type":"wokwi-resistor","props":{"value":"10000"},"label":"Sol 10kΩ Direnç"},{"id":"ldr2","type":"wokwi-photoresistor","props":{},"label":"Sağ LDR (2 Bacaklı)"},{"id":"r2","type":"wokwi-resistor","props":{"value":"10000"},"label":"Sağ 10kΩ Direnç"},{"id":"servo1","type":"wokwi-servo","props":{},"label":"SG90 Servo Motor"}],"connections":[{"from":"ldr1.1","to":"5V","color":"red"},{"from":"ldr1.2","to":"uno.A0","color":"green"},{"from":"ldr1.2","to":"r1.1","color":"green"},{"from":"r1.2","to":"GND","color":"black"},{"from":"ldr2.1","to":"5V","color":"red"},{"from":"ldr2.2","to":"uno.A1","color":"blue"},{"from":"ldr2.2","to":"r2.1","color":"blue"},{"from":"r2.2","to":"GND","color":"black"},{"from":"servo1.V+","to":"5V","color":"red"},{"from":"servo1.GND","to":"GND","color":"black"},{"from":"uno.D9","to":"servo1.PWM","color":"orange"}]},"akis_adimlari":{"gozlemle":"Sol LDR (A0) ve Sağ LDR (A1) sensörleri iki yöndeki ışık şiddetini (0-1023) ölçer.","karar_ver":"Sol LDR (A0) ışık değeri Sağ LDR (A1) değerinden daha büyük mü?","evet_sonucu":"Sol tarafta ışık daha güçlü! SG90 Servo Motoru (D9) sola (135 derece) döndür.","hayir_sonucu":"Sağ tarafta ışık daha güçlü! SG90 Servo Motoru (D9) sağa (45 derece) döndür."},"arduino_kodu":"#include <Servo.h>\\n\\nconst int LDR_SOL = A0;\\nconst int LDR_SAG = A1;\\nconst int SERVO_PIN = 9;\\nServo gunebakanServo;\\n\\nvoid setup() {\\n  Serial.begin(9600);\\n  gunebakanServo.attach(SERVO_PIN);\\n  gunebakanServo.write(90);\\n}\\n\\nvoid loop() {\\n  int isikSol = analogRead(LDR_SOL);\\n  int isikSag = analogRead(LDR_SAG);\\n  if (isikSol > isikSag + 30) {\\n    gunebakanServo.write(135);\\n  } else if (isikSag > isikSol + 30) {\\n    gunebakanServo.write(45);\\n  } else {\\n    gunebakanServo.write(90);\\n  }\\n  delay(100);\\n}","guvenlik_notu":"Her iki 2 bacaklı LDR için ayrı 10kΩ dirençlerle iki adet gerilim bölücü kurduk."}
+
+ÖRNEK 2 (Bluetooth HC-05 + L293D Motor Sürücü + 2x DC Motor ile Akıllı Araba):
+{"proje_adi":"Bluetooth Kontrollü Akıllı Araba","karsilama_mesaji":"HC-05 Bluetooth modülü ve L293D motor sürücü ile telefondan kontrol edilen 2 motorlu araba devresi!","gerekli_parcalar":["ARDUINO_UNO","BREADBOARD","BLUETOOTH_HC05","MOTOR_DRIVER_L293D","DC_MOTOR_5V"],"netlist":{"board":"arduino-uno","components":[{"id":"hc05","type":"wokwi-hc-05","props":{},"label":"HC-05 Bluetooth Modülü"},{"id":"l293d","type":"wokwi-l293d","props":{},"label":"L293D Motor Sürücü"},{"id":"motor1","type":"wokwi-dc-motor","props":{},"label":"Sol DC Motor"},{"id":"motor2","type":"wokwi-dc-motor","props":{},"label":"Sağ DC Motor"}],"connections":[{"from":"hc05.VCC","to":"5V","color":"red"},{"from":"hc05.GND","to":"GND","color":"black"},{"from":"hc05.TXD","to":"uno.D10","color":"green"},{"from":"hc05.RXD","to":"uno.D11","color":"blue"},{"from":"l293d.VCC1","to":"5V","color":"red"},{"from":"l293d.VCC2","to":"5V","color":"red"},{"from":"l293d.GND","to":"GND","color":"black"},{"from":"l293d.EN1","to":"5V","color":"red"},{"from":"l293d.EN2","to":"5V","color":"red"},{"from":"l293d.IN1","to":"uno.D2","color":"orange"},{"from":"l293d.IN2","to":"uno.D3","color":"yellow"},{"from":"l293d.IN3","to":"uno.D4","color":"green"},{"from":"l293d.IN4","to":"uno.D5","color":"blue"},{"from":"l293d.OUT1","to":"motor1.1","color":"orange"},{"from":"l293d.OUT2","to":"motor1.2","color":"black"},{"from":"l293d.OUT3","to":"motor2.1","color":"green"},{"from":"l293d.OUT4","to":"motor2.2","color":"black"}]},"akis_adimlari":{"gozlemle":"HC-05 Bluetooth modülü (D10/D11) telefondan gelen yön komutlarını ('F', 'B', 'L', 'R', 'S') dinler.","karar_ver":"Telefondan ileri ('F') veya dönüş komutu geldi mi?","evet_sonucu":"L293D Motor Sürücü (D2-D5) üzerinden Sol ve Sağ DC Motorlara enerji vererek arabayı hareket ettir!","hayir_sonucu":"Dur ('S') komutu geldiğinde her iki DC motoru da durdur."},"arduino_kodu":"#include <SoftwareSerial.h>\\n\\nconst int BT_RX = 10;\\nconst int BT_TX = 11;\\nSoftwareSerial bt(BT_RX, BT_TX);\\n\\nconst int IN1 = 2;\\nconst int IN2 = 3;\\nconst int IN3 = 4;\\nconst int IN4 = 5;\\n\\nvoid setup() {\\n  Serial.begin(9600);\\n  bt.begin(9600);\\n  pinMode(IN1, OUTPUT);\\n  pinMode(IN2, OUTPUT);\\n  pinMode(IN3, OUTPUT);\\n  pinMode(IN4, OUTPUT);\\n}\\n\\nvoid loop() {\\n  if (bt.available()) {\\n    char c = bt.read();\\n    if (c == 'F') {\\n      digitalWrite(IN1, HIGH); digitalWrite(IN2, LOW);\\n      digitalWrite(IN3, HIGH); digitalWrite(IN4, LOW);\\n    } else if (c == 'B') {\\n      digitalWrite(IN1, LOW); digitalWrite(IN2, HIGH);\\n      digitalWrite(IN3, LOW); digitalWrite(IN4, HIGH);\\n    } else {\\n      digitalWrite(IN1, LOW); digitalWrite(IN2, LOW);\\n      digitalWrite(IN3, LOW); digitalWrite(IN4, LOW);\\n    }\\n  }\\n}","guvenlik_notu":"DC motorlar yüksek akım çektiği için Arduino pinlerine doğrudan değil, L293D motor sürücü üzerinden bağlanır."}
 """
 
 
@@ -1565,11 +1808,26 @@ def validate_one_shot_topology_and_code(
 
     bindings = extract_netlist_pin_bindings(netlist)
     bound_comp_ids = {b.component_id for b in bindings}
+    # Dolaylı sürülen parçalar (örn. L293D / L298N / Röle çıkışına bağlı DC Motorlar)
+    driver_ids = {
+        c.id for c in netlist.components
+        if c.type in ("wokwi-l293d", "wokwi-l298n", "wokwi-relay-module") and c.id in bound_comp_ids
+    }
+    indirectly_driven_ids: Set[str] = set()
+    for conn in netlist.connections:
+        if "." in conn.from_pin and "." in conn.to_pin:
+            p1 = conn.from_pin.split(".", 1)[0]
+            p2 = conn.to_pin.split(".", 1)[0]
+            if p1 in driver_ids:
+                indirectly_driven_ids.add(p2)
+            elif p2 in driver_ids:
+                indirectly_driven_ids.add(p1)
+
     non_resistor_comps = [c for c in netlist.components if c.type != "wokwi-resistor"]
     for c in non_resistor_comps:
-        if c.id not in bound_comp_ids:
+        if c.id not in bound_comp_ids and c.id not in indirectly_driven_ids:
             blocking_errors.append(
-                f"'{c.label}' ({c.id}) hiçbir Arduino Uno sinyal pinine (D2..D13 veya A0..A5) bağlanmamış."
+                f"'{c.label}' ({c.id}) hiçbir Arduino Uno sinyal pinine (D2..D13 veya A0..A5) veya motor sürücüye bağlanmamış."
             )
 
     if not blocking_errors:

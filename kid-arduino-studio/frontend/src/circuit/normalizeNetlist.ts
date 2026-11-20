@@ -17,6 +17,7 @@ import type {
 
 export const SUPPORTED_COMPONENT_TYPES = new Set<string>([
   'wokwi-led',
+  'wokwi-rgb-led',
   'wokwi-resistor',
   'wokwi-photoresistor',
   'wokwi-photoresistor-sensor',
@@ -24,7 +25,26 @@ export const SUPPORTED_COMPONENT_TYPES = new Set<string>([
   'wokwi-pushbutton',
   'wokwi-servo',
   'wokwi-hc-sr04',
-  'wokwi-potentiometer'
+  'wokwi-potentiometer',
+  'wokwi-hc-05',
+  'wokwi-hc-06',
+  'wokwi-l293d',
+  'wokwi-l298n',
+  'wokwi-dc-motor',
+  'wokwi-pir-motion-sensor',
+  'wokwi-dht22',
+  'wokwi-analog-joystick',
+  'wokwi-relay-module',
+  'wokwi-lcd1602',
+  'wokwi-ssd1306',
+  'wokwi-soil-moisture-sensor',
+  'wokwi-rain-sensor',
+  'wokwi-water-sensor',
+  'wokwi-gas-sensor',
+  'wokwi-flame-sensor',
+  'wokwi-small-sound-sensor',
+  'wokwi-ir-receiver',
+  'wokwi-ntc-temperature-sensor'
 ]);
 
 export interface NormalizationResult {
@@ -117,7 +137,105 @@ const COMPONENT_TYPE_ALIASES: Record<string, { type: string; defaultProps?: Reco
   'potentiometer': { type: 'wokwi-potentiometer' },
   'pot': { type: 'wokwi-potentiometer' },
   'potans': { type: 'wokwi-potentiometer' },
-  'potansiyometre': { type: 'wokwi-potentiometer' }
+  'potansiyometre': { type: 'wokwi-potentiometer' },
+
+  'wokwi-rgb-led': { type: 'wokwi-rgb-led' },
+  'rgb-led': { type: 'wokwi-rgb-led' },
+  'rgb_led': { type: 'wokwi-rgb-led' },
+  'led_rgb': { type: 'wokwi-rgb-led' },
+
+  'wokwi-hc-05': { type: 'wokwi-hc-05' },
+  'wokwi-hc05': { type: 'wokwi-hc-05' },
+  'hc-05': { type: 'wokwi-hc-05' },
+  'hc05': { type: 'wokwi-hc-05' },
+  'bluetooth': { type: 'wokwi-hc-05' },
+  'bluetooth_hc05': { type: 'wokwi-hc-05' },
+
+  'wokwi-hc-06': { type: 'wokwi-hc-06' },
+  'wokwi-hc06': { type: 'wokwi-hc-06' },
+  'hc-06': { type: 'wokwi-hc-06' },
+  'hc06': { type: 'wokwi-hc-06' },
+  'bluetooth_hc06': { type: 'wokwi-hc-06' },
+
+  'wokwi-l293d': { type: 'wokwi-l293d' },
+  'l293d': { type: 'wokwi-l293d' },
+  'l293': { type: 'wokwi-l293d' },
+  'motor_driver': { type: 'wokwi-l293d' },
+  'motor_driver_l293d': { type: 'wokwi-l293d' },
+
+  'wokwi-l298n': { type: 'wokwi-l298n' },
+  'l298n': { type: 'wokwi-l298n' },
+  'l298': { type: 'wokwi-l298n' },
+  'motor_driver_l298n': { type: 'wokwi-l298n' },
+
+  'wokwi-dc-motor': { type: 'wokwi-dc-motor' },
+  'wokwi-dcmotor': { type: 'wokwi-dc-motor' },
+  'dc-motor': { type: 'wokwi-dc-motor' },
+  'dc_motor': { type: 'wokwi-dc-motor' },
+  'dcmotor': { type: 'wokwi-dc-motor' },
+  'dc_motor_5v': { type: 'wokwi-dc-motor' },
+  'motor': { type: 'wokwi-dc-motor' },
+
+  'wokwi-pir-motion-sensor': { type: 'wokwi-pir-motion-sensor' },
+  'pir': { type: 'wokwi-pir-motion-sensor' },
+  'pir_sensor': { type: 'wokwi-pir-motion-sensor' },
+  'pir-sensor': { type: 'wokwi-pir-motion-sensor' },
+
+  'wokwi-dht22': { type: 'wokwi-dht22' },
+  'wokwi-dht11': { type: 'wokwi-dht22' },
+  'dht11': { type: 'wokwi-dht22' },
+  'dht22': { type: 'wokwi-dht22' },
+
+  'wokwi-analog-joystick': { type: 'wokwi-analog-joystick' },
+  'joystick': { type: 'wokwi-analog-joystick' },
+  'joystick_module': { type: 'wokwi-analog-joystick' },
+
+  'wokwi-relay-module': { type: 'wokwi-relay-module' },
+  'wokwi-relay': { type: 'wokwi-relay-module' },
+  'relay': { type: 'wokwi-relay-module' },
+  'relay_5v': { type: 'wokwi-relay-module' },
+
+  'wokwi-lcd1602': { type: 'wokwi-lcd1602' },
+  'lcd1602': { type: 'wokwi-lcd1602' },
+  'lcd': { type: 'wokwi-lcd1602' },
+  'lcd_16x2_i2c': { type: 'wokwi-lcd1602' },
+
+  'wokwi-ssd1306': { type: 'wokwi-ssd1306' },
+  'ssd1306': { type: 'wokwi-ssd1306' },
+  'oled': { type: 'wokwi-ssd1306' },
+  'oled_096_i2c': { type: 'wokwi-ssd1306' },
+
+  'wokwi-soil-moisture-sensor': { type: 'wokwi-soil-moisture-sensor' },
+  'soil_moisture': { type: 'wokwi-soil-moisture-sensor' },
+  'soil-moisture': { type: 'wokwi-soil-moisture-sensor' },
+
+  'wokwi-rain-sensor': { type: 'wokwi-rain-sensor' },
+  'rain_sensor': { type: 'wokwi-rain-sensor' },
+  'rain-sensor': { type: 'wokwi-rain-sensor' },
+
+  'wokwi-water-sensor': { type: 'wokwi-water-sensor' },
+  'water_sensor': { type: 'wokwi-water-sensor' },
+  'water-sensor': { type: 'wokwi-water-sensor' },
+
+  'wokwi-gas-sensor': { type: 'wokwi-gas-sensor' },
+  'gas_sensor': { type: 'wokwi-gas-sensor' },
+  'mq2': { type: 'wokwi-gas-sensor' },
+  'mq2_gas': { type: 'wokwi-gas-sensor' },
+
+  'wokwi-flame-sensor': { type: 'wokwi-flame-sensor' },
+  'flame_sensor': { type: 'wokwi-flame-sensor' },
+  'flame-sensor': { type: 'wokwi-flame-sensor' },
+
+  'wokwi-small-sound-sensor': { type: 'wokwi-small-sound-sensor' },
+  'sound_sensor': { type: 'wokwi-small-sound-sensor' },
+  'sound-sensor': { type: 'wokwi-small-sound-sensor' },
+
+  'wokwi-ir-receiver': { type: 'wokwi-ir-receiver' },
+  'ir_receiver': { type: 'wokwi-ir-receiver' },
+  'ir-receiver': { type: 'wokwi-ir-receiver' },
+
+  'wokwi-ntc-temperature-sensor': { type: 'wokwi-ntc-temperature-sensor' },
+  'ntc': { type: 'wokwi-ntc-temperature-sensor' }
 };
 
 // Her bileşen tipi için pin alias tablosu
@@ -364,6 +482,134 @@ const PIN_ALIASES_BY_TYPE: Record<string, Record<string, string>> = {
     'P3': 'VCC',
     'RIGHT': 'VCC',
     'POWER': 'VCC'
+  },
+  'wokwi-hc-05': {
+    'VCC': 'VCC', '5V': 'VCC', '+': 'VCC', 'POWER': 'VCC', '1': 'VCC',
+    'GND': 'GND', '-': 'GND', '0V': 'GND', 'GROUND': 'GND', '2': 'GND',
+    'TXD': 'TXD', 'TX': 'TXD', 'T': 'TXD', 'TXO': 'TXD', 'DOUT': 'TXD', '3': 'TXD',
+    'RXD': 'RXD', 'RX': 'RXD', 'R': 'RXD', 'RXI': 'RXD', 'DIN': 'RXD', '4': 'RXD',
+    'STATE': 'STATE', 'ST': 'STATE', '5': 'STATE',
+    'EN': 'EN', 'ENABLE': 'EN', 'KEY': 'EN', '6': 'EN'
+  },
+  'wokwi-hc-06': {
+    'VCC': 'VCC', '5V': 'VCC', '+': 'VCC', 'POWER': 'VCC', '1': 'VCC',
+    'GND': 'GND', '-': 'GND', '0V': 'GND', 'GROUND': 'GND', '2': 'GND',
+    'TXD': 'TXD', 'TX': 'TXD', 'T': 'TXD', 'TXO': 'TXD', 'DOUT': 'TXD', '3': 'TXD',
+    'RXD': 'RXD', 'RX': 'RXD', 'R': 'RXD', 'RXI': 'RXD', 'DIN': 'RXD', '4': 'RXD'
+  },
+  'wokwi-l293d': {
+    'EN1': 'EN1', 'ENABLE1': 'EN1', 'EN12': 'EN1', '1,2EN': 'EN1', '1-2EN': 'EN1', '1': 'EN1',
+    'IN1': 'IN1', 'INPUT1': 'IN1', '1A': 'IN1', '2': 'IN1',
+    'OUT1': 'OUT1', 'OUTPUT1': 'OUT1', '1Y': 'OUT1', '3': 'OUT1',
+    'GND': 'GND', 'GND1': 'GND', 'GND2': 'GND', 'GND3': 'GND', 'GND4': 'GND', '4': 'GND', '5': 'GND', '12': 'GND', '13': 'GND',
+    'OUT2': 'OUT2', 'OUTPUT2': 'OUT2', '2Y': 'OUT2', '6': 'OUT2',
+    'IN2': 'IN2', 'INPUT2': 'IN2', '2A': 'IN2', '7': 'IN2',
+    'VCC2': 'VCC2', 'VC2': 'VCC2', 'VIN': 'VCC2', 'VM': 'VCC2', 'VS': 'VCC2', 'MOTOR_VCC': 'VCC2', '12V': 'VCC2', '9V': 'VCC2', '8': 'VCC2',
+    'EN2': 'EN2', 'ENABLE2': 'EN2', 'EN34': 'EN2', '3,4EN': 'EN2', '3-4EN': 'EN2', '9': 'EN2',
+    'IN3': 'IN3', 'INPUT3': 'IN3', '3A': 'IN3', '10': 'IN3',
+    'OUT3': 'OUT3', 'OUTPUT3': 'OUT3', '3Y': 'OUT3', '11': 'OUT3',
+    'OUT4': 'OUT4', 'OUTPUT4': 'OUT4', '4Y': 'OUT4', '14': 'OUT4',
+    'IN4': 'IN4', 'INPUT4': 'IN4', '4A': 'IN4', '15': 'IN4',
+    'VCC1': 'VCC1', 'VC1': 'VCC1', 'VCC': 'VCC1', '5V': 'VCC1', 'LOGIC_VCC': 'VCC1', '16': 'VCC1'
+  },
+  'wokwi-l298n': {
+    'VCC': 'VCC', '12V': 'VCC', 'VIN': 'VCC', 'V+': 'VCC', 'POWER': 'VCC', '1': 'VCC',
+    'GND': 'GND', '-': 'GND', '0V': 'GND', 'GROUND': 'GND', '2': 'GND',
+    '5V': '5V', 'VCC_5V': '5V', 'LOGIC_5V': '5V', '3': '5V',
+    'ENA': 'ENA', 'EN1': 'ENA', 'ENABLE_A': 'ENA',
+    'IN1': 'IN1', 'IN2': 'IN2', 'IN3': 'IN3', 'IN4': 'IN4',
+    'ENB': 'ENB', 'EN2': 'ENB', 'ENABLE_B': 'ENB',
+    'OUT1': 'OUT1', 'OUT2': 'OUT2', 'OUT3': 'OUT3', 'OUT4': 'OUT4'
+  },
+  'wokwi-dc-motor': {
+    '1': '1', '+': '1', 'POS': '1', 'PIN1': '1', 'IN1': '1', 'A': '1', 'RED': '1',
+    '2': '2', '-': '2', 'NEG': '2', 'PIN2': '2', 'IN2': '2', 'B': '2', 'BLACK': '2', 'GND': '2'
+  },
+  'wokwi-rgb-led': {
+    'R': 'R', 'RED': 'R', '1': 'R', 'ANODE_RED': 'R',
+    'COM': 'COM', 'COMMON': 'COM', 'C': 'COM', 'A': 'COM', 'CATHODE': 'COM', 'KATOT': 'COM', 'GND': 'COM', '2': 'COM', '-': 'COM',
+    'G': 'G', 'GREEN': 'G', '3': 'G', 'ANODE_GREEN': 'G',
+    'B': 'B', 'BLUE': 'B', '4': 'B', 'ANODE_BLUE': 'B'
+  },
+  'wokwi-pir-motion-sensor': {
+    'VCC': 'VCC', '5V': 'VCC', '+': 'VCC', 'POWER': 'VCC', '1': 'VCC',
+    'OUT': 'OUT', 'SIG': 'OUT', 'SIGNAL': 'OUT', 'D': 'OUT', '2': 'OUT',
+    'GND': 'GND', '-': 'GND', '0V': 'GND', 'GROUND': 'GND', '3': 'GND'
+  },
+  'wokwi-dht22': {
+    'VCC': 'VCC', '5V': 'VCC', '+': 'VCC', 'POWER': 'VCC', '1': 'VCC',
+    'SDA': 'SDA', 'DATA': 'SDA', 'SIG': 'SDA', 'OUT': 'SDA', '2': 'SDA',
+    'NC': 'NC', '3': 'NC',
+    'GND': 'GND', '-': 'GND', 'GROUND': 'GND', '4': 'GND'
+  },
+  'wokwi-analog-joystick': {
+    'GND': 'GND', '-': 'GND', 'GROUND': 'GND', '1': 'GND',
+    '5V': 'VCC', 'VCC': 'VCC', '+': 'VCC', '2': 'VCC',
+    'HORZ': 'HORZ', 'VRX': 'HORZ', 'X': 'HORZ', '3': 'HORZ',
+    'VERT': 'VERT', 'VRY': 'VERT', 'Y': 'VERT', '4': 'VERT',
+    'SEL': 'SEL', 'SW': 'SEL', 'KEY': 'SEL', 'BTN': 'SEL', 'BUTTON': 'SEL', '5': 'SEL'
+  },
+  'wokwi-relay-module': {
+    'VCC': 'VCC', '5V': 'VCC', '+': 'VCC', 'POWER': 'VCC', '1': 'VCC',
+    'GND': 'GND', '-': 'GND', 'GROUND': 'GND', '2': 'GND',
+    'IN': 'IN', 'SIG': 'IN', 'SIGNAL': 'IN', 'CTRL': 'IN', 'DATA': 'IN', '3': 'IN',
+    'NO': 'NO', 'COM': 'COM', 'NC': 'NC'
+  },
+  'wokwi-lcd1602': {
+    'GND': 'GND', '-': 'GND', '1': 'GND',
+    'VCC': 'VCC', '5V': 'VCC', '+': 'VCC', '2': 'VCC',
+    'SDA': 'SDA', '3': 'SDA',
+    'SCL': 'SCL', '4': 'SCL'
+  },
+  'wokwi-ssd1306': {
+    'GND': 'GND', '-': 'GND', '1': 'GND',
+    'VCC': 'VCC', '5V': 'VCC', '3.3V': 'VCC', '+': 'VCC', '2': 'VCC',
+    'SCL': 'SCL', 'SCK': 'SCL', 'CLK': 'SCL', '3': 'SCL',
+    'SDA': 'SDA', 'MOSI': 'SDA', 'DATA': 'SDA', '4': 'SDA'
+  },
+  'wokwi-soil-moisture-sensor': {
+    'VCC': 'VCC', '5V': 'VCC', '+': 'VCC', '1': 'VCC',
+    'GND': 'GND', '-': 'GND', '2': 'GND',
+    'DO': 'DO', 'D0': 'DO', 'DIGITAL': 'DO', '3': 'DO',
+    'AO': 'AO', 'A0': 'AO', 'SIG': 'AO', 'OUT': 'AO', 'ANALOG': 'AO', '4': 'AO'
+  },
+  'wokwi-rain-sensor': {
+    'VCC': 'VCC', '5V': 'VCC', '+': 'VCC', '1': 'VCC',
+    'GND': 'GND', '-': 'GND', '2': 'GND',
+    'DO': 'DO', 'D0': 'DO', 'DIGITAL': 'DO', '3': 'DO',
+    'AO': 'AO', 'A0': 'AO', 'SIG': 'AO', 'OUT': 'AO', 'ANALOG': 'AO', '4': 'AO'
+  },
+  'wokwi-water-sensor': {
+    'VCC': 'VCC', '5V': 'VCC', '+': 'VCC', '1': 'VCC',
+    'GND': 'GND', '-': 'GND', '2': 'GND',
+    'AO': 'AO', 'A0': 'AO', 'SIG': 'AO', 'OUT': 'AO', 'ANALOG': 'AO', '3': 'AO'
+  },
+  'wokwi-gas-sensor': {
+    'VCC': 'VCC', '5V': 'VCC', '+': 'VCC', '1': 'VCC',
+    'GND': 'GND', '-': 'GND', '2': 'GND',
+    'DO': 'DO', 'D0': 'DO', '3': 'DO',
+    'AO': 'AO', 'A0': 'AO', 'SIG': 'AO', 'OUT': 'AO', '4': 'AO'
+  },
+  'wokwi-flame-sensor': {
+    'VCC': 'VCC', '5V': 'VCC', '+': 'VCC', '1': 'VCC',
+    'GND': 'GND', '-': 'GND', '2': 'GND',
+    'DO': 'DO', 'D0': 'DO', '3': 'DO',
+    'AO': 'AO', 'A0': 'AO', 'SIG': 'AO', 'OUT': 'AO', '4': 'AO'
+  },
+  'wokwi-small-sound-sensor': {
+    'VCC': 'VCC', '5V': 'VCC', '+': 'VCC', '1': 'VCC',
+    'GND': 'GND', '-': 'GND', '2': 'GND',
+    'DO': 'DO', 'D0': 'DO', '3': 'DO',
+    'AO': 'AO', 'A0': 'AO', 'SIG': 'AO', 'OUT': 'AO', '4': 'AO'
+  },
+  'wokwi-ir-receiver': {
+    'OUT': 'OUT', 'SIG': 'OUT', 'DATA': 'OUT', 'DAT': 'OUT', '1': 'OUT',
+    'GND': 'GND', '-': 'GND', '2': 'GND',
+    'VCC': 'VCC', '5V': 'VCC', '+': 'VCC', '3': 'VCC'
+  },
+  'wokwi-ntc-temperature-sensor': {
+    '1': '1', 'A': '1', 'VCC': '1',
+    '2': '2', 'B': '2', 'GND': '2', 'SIG': '2'
   }
 };
 

@@ -101,6 +101,32 @@
       <wokwi-ssd1306></wokwi-ssd1306>
     </div>
 
+    <!-- 11. Bluetooth & Motor Sürücüler & Röle -->
+    <div v-else-if="itemId === 'BLUETOOTH_HC05' || itemId === 'BLUETOOTH_HC06'" class="scale-[0.4] origin-center flex items-center justify-center">
+      <wokwi-hc-05></wokwi-hc-05>
+    </div>
+    <div v-else-if="itemId === 'MOTOR_DRIVER_L293D'" class="scale-[0.38] origin-center flex items-center justify-center">
+      <wokwi-l293d></wokwi-l293d>
+    </div>
+    <div v-else-if="itemId === 'MOTOR_DRIVER_L298N'" class="scale-[0.38] origin-center flex items-center justify-center">
+      <wokwi-l298n></wokwi-l298n>
+    </div>
+    <div v-else-if="itemId === 'DC_MOTOR_5V'" class="scale-[0.45] origin-center flex items-center justify-center">
+      <wokwi-dc-motor></wokwi-dc-motor>
+    </div>
+    <div v-else-if="itemId === 'RELAY_MODULE'" class="scale-[0.42] origin-center flex items-center justify-center">
+      <wokwi-relay-module></wokwi-relay-module>
+    </div>
+    <div v-else-if="itemId === 'SOIL_MOISTURE'" class="scale-[0.4] origin-center flex items-center justify-center">
+      <wokwi-soil-moisture-sensor></wokwi-soil-moisture-sensor>
+    </div>
+    <div v-else-if="itemId === 'RAIN_SENSOR'" class="scale-[0.4] origin-center flex items-center justify-center">
+      <wokwi-rain-sensor></wokwi-rain-sensor>
+    </div>
+    <div v-else-if="itemId === 'WATER_SENSOR'" class="scale-[0.4] origin-center flex items-center justify-center">
+      <wokwi-water-sensor></wokwi-water-sensor>
+    </div>
+
     <!-- Diğer Parçalar veya Özel Eklenenler İçin İkon -->
     <span v-else class="text-2xl">{{ icon || '🧪' }}</span>
   </div>

@@ -312,6 +312,14 @@ const IDEA_RULES: InventoryIdea[] = [
     check: (inv) => (inv.has('LDR_DISCRETE') || inv.has('LDR_SENSOR') || inv.has('LDR_MODULE')) && inv.has('SERVO_SG90')
   },
   {
+    id: 'idea-bluetooth-car',
+    title: 'Bluetooth Kontrollü Araba',
+    icon: '🏎️',
+    description: 'HC-05 Bluetooth modülü ve L293D motor sürücü ile telefondan yönlendirilen 2 DC motorlu araba.',
+    prompt: 'HC-05 bluetooth modülü ve L293D motor sürücü ile bluetooth kontrollü 2 motorlu araba yapmak istiyorum.',
+    check: (inv) => (inv.has('BLUETOOTH_HC05') || inv.has('BLUETOOTH_HC06')) && (inv.has('MOTOR_DRIVER_L293D') || inv.has('MOTOR_DRIVER_L298N') || inv.has('DC_MOTOR_5V'))
+  },
+  {
     id: 'idea-night-lamp',
     title: 'Otomatik Gece Lambası',
     icon: '🌙',
@@ -431,6 +439,8 @@ const defaultElectronics: InventoryItem[] = [
   { id: 'SLIDE_SWITCH', name: 'Sürgülü Anahtar', icon: '🔛', tag: 'Aç/Kapa Switch', category: 'passive', color: 'bg-[#f1f5f9]' },
 
   // 5. Sensörler
+  { id: 'BLUETOOTH_HC05', name: 'HC-05 Bluetooth Modülü', icon: '📶', tag: 'Kablosuz Seri Haberleşme', category: 'sensor', color: 'bg-[#e0f2fe]' },
+  { id: 'BLUETOOTH_HC06', name: 'HC-06 Bluetooth Modülü', icon: '📶', tag: 'Kablosuz Seri Alıcı', category: 'sensor', color: 'bg-[#e0f2fe]' },
   { id: 'LDR_DISCRETE', name: 'Foto-direnç (2 Bacaklı LDR)', icon: '☀️', tag: 'Klasik Işığa Duyarlı Direnç', category: 'sensor', color: 'bg-[#fed7aa]' },
   { id: 'LDR_MODULE', name: 'LDR Sensör Modülü (4 Pinli)', icon: '🎛️', tag: 'KY-018 Karşılaştırıcı Kart Modülü', category: 'sensor', color: 'bg-[#fed7aa]' },
   { id: 'LDR_SENSOR', name: 'Işık Sensörü (LDR)', icon: '☀️', tag: 'Oda Işığı Seviyesi Ölçer', category: 'sensor', color: 'bg-[#fed7aa]' },
@@ -444,6 +454,8 @@ const defaultElectronics: InventoryItem[] = [
   { id: 'MQ2_GAS', name: 'MQ-2 Gaz & Duman', icon: '💨', tag: 'Duman ve Gaz Algılayıcı', category: 'sensor', color: 'bg-[#fef3c7]' },
 
   // 6. Motorlar, Ses ve Aktüatörler
+  { id: 'MOTOR_DRIVER_L293D', name: 'L293D Motor Sürücü', icon: '🚗', tag: 'Çift DC Motor Sürücü Entegresi', category: 'actuator_sound', color: 'bg-[#fed7aa]' },
+  { id: 'MOTOR_DRIVER_L298N', name: 'L298N Motor Sürücü', icon: '🏎️', tag: 'Güçlü Çift Motor Sürücü Modülü', category: 'actuator_sound', color: 'bg-[#fed7aa]' },
   { id: 'BUZZER', name: 'Piezo Buzzer (Hoparlör)', icon: '🔊', tag: 'Melodi, Alarm ve Bip Sesi', category: 'actuator_sound', color: 'bg-[#e2e8f0]' },
   { id: 'ACTIVE_BUZZER', name: 'Aktif Buzzer', icon: '📢', tag: 'Sürekli Bip Sesi Verici', category: 'actuator_sound', color: 'bg-[#e2e8f0]' },
   { id: 'SERVO_SG90', name: 'SG90 Servo Motor', icon: '🦾', tag: '0-180 Derece Dönen Kol', category: 'actuator_sound', color: 'bg-[#bae6fd]' },

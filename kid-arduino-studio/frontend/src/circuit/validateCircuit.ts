@@ -164,6 +164,35 @@ export function validateNetlist(netlist: CircuitNetlist): ValidationReport {
         }
         break;
       }
+      case 'wokwi-hc-05':
+      case 'wokwi-hc-06': {
+        if (!connectedPins.has('VCC') || !connectedPins.has('GND')) {
+          warnings.push(`'${comp.label || comp.id}' Bluetooth modülünün güç pinleri (VCC/GND) eksik!`);
+        }
+        if (!connectedPins.has('TXD') && !connectedPins.has('RXD') && !connectedPins.has('TX') && !connectedPins.has('RX')) {
+          warnings.push(`'${comp.label || comp.id}' Bluetooth modülünün haberleşme pinleri (TX/RX) eksik!`);
+        }
+        break;
+      }
+      case 'wokwi-l293d':
+      case 'wokwi-l298n': {
+        if (connectedPins.size < 4) {
+          warnings.push(`'${comp.label || comp.id}' Motor sürücünün güç ve kontrol pinleri eksik!`);
+        }
+        break;
+      }
+      case 'wokwi-dc-motor': {
+        if (connectedPins.size < 2) {
+          warnings.push(`'${comp.label || comp.id}' DC motorun iki kutbu da bağlı olmalıdır.`);
+        }
+        break;
+      }
+      case 'wokwi-relay-module': {
+        if (!connectedPins.has('VCC') || !connectedPins.has('GND') || !connectedPins.has('IN')) {
+          warnings.push(`'${comp.label || comp.id}' Röle modülünün VCC, GND ve IN pinleri bağlı olmalıdır.`);
+        }
+        break;
+      }
     }
   }
 

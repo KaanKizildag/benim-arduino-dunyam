@@ -250,8 +250,8 @@
         <div
           v-for="comp in offBoardComponents"
           :key="comp.id"
-          class="absolute z-10 w-[140px] h-[96px] rounded-2xl bg-slate-800/80 border-2 border-cyan-500/60 shadow-lg flex flex-col items-center justify-between p-1.5"
-          :style="{ left: `${comp.left}px`, top: `${comp.top}px` }"
+          class="absolute z-10 h-[96px] rounded-2xl bg-slate-800/80 border-2 border-cyan-500/60 shadow-lg flex flex-col items-center justify-between p-1.5"
+          :style="{ left: `${comp.left}px`, top: `${comp.top}px`, width: `${comp.width || 140}px` }"
         >
           <!-- Modül Başlığı -->
           <div class="px-2 py-0.5 rounded-md bg-slate-950/90 border border-cyan-500/40 text-[9px] font-black text-cyan-300 truncate max-w-full">
