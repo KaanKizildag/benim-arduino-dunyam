@@ -90,6 +90,37 @@ interface SeriesPartnerMatch {
   partnerPin: string;
 }
 
+export const OFF_BOARD_PIN_DEFS: Record<string, { label: string; pins: string[] }> = {
+  'wokwi-servo': { label: 'SG90 Servo Motor', pins: ['PWM', 'V+', 'GND'] },
+  'wokwi-hc-sr04': { label: 'HC-SR04 Mesafe Sensörü', pins: ['VCC', 'TRIG', 'ECHO', 'GND'] },
+  'wokwi-photoresistor-sensor': { label: 'LDR Işık Sensörü', pins: ['VCC', 'GND', 'DO', 'AO'] },
+  'wokwi-hc-05': { label: 'HC-05 Bluetooth Modülü', pins: ['VCC', 'GND', 'TXD', 'RXD'] },
+  'wokwi-hc-06': { label: 'HC-06 Bluetooth Modülü', pins: ['VCC', 'GND', 'TXD', 'RXD'] },
+  'wokwi-l293d': {
+    label: 'L293D Motor Sürücü',
+    pins: ['VCC1', 'VCC2', 'GND', 'IN1', 'IN2', 'IN3', 'IN4', 'OUT1', 'OUT2', 'OUT3', 'OUT4', 'EN1', 'EN2']
+  },
+  'wokwi-l298n': {
+    label: 'L298N Motor Sürücü',
+    pins: ['VCC', 'GND', '5V', 'IN1', 'IN2', 'IN3', 'IN4', 'OUT1', 'OUT2', 'OUT3', 'OUT4', 'ENA', 'ENB']
+  },
+  'wokwi-dc-motor': { label: 'DC Motor', pins: ['1', '2'] },
+  'wokwi-relay-module': { label: '5V Röle Modülü', pins: ['VCC', 'GND', 'IN'] },
+  'wokwi-pir-motion-sensor': { label: 'PIR Hareket Sensörü', pins: ['VCC', 'OUT', 'GND'] },
+  'wokwi-dht22': { label: 'DHT22 Sıcaklık/Nem Sensörü', pins: ['VCC', 'SDA', 'GND'] },
+  'wokwi-analog-joystick': { label: 'Analog Joystick', pins: ['GND', 'VCC', 'HORZ', 'VERT', 'SEL'] },
+  'wokwi-lcd1602': { label: '16x2 LCD Ekran', pins: ['GND', 'VCC', 'SDA', 'SCL'] },
+  'wokwi-ssd1306': { label: '0.96 OLED Ekran', pins: ['GND', 'VCC', 'SCL', 'SDA'] },
+  'wokwi-soil-moisture-sensor': { label: 'Toprak Nem Sensörü', pins: ['VCC', 'GND', 'DO', 'AO'] },
+  'wokwi-rain-sensor': { label: 'Yağmur Sensörü', pins: ['VCC', 'GND', 'DO', 'AO'] },
+  'wokwi-water-sensor': { label: 'Su Seviye Sensörü', pins: ['VCC', 'GND', 'AO'] },
+  'wokwi-gas-sensor': { label: 'MQ-2 Gaz Sensörü', pins: ['VCC', 'GND', 'DO', 'AO'] },
+  'wokwi-flame-sensor': { label: 'Alev Sensörü', pins: ['VCC', 'GND', 'DO', 'AO'] },
+  'wokwi-small-sound-sensor': { label: 'Ses Sensörü', pins: ['VCC', 'GND', 'DO', 'AO'] },
+  'wokwi-ir-receiver': { label: 'IR Kızılötesi Alıcı', pins: ['OUT', 'GND', 'VCC'] },
+  'wokwi-ntc-temperature-sensor': { label: 'NTC Sıcaklık Sensörü', pins: ['1', '2'] }
+};
+
 export class BreadboardAllocator {
   private currentCol = 4;
   private currentHalf: 'upper' | 'lower' = 'upper';
@@ -157,11 +188,7 @@ export class BreadboardAllocator {
   }
 
   public isOffBoardComponent(type: string): boolean {
-    return (
-      type === 'wokwi-servo' ||
-      type === 'wokwi-hc-sr04' ||
-      type === 'wokwi-photoresistor-sensor'
-    );
+    return Boolean(OFF_BOARD_PIN_DEFS[type]);
   }
 
   private isTwoPinPairable(type: string): boolean {
@@ -659,197 +686,94 @@ export class BreadboardAllocator {
   }
 
   /**
-   * Modül / Harici Bileşenler (4 Pin LDR, Servo, HC-SR04)
-   * Sağdaki modül dock'unda dikey olarak sıralanır.
-   * Her modülün alt kenarında 28px aralıklı net pin soketleri (VCC, GND, AO, PWM, TRIG, ECHO) yer alır.
+   * Modül / Harici Bileşenler (Bluetooth, Motor Sürücü, DC Motor, Servo, Sensörler vs.)
+   * Sağdaki modül dock'unda düzenli olarak sıralanır.
+   * Her modülün alt kenarında pin soketleri (VCC, GND, IN, OUT vs.) yer alır.
    */
   private allocateOffBoardComponent(comp: NetlistComponent): void {
-    const dockLeft = 815;
-    const dockTop = 76 + this.offBoardIndex * 132;
+    const colIndex = Math.floor(this.offBoardIndex / 4);
+    const rowIndex = this.offBoardIndex % 4;
+    const dockLeft = 815 + colIndex * 165;
+    const dockTop = 76 + rowIndex * 128;
     this.offBoardIndex++;
 
-    // Breadboard orijinine (448, 108) göre pin soket koordinat hesabı
-    const getSocketCoord = (pinIndex: number, totalPins: number) => {
-      const pitch = 28;
-      const cardWidth = 140;
-      const totalSpan = (totalPins - 1) * pitch;
-      const startOffsetX = Math.round((cardWidth - totalSpan) / 2);
+    const def = OFF_BOARD_PIN_DEFS[comp.type] || {
+      label: comp.label || comp.id,
+      pins: ['1', '2']
+    };
+
+    const pinNames = [...def.pins];
+    const totalPins = pinNames.length;
+    const pitch = totalPins > 8 ? 14 : totalPins > 5 ? 18 : totalPins > 3 ? 22 : 28;
+    const totalSpan = (totalPins - 1) * pitch;
+    const cardWidth = Math.max(140, totalSpan + 24);
+    const cardHeight = 96;
+    const startOffsetX = Math.round((cardWidth - totalSpan) / 2);
+
+    const getSocketCoord = (pinIndex: number) => {
       const canvasX = dockLeft + startOffsetX + pinIndex * pitch;
-      const canvasY = dockTop + 88; // Kartın altındaki etiketli pin soket barı
+      const canvasY = dockTop + 88;
       return {
         x: canvasX - 448,
         y: canvasY - 108
       };
     };
 
-    if (comp.type === 'wokwi-photoresistor-sensor') {
-      const pVcc = getSocketCoord(0, 4);
-      const pGnd = getSocketCoord(1, 4);
-      const pDo = getSocketCoord(2, 4);
-      const pAo = getSocketCoord(3, 4);
-
-      const pins: Record<string, AllocatedPin> = {
-        VCC: {
-          componentId: comp.id,
-          pinName: 'VCC',
-          col: 0,
-          row: 'offboard',
-          holeName: `${comp.id}.VCC`,
-          ...pVcc
-        },
-        GND: {
-          componentId: comp.id,
-          pinName: 'GND',
-          col: 0,
-          row: 'offboard',
-          holeName: `${comp.id}.GND`,
-          ...pGnd
-        },
-        DO: {
-          componentId: comp.id,
-          pinName: 'DO',
-          col: 0,
-          row: 'offboard',
-          holeName: `${comp.id}.DO`,
-          ...pDo
-        },
-        AO: {
-          componentId: comp.id,
-          pinName: 'AO',
-          col: 0,
-          row: 'offboard',
-          holeName: `${comp.id}.AO`,
-          ...pAo
-        }
+    const pins: Record<string, AllocatedPin> = {};
+    for (let i = 0; i < pinNames.length; i++) {
+      const pName = pinNames[i];
+      const coord = getSocketCoord(i);
+      pins[pName] = {
+        componentId: comp.id,
+        pinName: pName,
+        col: 0,
+        row: 'offboard',
+        holeName: `${comp.id}.${pName}`,
+        ...coord
       };
+    }
 
-      this.placedComponents.push({
-        id: comp.id,
-        type: comp.type,
-        props: comp.props || {},
-        label: comp.label || 'LDR Işık Sensörü',
-        isBreadboardMounted: false,
-        left: dockLeft,
-        top: dockTop,
-        labelX: dockLeft + 70,
-        labelY: -20,
-        startCol: 0,
-        endCol: 0,
-        pins
-      });
+    this.placedComponents.push({
+      id: comp.id,
+      type: comp.type,
+      props: comp.props || {},
+      label: comp.label || def.label,
+      isBreadboardMounted: false,
+      left: dockLeft,
+      top: dockTop,
+      width: cardWidth,
+      height: cardHeight,
+      labelX: dockLeft + Math.round(cardWidth / 2),
+      labelY: -20,
+      startCol: 0,
+      endCol: 0,
+      pins
+    });
 
-      for (const [k, v] of Object.entries(pins)) {
-        this.allocatedPins[`${comp.id}.${k}`] = v;
+    for (const [k, v] of Object.entries(pins)) {
+      this.allocatedPins[`${comp.id}.${k}`] = v;
+    }
+
+    // Ek koruma: yaygın pin isim varyasyonları için alias kayıtları
+    if (comp.type === 'wokwi-l293d') {
+      const gndPin = pins['GND'];
+      if (gndPin) {
+        this.allocatedPins[`${comp.id}.GND1`] = gndPin;
+        this.allocatedPins[`${comp.id}.GND2`] = gndPin;
+        this.allocatedPins[`${comp.id}.GND3`] = gndPin;
+        this.allocatedPins[`${comp.id}.GND4`] = gndPin;
       }
-    } else if (comp.type === 'wokwi-servo') {
-      const pPWM = getSocketCoord(0, 3);
-      const pVPlus = getSocketCoord(1, 3);
-      const pGnd = getSocketCoord(2, 3);
-
-      const pins: Record<string, AllocatedPin> = {
-        PWM: {
-          componentId: comp.id,
-          pinName: 'PWM',
-          col: 0,
-          row: 'offboard',
-          holeName: `${comp.id}.PWM`,
-          ...pPWM
-        },
-        'V+': {
-          componentId: comp.id,
-          pinName: 'V+',
-          col: 0,
-          row: 'offboard',
-          holeName: `${comp.id}.V+`,
-          ...pVPlus
-        },
-        GND: {
-          componentId: comp.id,
-          pinName: 'GND',
-          col: 0,
-          row: 'offboard',
-          holeName: `${comp.id}.GND`,
-          ...pGnd
-        }
-      };
-
-      this.placedComponents.push({
-        id: comp.id,
-        type: comp.type,
-        props: comp.props || {},
-        label: comp.label || 'SG90 Servo Motor',
-        isBreadboardMounted: false,
-        left: dockLeft,
-        top: dockTop,
-        labelX: dockLeft + 70,
-        labelY: -20,
-        startCol: 0,
-        endCol: 0,
-        pins
-      });
-
-      for (const [k, v] of Object.entries(pins)) {
-        this.allocatedPins[`${comp.id}.${k}`] = v;
+      if (pins['VCC1']) {
+        this.allocatedPins[`${comp.id}.VCC`] = pins['VCC1'];
+        this.allocatedPins[`${comp.id}.5V`] = pins['VCC1'];
       }
-    } else if (comp.type === 'wokwi-hc-sr04') {
-      const pVcc = getSocketCoord(0, 4);
-      const pTrig = getSocketCoord(1, 4);
-      const pEcho = getSocketCoord(2, 4);
-      const pGnd = getSocketCoord(3, 4);
-
-      const pins: Record<string, AllocatedPin> = {
-        VCC: {
-          componentId: comp.id,
-          pinName: 'VCC',
-          col: 0,
-          row: 'offboard',
-          holeName: `${comp.id}.VCC`,
-          ...pVcc
-        },
-        TRIG: {
-          componentId: comp.id,
-          pinName: 'TRIG',
-          col: 0,
-          row: 'offboard',
-          holeName: `${comp.id}.TRIG`,
-          ...pTrig
-        },
-        ECHO: {
-          componentId: comp.id,
-          pinName: 'ECHO',
-          col: 0,
-          row: 'offboard',
-          holeName: `${comp.id}.ECHO`,
-          ...pEcho
-        },
-        GND: {
-          componentId: comp.id,
-          pinName: 'GND',
-          col: 0,
-          row: 'offboard',
-          holeName: `${comp.id}.GND`,
-          ...pGnd
-        }
-      };
-
-      this.placedComponents.push({
-        id: comp.id,
-        type: comp.type,
-        props: comp.props || {},
-        label: comp.label || 'HC-SR04 Mesafe Sensörü',
-        isBreadboardMounted: false,
-        left: dockLeft,
-        top: dockTop,
-        labelX: dockLeft + 70,
-        labelY: -20,
-        startCol: 0,
-        endCol: 0,
-        pins
-      });
-
-      for (const [k, v] of Object.entries(pins)) {
-        this.allocatedPins[`${comp.id}.${k}`] = v;
+      if (pins['VCC2']) {
+        this.allocatedPins[`${comp.id}.VIN`] = pins['VCC2'];
+        this.allocatedPins[`${comp.id}.VM`] = pins['VCC2'];
       }
+    } else if (comp.type === 'wokwi-hc-05' || comp.type === 'wokwi-hc-06') {
+      if (pins['TXD']) this.allocatedPins[`${comp.id}.TX`] = pins['TXD'];
+      if (pins['RXD']) this.allocatedPins[`${comp.id}.RX`] = pins['RXD'];
     }
   }
 }

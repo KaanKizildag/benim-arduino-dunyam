@@ -1,0 +1,31 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: kid-arduino-backend
+    ports:
+      - "8001:8001"
+    environment:
+      - PORT=8001
+      - OLLAMA_API_BASE=http://host.docker.internal:11434
+    env_file:
+      - path: ./backend/.env
+        required: false
+    volumes:
+      - ./backend/saved_projects.json:/app/saved_projects.json
+      - ./backend/ai_logs.json:/app/ai_logs.json
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: kid-arduino-frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+    restart: unless-stopped

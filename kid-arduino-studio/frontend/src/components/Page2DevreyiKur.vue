@@ -250,8 +250,8 @@
         <div
           v-for="comp in offBoardComponents"
           :key="comp.id"
-          class="absolute z-10 w-[140px] h-[96px] rounded-2xl bg-slate-800/80 border-2 border-cyan-500/60 shadow-lg flex flex-col items-center justify-between p-1.5"
-          :style="{ left: `${comp.left}px`, top: `${comp.top}px` }"
+          class="absolute z-10 h-[96px] rounded-2xl bg-slate-800/80 border-2 border-cyan-500/60 shadow-lg flex flex-col items-center justify-between p-1.5"
+          :style="{ left: `${comp.left}px`, top: `${comp.top}px`, width: `${comp.width || 140}px` }"
         >
           <!-- Modül Başlığı -->
           <div class="px-2 py-0.5 rounded-md bg-slate-950/90 border border-cyan-500/40 text-[9px] font-black text-cyan-300 truncate max-w-full">
@@ -380,7 +380,6 @@
               :stroke-width="idx === currentStepIndex && !showAllWires ? 4.5 : 3.5"
               stroke-linecap="round"
               :opacity="!showAllWires && idx !== currentStepIndex ? 0.55 : 1"
-              :class="{ 'wire-active-flow': idx === currentStepIndex || showAllWires }"
             />
 
             <!-- Başlangıç Pini Halkası -->
@@ -410,10 +409,9 @@
             <circle
               :cx="currentWire.from.x"
               :cy="currentWire.from.y"
-              r="9"
+              r="8"
               fill="#38bdf8"
-              opacity="0.45"
-              class="animate-ping"
+              opacity="0.3"
             />
             <circle
               :cx="currentWire.from.x"
@@ -446,10 +444,9 @@
             <circle
               :cx="currentWire.to.x"
               :cy="currentWire.to.y"
-              r="12"
+              r="10"
               fill="#facc15"
-              opacity="0.65"
-              class="animate-ping"
+              opacity="0.3"
             />
             <circle
               :cx="currentWire.to.x"
@@ -929,14 +926,4 @@ function prevStep() {
 </script>
 
 <style scoped>
-@keyframes wireDash {
-  to {
-    stroke-dashoffset: -20;
-  }
-}
-
-.wire-active-flow {
-  stroke-dasharray: 6, 4;
-  animation: wireDash 1s linear infinite;
-}
 </style>
