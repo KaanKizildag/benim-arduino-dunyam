@@ -43,6 +43,40 @@ class AkisAdimi(BaseModel):
     evet_sonucu: str = Field(..., description="3. EVET: Karar 'Evet' ise ne olacağını belirtir.")
     hayir_sonucu: str = Field(..., description="4. HAYIR: Karar 'Hayır' ise ne olacağını belirtir.")
 
+class PinBindingInfo(BaseModel):
+    uno_pin: str = Field(..., description="Arduino pini, örn: D13, A0, D9")
+    component_id: str = Field(..., description="Bağlı olduğu bileşen kimliği, örn: led1, ldr1, servo1")
+    component_label: str = Field(..., description="Bileşenin Türkçe adı, örn: Kırmızı LED")
+    component_type: str = Field(..., description="Wokwi bileşen tipi")
+    pin_name: str = Field(..., description="Bileşen pini, örn: A, AO, PWM, TRIG")
+    via_component: Optional[str] = Field(default=None, description="Arada seri direnç varsa kimliği, örn: r1 (220Ω Direnç)")
+    role: str = Field(default="OUTPUT", description="INPUT veya OUTPUT")
+
+class LogicVerificationReport(BaseModel):
+    is_valid: bool = Field(default=True, description="Kod ve akış diyagramı hatasız ve kablolamayla uyumlu mu?")
+    syntax_ok: bool = Field(default=True, description="Arduino C++ kodu sözdizimi geçerli mi?")
+    pins_matched: bool = Field(default=True, description="Koddaki pinler ile kablolamadaki (netlist) pinler birebir uyumlu mu?")
+    flow_complete: bool = Field(default=True, description="Akış diyagramının 4 adımı da eksiksiz mi?")
+    auto_repaired: bool = Field(default=False, description="Uyumsuzluk tespit edilip otomatik onarıldı mı?")
+    pin_bindings: List[PinBindingInfo] = Field(default_factory=list, description="Netlist'ten çıkarılan ve kodla eşleştirilen pin tablosu")
+    checks: List[str] = Field(default_factory=list, description="Yapılan doğrulama kontrollerinin çocuk dostu özeti")
+    warnings: List[str] = Field(default_factory=list, description="Varsa uyarılar")
+
+class WiringDesignResponse(BaseModel):
+    proje_adi: str = Field(..., description="Çocuklar için heyecan verici proje adı")
+    karsilama_mesaji: str = Field(..., description="AI asistanın çocuğu motive eden kısa ve sevimli karşılama mesajı")
+    gerekli_parcalar: List[str] = Field(..., description="Kullanılacak parçaların envanter kodları")
+    netlist: CircuitNetlist = Field(..., description="Hatasız ve doğrulanmış Netlist kablolama şeması")
+    baglanti_adimlari: Optional[List[BaglantiAdimi]] = Field(default_factory=list, description="Adım adım bağlantı listesi")
+    guvenlik_notu: Optional[str] = Field(default="Elektronik parçaları bağlarken nazik ol!", description="Çocuğa güvenlik hatırlatması")
+    pin_bindings: List[PinBindingInfo] = Field(default_factory=list, description="Hangi Arduino pininin hangi parçaya bağlandığının özeti")
+    uyarilar: Optional[List[str]] = Field(default_factory=list, description="Normalizasyon ve kablolama doğrulama notları")
+
+class LogicDesignResponse(BaseModel):
+    akis_adimlari: AkisAdimi = Field(..., description="Kablolamaya uygun mantıksal akış diyagramı")
+    arduino_kodu: str = Field(..., description="Kablolamadaki pinlerle %100 uyumlu Arduino C++ kodu")
+    verification: LogicVerificationReport = Field(..., description="Kod ve akış diyagramının kablolama ile uyumluluk teyit raporu")
+
 class ProjeTasarimi(BaseModel):
     proje_adi: str = Field(..., description="Çocuklar için heyecan verici proje adı")
     karsilama_mesaji: str = Field(..., description="AI asistanın çocuğu motive eden kısa ve sevimli karşılama mesajı")
@@ -65,3 +99,31 @@ class ProjeTasarimi(BaseModel):
         default_factory=list,
         description="Netlist normalizasyon ve kod-pin uyum uyarıları"
     )
+    verification: Optional[LogicVerificationReport] = Field(
+        default=None,
+        description="Kablolama ve kod doğrulama raporu"
+    )
+
+class SavedProjectEntry(BaseModel):
+    id: str = Field(..., description="Proje benzersiz kimliği")
+    created_at: str = Field(..., description="Oluşturulma tarihi/saati")
+    prompt: str = Field(default="", description="Çocuğun yazdığı proje hayali")
+    is_preset: bool = Field(default=False, description="Hazır kurgulanmış örnek proje mi?")
+    badge: Optional[str] = Field(default="AI Tasarımım ✨", description="Proje rozeti")
+    difficulty: Optional[str] = Field(default="Kolay Seviye", description="Zorluk seviyesi")
+    project: ProjeTasarimi = Field(..., description="Projenin tüm devre, akış ve kod verisi")
+
+class AILogEntry(BaseModel):
+    id: str = Field(..., description="Log benzersiz kimliği")
+    timestamp: str = Field(..., description="İstek zamanı")
+    stage: str = Field(..., description="Aşama adı: 1. Aşama (Kablolama), 2. Aşama (Akış & Kod), Repair vb.")
+    model: str = Field(..., description="Kullanılan AI modeli")
+    provider: str = Field(..., description="ollama veya litellm")
+    duration_ms: int = Field(default=0, description="Yanıt süresi (milisaniye)")
+    status: str = Field(default="SUCCESS", description="SUCCESS, REPAIRED, FALLBACK, ERROR")
+    user_goal: str = Field(default="", description="Kullanıcının yazdığı orijinal proje fikri")
+    system_prompt: str = Field(default="", description="Yapay zekaya gönderilen sistem talimatı")
+    user_prompt: str = Field(default="", description="Yapay zekaya gönderilen kullanıcı isteği")
+    raw_response: str = Field(default="", description="Yapay zekadan dönen ham yanıt")
+    processed_output: Optional[Dict[str, Any]] = Field(default=None, description="Doğrulanmış ve normalize edilmiş çıktı")
+    notes: List[str] = Field(default_factory=list, description="Normalizasyon, filtreleme veya hata notları")

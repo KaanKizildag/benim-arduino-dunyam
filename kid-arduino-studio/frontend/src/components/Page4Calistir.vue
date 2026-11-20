@@ -1,173 +1,358 @@
 <template>
-  <div class="max-w-4xl mx-auto w-full flex flex-col items-center gap-6 py-4 sm:py-8 px-4">
-    
-    <!-- Üst Donanım ve Port Durum Bandı -->
-    <div
-      :class="[
-        'w-full p-4 rounded-3xl border-2 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs shadow-xs',
-        isHardwareReady
-          ? 'bg-emerald-50 border-emerald-200 text-emerald-950'
-          : 'bg-amber-50 border-amber-200 text-amber-950'
-      ]"
-    >
-      <div class="flex items-center gap-3">
-        <span class="text-3xl">{{ isHardwareReady ? '🔌' : '⏳' }}</span>
-        <div>
-          <strong class="text-sm font-black block">
-            {{ isHardwareReady ? 'Arduino Uno Kartı Bağlı ve Hazır!' : 'Arduino Kartı Aranıyor...' }}
-          </strong>
-          <span class="text-[11px] font-bold opacity-80">
-            {{ activePortLabel }}
-          </span>
+  <div class="w-full max-w-6xl mx-auto flex-1 flex flex-col gap-3.5 py-2.5 sm:py-4 px-2 sm:px-4 select-none">
+
+    <!-- 1. ÜST BAR: DONANIM PORT SEÇİMİ + DEVREYİ ÇALIŞTIR (KARTA YÜKLE) BUTONU -->
+    <div class="bg-white rounded-3xl p-3.5 sm:p-4 border-[3px] border-slate-900 shadow-[0_5px_0_#0f172a] flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+      <!-- Sol: Port ve Kart Durumu -->
+      <div class="flex flex-wrap items-center gap-3">
+        <div
+          :class="[
+            'w-12 h-12 rounded-2xl border-2 border-slate-900 flex items-center justify-center text-2xl shrink-0 shadow-[0_3px_0_#0f172a]',
+            hasRealHardwarePort ? 'bg-emerald-200' : 'bg-amber-200'
+          ]"
+        >
+          {{ hasRealHardwarePort ? '🔌' : '🖥️' }}
+        </div>
+        <div class="min-w-0">
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <h2 class="text-sm sm:text-base font-black text-slate-900">
+              {{ hasRealHardwarePort ? 'Arduino Uno Bağlı ve Hazır' : 'Sanal Serial Simülatör & Port İzleyici' }}
+            </h2>
+            <span
+              :class="[
+                'px-2 py-0.5 rounded-lg border border-slate-900 text-[10px] font-black',
+                hasRealHardwarePort ? 'bg-emerald-100 text-emerald-950' : 'bg-sky-100 text-sky-950'
+              ]"
+            >
+              {{ activePortLabel }}
+            </span>
+          </div>
+          <p class="text-[11px] font-bold text-slate-600 mt-0.5">
+            Kodu Arduino'ya yükle ve aşağıda <strong>Serial Monitor</strong> veri akışını canlı izle!
+          </p>
         </div>
       </div>
 
-      <!-- Port Seçici veya Yenileme -->
-      <div class="flex items-center gap-2">
-        <select
-          v-model="selectedPort"
-          class="p-2 rounded-xl border border-current font-bold text-xs bg-white text-slate-800 outline-none cursor-pointer"
-        >
-          <option value="auto">Otomatik Port (Tavsiye Edilen)</option>
-          <option v-for="p in availablePorts" :key="p.address" :value="p.address">
-            {{ p.label }} ({{ p.address }})
-          </option>
-        </select>
+      <!-- Sağ: Port Seçici + Baud Rate + Karta Yükle Butonu -->
+      <div class="flex flex-wrap items-center gap-2">
+        <div class="flex items-center gap-1.5 bg-slate-100 p-1.5 rounded-2xl border-2 border-slate-900">
+          <select
+            v-model="selectedPort"
+            class="px-2.5 py-1.5 rounded-xl border border-slate-900 font-black text-xs bg-white text-slate-900 outline-none cursor-pointer"
+          >
+            <option value="auto">Otomatik Port</option>
+            <option v-for="p in availablePorts" :key="p.address" :value="p.address">
+              {{ p.label }}
+            </option>
+          </select>
+
+          <select
+            v-model.number="baudRate"
+            class="px-2 py-1.5 rounded-xl border border-slate-900 font-black text-xs bg-white text-slate-900 outline-none cursor-pointer"
+            title="Serial Baud Rate"
+          >
+            <option :value="9600">9600 baud</option>
+            <option :value="115200">115200 baud</option>
+          </select>
+
+          <button
+            type="button"
+            @click="$emit('refresh-ports')"
+            class="px-2.5 py-1.5 rounded-xl border border-slate-900 font-black text-xs bg-white hover:bg-slate-50 text-slate-800 cursor-pointer transition"
+            title="Portları Yenile"
+          >
+            🔄
+          </button>
+        </div>
+
         <button
           type="button"
-          @click="$emit('refresh-ports')"
-          class="p-2 rounded-xl border border-current font-bold bg-white/80 hover:bg-white text-slate-700 transition"
-          title="Portları Yenile"
+          @click="triggerUpload"
+          :disabled="isUploading"
+          class="px-6 py-3 rounded-2xl bg-[#4ade80] hover:bg-[#22c55e] border-2 border-slate-900 shadow-[0_4px_0_#15803d] active:translate-y-1 active:shadow-none text-slate-950 font-black text-xs sm:text-sm transition cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
         >
-          🔄
+          <span v-if="isUploading" class="animate-spin text-base">⚙️</span>
+          <span v-else class="text-base">🚀</span>
+          <span>{{ isUploading ? 'Karta Yükleniyor...' : 'Devreyi Kurdum, Çalıştır!' }}</span>
         </button>
       </div>
     </div>
 
-    <!-- Ortada Devasa, Pofuduk Yeşil 'Devreyi Kurdum, Çalıştır! 🚀' Butonu -->
-    <div class="w-full bg-white rounded-3xl p-6 sm:p-10 border-2 border-slate-200 shadow-xl flex flex-col items-center text-center gap-4">
-      <div class="text-4xl animate-bounce">
-        🌟
-      </div>
-      <div>
-        <h2 class="text-xl sm:text-2xl font-black text-slate-900 mb-1">
-          Harika Bir İş Çıkardın!
-        </h2>
-        <p class="text-xs sm:text-sm text-slate-500 font-medium max-w-md">
-          Devren kuruldu, mantık onaylandı. Şimdi tek bir tıkla Arduino Uno beynine kodunu yükleyip hayat verelim!
-        </p>
-      </div>
-
-      <button
-        type="button"
-        @click="triggerUpload"
-        :disabled="isUploading"
+    <!-- 2. ANA İKİ SÜTUNLU ÇALIŞTIRMA EKRANI: SOLDA SERIAL MONITOR AKIŞI, SAĞDA AKILLI GÖRSELLEŞTİRİCİ -->
+    <div :class="['grid gap-3.5 flex-1 min-h-[380px]', hasVisualizableData ? 'grid-cols-1 lg:grid-cols-12' : 'grid-cols-1']">
+      
+      <!-- SOL SÜTUN: CANLI SERIAL MONITOR TERMİNALİ (Her Zaman Görünür) -->
+      <div
         :class="[
-          'w-full max-w-md py-5 sm:py-6 rounded-3xl font-black text-lg sm:text-xl shadow-2xl transition-all transform active:scale-95 cursor-pointer flex items-center justify-center gap-3',
-          isUploading
-            ? 'bg-emerald-400 text-white cursor-wait opacity-80'
-            : 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white shadow-emerald-200 hover:shadow-emerald-300 hover:scale-102'
+          'bg-slate-950 rounded-3xl border-[3px] border-slate-900 shadow-[0_6px_0_#0f172a] flex flex-col overflow-hidden',
+          hasVisualizableData ? 'lg:col-span-7' : 'w-full'
         ]"
       >
-        <span v-if="isUploading" class="animate-spin text-2xl">⚙️</span>
-        <span v-else class="text-2xl">🚀</span>
-        <span>{{ isUploading ? 'Karta Yükleniyor...' : 'Devreyi Kurdum, Çalıştır! 🚀' }}</span>
-      </button>
+        <!-- Terminal Üst Başlık Çubuğu -->
+        <div class="px-4 py-2.5 bg-slate-900 border-b-2 border-slate-800 flex flex-wrap items-center justify-between gap-2">
+          <div class="flex items-center gap-2">
+            <span
+              class="w-3 h-3 rounded-full border border-slate-950"
+              :class="isPaused ? 'bg-amber-400' : 'bg-emerald-400 animate-pulse shadow-[0_0_8px_#34d399]'"
+            ></span>
+            <span class="text-xs font-black text-white tracking-wide">
+              🖥️ SERIAL MONITOR ({{ baudRate }} baud)
+            </span>
+            <span class="px-2 py-0.5 rounded-md bg-slate-800 border border-slate-700 text-[10px] font-bold text-cyan-300">
+              {{ serialLines.length }} satır
+            </span>
+          </div>
 
-      <!-- Yükleme Durum Bildirimi -->
-      <p v-if="statusMessage" class="text-xs font-bold text-indigo-600 animate-pulse">
-        {{ statusMessage }}
-      </p>
+          <!-- Terminal Kontrolleri -->
+          <div class="flex items-center gap-1.5">
+            <button
+              type="button"
+              @click="showTimestamps = !showTimestamps"
+              :class="[
+                'px-2 py-1 rounded-lg border text-[10px] font-black cursor-pointer transition',
+                showTimestamps
+                  ? 'bg-sky-500/20 border-sky-400 text-sky-300'
+                  : 'bg-slate-800 border-slate-700 text-slate-400'
+              ]"
+            >
+              🕒 Saat
+            </button>
+            <button
+              type="button"
+              @click="autoScroll = !autoScroll"
+              :class="[
+                'px-2 py-1 rounded-lg border text-[10px] font-black cursor-pointer transition',
+                autoScroll
+                  ? 'bg-emerald-500/20 border-emerald-400 text-emerald-300'
+                  : 'bg-slate-800 border-slate-700 text-slate-400'
+              ]"
+            >
+              ⬇️ Otomatik Kaydır
+            </button>
+            <button
+              type="button"
+              @click="isPaused = !isPaused"
+              :class="[
+                'px-2.5 py-1 rounded-lg border text-[10px] font-black cursor-pointer transition',
+                isPaused
+                  ? 'bg-amber-400 border-slate-900 text-slate-950'
+                  : 'bg-slate-800 hover:bg-slate-700 border-slate-700 text-amber-300'
+              ]"
+            >
+              {{ isPaused ? '▶️ Devam Et' : '⏸️ Duraklat' }}
+            </button>
+            <button
+              type="button"
+              @click="clearSerialMonitor"
+              class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-rose-950 border border-slate-700 hover:border-rose-500 text-[10px] font-black text-rose-300 cursor-pointer transition"
+            >
+              🗑️ Temizle
+            </button>
+          </div>
+        </div>
+
+        <!-- Serial Veri Akışı Satırları -->
+        <div
+          ref="terminalScrollRef"
+          class="flex-1 p-3.5 overflow-y-auto font-mono text-xs flex flex-col gap-1.5 max-h-[340px] min-h-[260px] select-text"
+        >
+          <div
+            v-if="serialLines.length === 0"
+            class="flex-1 flex flex-col items-center justify-center text-slate-500 py-10 gap-2"
+          >
+            <span class="text-2xl">📡</span>
+            <span class="font-bold text-xs">Serial port veri akışı bekleniyor...</span>
+          </div>
+
+          <div
+            v-for="line in serialLines"
+            :key="line.id"
+            class="px-2.5 py-1.5 rounded-xl bg-slate-900/90 border border-slate-800/90 flex items-start justify-between gap-2 hover:border-slate-700 transition"
+          >
+            <div class="flex items-start gap-2 min-w-0 flex-1">
+              <span
+                v-if="showTimestamps"
+                class="text-[10px] text-slate-500 font-bold shrink-0 pt-0.5"
+              >
+                [{{ line.timestamp }}]
+              </span>
+              <span
+                :class="[
+                  'break-all leading-relaxed',
+                  line.source === 'system'
+                    ? 'text-amber-300 font-bold'
+                    : line.source === 'user'
+                    ? 'text-sky-300 font-bold'
+                    : 'text-emerald-300'
+                ]"
+              >
+                {{ line.text }}
+              </span>
+            </div>
+
+            <!-- Satırdan Ayrıştırılan Sayısal Kanal Rozetleri -->
+            <div v-if="Object.keys(line.channels).length > 0" class="flex flex-wrap items-center gap-1 shrink-0">
+              <span
+                v-for="(val, key) in line.channels"
+                :key="key"
+                class="px-1.5 py-0.5 rounded bg-slate-800 border border-emerald-500/40 text-[10px] font-black text-emerald-300"
+              >
+                {{ key }}={{ val }}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Alt: Serial Porta Veri Gönderme / Test Değeri Girme Çubuğu -->
+        <div class="p-2.5 bg-slate-900 border-t-2 border-slate-800 flex items-center gap-2">
+          <input
+            v-model="manualInput"
+            type="text"
+            placeholder="Serial porta veri gönder veya test satırı yaz (örn: IsikSol: 750, IsikSag: 320)..."
+            class="flex-1 px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-700 text-xs font-mono text-white placeholder:text-slate-500 outline-none focus:border-sky-400"
+            @keydown.enter.prevent="sendManualSerialLine"
+          />
+          <button
+            type="button"
+            @click="sendManualSerialLine"
+            class="px-3.5 py-1.5 rounded-xl bg-sky-400 hover:bg-sky-300 text-slate-950 font-black text-xs border border-slate-950 cursor-pointer shrink-0 transition"
+          >
+            Gönder ↵
+          </button>
+        </div>
+      </div>
+
+      <!-- SAĞ SÜTUN: AKILLI VERİ GÖRSELLEŞTİRİCİ (Yalnızca Görselleştirilebilir Kanal / Sensör Varsa Açılır) -->
+      <div
+        v-if="hasVisualizableData"
+        class="lg:col-span-5 bg-white rounded-3xl p-4 border-[3px] border-slate-900 shadow-[0_6px_0_#0f172a] flex flex-col justify-between gap-3"
+      >
+        <!-- Başlık -->
+        <div class="flex items-center justify-between border-b-2 border-slate-100 pb-2">
+          <div class="flex items-center gap-2">
+            <span class="text-lg">📊</span>
+            <div>
+              <h3 class="text-xs sm:text-sm font-black text-slate-900 leading-tight">
+                Canlı Sensör & Çıkış Görselleştirici
+              </h3>
+              <span class="text-[10px] font-bold text-slate-500">
+                Serial porttan okunan veriler otomatik grafiğe dönüştürülür
+              </span>
+            </div>
+          </div>
+          <span class="px-2 py-0.5 rounded-lg bg-emerald-100 border border-slate-900 text-[10px] font-black text-emerald-950">
+            {{ channelCards.length }} Kanal
+          </span>
+        </div>
+
+        <!-- Canlı Kanal Kartları (LDR1, LDR2, Mesafe, Servo Açısı vb.) -->
+        <div class="flex flex-col gap-2.5 overflow-y-auto max-h-[210px] pr-0.5">
+          <div
+            v-for="ch in channelCards"
+            :key="ch.name"
+            class="p-3 rounded-2xl bg-slate-50 border-2 border-slate-900 flex flex-col gap-1.5"
+          >
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-1.5">
+                <span class="text-base">{{ ch.icon }}</span>
+                <span class="text-xs font-black text-slate-900">{{ ch.label }}</span>
+                <span v-if="ch.pinBadge" class="px-1.5 py-0.2 rounded bg-sky-100 border border-slate-900 text-[9px] font-black text-sky-950">
+                  {{ ch.pinBadge }}
+                </span>
+              </div>
+              <div class="text-sm font-black text-slate-950 font-mono">
+                {{ ch.currentValue }} <span class="text-[10px] font-bold text-slate-500">{{ ch.unit }}</span>
+              </div>
+            </div>
+
+            <!-- Canlı Bar -->
+            <div class="w-full h-3 rounded-full bg-slate-200 border border-slate-900 overflow-hidden p-0.5">
+              <div
+                class="h-full rounded-full transition-all duration-300"
+                :style="{ width: `${ch.percent}%`, backgroundColor: ch.color }"
+              ></div>
+            </div>
+
+            <!-- İnteraktif Simülasyon Kaydırıcısı (Fiziksel Kart Takılı Değilken Çocuğun Sensörü Test Etmesi İçin) -->
+            <div v-if="!hasRealHardwarePort" class="flex items-center justify-between gap-2 pt-0.5">
+              <span class="text-[9px] font-bold text-slate-500">Slayder ile Test Et:</span>
+              <input
+                type="range"
+                :min="ch.min"
+                :max="ch.max"
+                :value="ch.currentValue"
+                @input="onSliderAdjust(ch.name, Number(($event.target as HTMLInputElement).value))"
+                class="w-36 accent-sky-600 cursor-pointer h-1.5"
+              />
+            </div>
+          </div>
+        </div>
+
+        <!-- Canlı Zaman Grafiği (SVG Sparkline /Serial Plotter) -->
+        <div class="bg-slate-900 rounded-2xl p-3 border-2 border-slate-900 flex flex-col gap-1.5">
+          <div class="flex items-center justify-between text-[10px] font-black text-slate-300">
+            <span>📈 SERIAL PLOTTER (SON ÖLÇÜMLER)</span>
+            <div class="flex items-center gap-2">
+              <span
+                v-for="ch in channelCards"
+                :key="ch.name"
+                class="flex items-center gap-1"
+              >
+                <span class="w-2 h-2 rounded-full inline-block" :style="{ backgroundColor: ch.color }"></span>
+                <span>{{ ch.label }}</span>
+              </span>
+            </div>
+          </div>
+
+          <svg class="w-full h-20 overflow-visible" viewBox="0 0 300 70" preserveAspectRatio="none">
+            <line x1="0" y1="15" x2="300" y2="15" stroke="#334155" stroke-width="0.6" stroke-dasharray="3,3" />
+            <line x1="0" y1="35" x2="300" y2="35" stroke="#334155" stroke-width="0.6" stroke-dasharray="3,3" />
+            <line x1="0" y1="55" x2="300" y2="55" stroke="#334155" stroke-width="0.6" stroke-dasharray="3,3" />
+
+            <polyline
+              v-for="ch in channelCards"
+              :key="ch.name"
+              fill="none"
+              :stroke="ch.color"
+              stroke-width="2.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              :points="ch.sparklinePoints"
+            />
+          </svg>
+        </div>
+      </div>
+
     </div>
 
-    <!-- Altta Güneş & Ay Motifli Dairesel Sensör İbresi (Canlı Seri Port Verisi) -->
-    <div class="w-full bg-white rounded-3xl p-6 border-2 border-slate-200 shadow-md flex flex-col items-center text-center gap-4">
-      <div class="flex items-center justify-between w-full border-b border-slate-100 pb-2">
-        <div class="flex items-center gap-2">
-          <span class="text-xl">📡</span>
-          <h3 class="text-xs sm:text-sm font-black text-slate-800">
-            Canlı Sensör Verisi (Seri Port İzleyici)
-          </h3>
-        </div>
-        <span class="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black animate-pulse">
-          ● CANLI AKIŞ
-        </span>
-      </div>
-
-      <!-- Güneş ve Ay Motifli Dairesel Gösterge -->
-      <div class="relative w-48 h-48 flex items-center justify-center">
-        <!-- Dairesel Arka Plan -->
-        <svg class="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
-          <circle
-            cx="50"
-            cy="50"
-            r="40"
-            stroke="#e2e8f0"
-            stroke-width="10"
-            fill="none"
-          />
-          <circle
-            cx="50"
-            cy="50"
-            r="40"
-            :stroke="liveSensorValue < 400 ? '#6366f1' : '#f59e0b'"
-            stroke-width="10"
-            stroke-dasharray="251.2"
-            :stroke-dashoffset="gaugeOffset"
-            stroke-linecap="round"
-            fill="none"
-            class="transition-all duration-300"
-          />
-        </svg>
-
-        <!-- İçerideki Güneş/Ay İkonu ve Değer -->
-        <div class="absolute inset-0 flex flex-col items-center justify-center">
-          <span class="text-3xl mb-1">
-            {{ liveSensorValue < 400 ? '🌙' : '☀️' }}
-          </span>
-          <span class="text-2xl font-black text-slate-900 leading-none">
-            {{ liveSensorValue }}
-          </span>
-          <span class="text-[10px] font-extrabold text-slate-400 mt-0.5">
-            / 1023
-          </span>
-        </div>
-      </div>
-
-      <!-- Cana Yakın Durum Bildirimi -->
-      <div class="px-5 py-2.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-black">
-        <span v-if="liveSensorValue < 400" class="text-indigo-600">
-          🌙 Oda Karanlık (Işık 400'ün altında) ➔ Lamban Yanıyor! 💡
-        </span>
-        <span v-else class="text-amber-600">
-          ☀️ Oda Aydınlık (Işık Bol) ➔ Lamba Dinleniyor! 😴
-        </span>
-      </div>
-    </div>
-
-    <!-- Alt Geri Butonu -->
-    <div class="w-full flex items-center justify-start pt-2">
+    <!-- 3. ALT GERİ DÖNÜŞ VE DURUM ÇUBUĞU -->
+    <div class="flex items-center justify-between gap-3 pt-1">
       <button
         type="button"
         @click="$emit('prev-page')"
-        class="px-4 py-2.5 rounded-2xl border-2 border-slate-300 bg-white hover:bg-slate-100 text-slate-700 font-extrabold text-xs transition cursor-pointer"
+        class="px-4 py-2 rounded-2xl border-2 border-slate-900 bg-white hover:bg-slate-50 text-slate-800 font-black text-xs transition cursor-pointer shadow-[0_2px_0_#0f172a] active:translate-y-0.5"
       >
-        ◀ Devre Şemasına Geri Dön
+        ◀ 3. Nasıl Çalışacak'a Dön
       </button>
+
+      <div v-if="statusMessage" class="px-3.5 py-1.5 rounded-xl bg-amber-100 border-2 border-slate-900 text-xs font-black text-slate-900">
+        {{ statusMessage }}
+      </div>
     </div>
 
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue';
-import confetti from 'canvas-confetti';
-import type { PortInfo, UploadResult } from '../types/project';
+import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue';
+import type { PortInfo, CircuitNetlist } from '../types/project';
 
 const props = defineProps<{
   isUploading: boolean;
   availablePorts: PortInfo[];
   arduinoCode: string;
+  projectName?: string;
+  netlist?: CircuitNetlist;
 }>();
 
 const emit = defineEmits<{
@@ -176,66 +361,418 @@ const emit = defineEmits<{
   (e: 'upload', port: string): void;
 }>();
 
-const selectedPort = ref('auto');
-const statusMessage = ref('');
-const liveSensorValue = ref(320);
-let eventSource: EventSource | null = null;
-let simulatedTimer: any = null;
+interface SerialLineItem {
+  id: number;
+  timestamp: string;
+  text: string;
+  source: 'hardware' | 'simulated' | 'system' | 'user';
+  channels: Record<string, number>;
+}
 
-const isHardwareReady = computed(() => {
-  return props.availablePorts && props.availablePorts.length > 0;
+interface ChannelMeta {
+  name: string;
+  label: string;
+  icon: string;
+  pinBadge?: string;
+  min: number;
+  max: number;
+  unit: string;
+  color: string;
+}
+
+const COLORS = ['#38bdf8', '#4ade80', '#f59e0b', '#f43f5e', '#a855f7'];
+
+const selectedPort = ref('auto');
+const baudRate = ref(9600);
+const statusMessage = ref('');
+const isPaused = ref(false);
+const autoScroll = ref(true);
+const showTimestamps = ref(true);
+const manualInput = ref('');
+const terminalScrollRef = ref<HTMLElement | null>(null);
+
+const serialLines = ref<SerialLineItem[]>([]);
+const channelHistory = ref<Record<string, number[]>>({});
+const channelValues = ref<Record<string, number>>({});
+const manualOverrides = ref<Record<string, number>>({});
+
+let lineCounter = 1;
+let eventSource: EventSource | null = null;
+let simInterval: ReturnType<typeof setInterval> | null = null;
+
+const hasRealHardwarePort = computed(() => {
+  return (props.availablePorts || []).some(
+    p => p.address !== 'SIMULATED_PORT' && p.address !== 'auto' && p.source !== 'simulated'
+  );
 });
 
 const activePortLabel = computed(() => {
-  if (!isHardwareReady.value) return 'Simüle Port Modunda Çalışıyor';
+  if (!hasRealHardwarePort.value) return 'Simülasyon Akışı Aktif';
   const match = props.availablePorts.find(p => p.address === selectedPort.value);
-  return match ? `${match.board_name} (${match.address})` : 'Otomatik Port Seçili';
+  return match ? `${match.board_name} (${match.address})` : 'Donanım Portu Hazır';
 });
 
-// Dairesel Gösterge Ofseti (251.2 tam çember çevresi)
-const gaugeOffset = computed(() => {
-  const pct = Math.min(Math.max(liveSensorValue.value / 1023, 0), 1);
-  return 251.2 * (1 - pct);
+/**
+ * Devredeki (netlist) ve Arduino kodundaki gerçek bileşenlere göre
+ * beklenen Serial Monitor kanallarını çıkarır.
+ */
+const expectedChannels = computed<ChannelMeta[]>(() => {
+  const comps = props.netlist?.components || [];
+  const conns = props.netlist?.connections || [];
+  const metas: ChannelMeta[] = [];
+
+  const findUnoPin = (compId: string): string | undefined => {
+    for (const c of conns) {
+      if (c.from.startsWith(`${compId}.`) && c.to.startsWith('uno.')) return c.to.replace('uno.', '');
+      if (c.to.startsWith(`${compId}.`) && c.from.startsWith('uno.')) return c.from.replace('uno.', '');
+    }
+    return undefined;
+  };
+
+  let colorIdx = 0;
+  for (const comp of comps) {
+    if (comp.type === 'wokwi-resistor') continue;
+    const pinBadge = findUnoPin(comp.id);
+    const color = COLORS[colorIdx % COLORS.length]!;
+    colorIdx++;
+
+    if (comp.type === 'wokwi-photoresistor' || comp.type === 'wokwi-photoresistor-sensor') {
+      metas.push({
+        name: comp.id.toUpperCase(),
+        label: comp.label || comp.id,
+        icon: '☀️',
+        pinBadge,
+        min: 0,
+        max: 1023,
+        unit: '/ 1023',
+        color
+      });
+    } else if (comp.type === 'wokwi-hc-sr04') {
+      metas.push({
+        name: 'MESAFE',
+        label: comp.label || 'Mesafe (HC-SR04)',
+        icon: '📏',
+        pinBadge,
+        min: 2,
+        max: 200,
+        unit: 'cm',
+        color
+      });
+    } else if (comp.type === 'wokwi-potentiometer') {
+      metas.push({
+        name: comp.id.toUpperCase(),
+        label: comp.label || 'Potansiyometre',
+        icon: '🎚️',
+        pinBadge,
+        min: 0,
+        max: 1023,
+        unit: '/ 1023',
+        color
+      });
+    } else if (comp.type === 'wokwi-pushbutton') {
+      metas.push({
+        name: comp.id.toUpperCase(),
+        label: comp.label || 'Buton Durumu',
+        icon: '🔘',
+        pinBadge,
+        min: 0,
+        max: 1,
+        unit: '(0/1)',
+        color
+      });
+    } else if (comp.type === 'wokwi-servo') {
+      metas.push({
+        name: 'SERVO_ACI',
+        label: comp.label || 'Servo Motor Açısı',
+        icon: '🦾',
+        pinBadge,
+        min: 0,
+        max: 180,
+        unit: '°',
+        color
+      });
+    }
+  }
+
+  return metas;
 });
+
+/**
+ * Bir Serial Monitor satırındaki `Key: Value`, `Key = Value` veya tekil sayıları ayrıştırır.
+ */
+function parseChannelsFromText(lineText: string): Record<string, number> {
+  const result: Record<string, number> = {};
+  const pairRegex = /([A-Za-z0-9_ğüşıöçĞÜŞİÖÇ]+)\s*[:=]\s*(-?\d+(?:\.\d+)?)/g;
+  let match: RegExpExecArray | null;
+  while ((match = pairRegex.exec(lineText)) !== null) {
+    if (match[1] && match[2] !== undefined) {
+      result[match[1]] = Number(match[2]);
+    }
+  }
+
+  if (Object.keys(result).length === 0) {
+    const trimmed = lineText.trim();
+    if (/^-?\d+(?:\.\d+)?$/.test(trimmed)) {
+      result['Deger'] = Number(trimmed);
+    }
+  }
+  return result;
+}
+
+function appendSerialLine(
+  text: string,
+  source: SerialLineItem['source'] = 'simulated',
+  explicitChannels?: Record<string, number>,
+  customTimestamp?: string
+) {
+  if (isPaused.value && source !== 'user' && source !== 'system') return;
+
+  const parsed = explicitChannels && Object.keys(explicitChannels).length > 0
+    ? explicitChannels
+    : parseChannelsFromText(text);
+
+  for (const [k, v] of Object.entries(parsed)) {
+    channelValues.value[k] = v;
+    if (!channelHistory.value[k]) {
+      channelHistory.value[k] = [];
+    }
+    channelHistory.value[k]!.push(v);
+    if (channelHistory.value[k]!.length > 28) {
+      channelHistory.value[k]!.shift();
+    }
+  }
+
+  const nowStr = customTimestamp || new Date().toLocaleTimeString('tr-TR', { hour12: false });
+  serialLines.value.push({
+    id: lineCounter++,
+    timestamp: nowStr,
+    text,
+    source,
+    channels: parsed
+  });
+
+  if (serialLines.value.length > 150) {
+    serialLines.value.shift();
+  }
+
+  if (autoScroll.value) {
+    void nextTick(() => {
+      if (terminalScrollRef.value) {
+        terminalScrollRef.value.scrollTop = terminalScrollRef.value.scrollHeight;
+      }
+    });
+  }
+}
+
+const channelCards = computed(() => {
+  const activeKeys = Object.keys(channelValues.value);
+  if (activeKeys.length === 0) return [];
+
+  return activeKeys.slice(0, 5).map((key, idx) => {
+    const meta = expectedChannels.value.find(
+      m => m.name.toLowerCase() === key.toLowerCase() || m.label.toLowerCase().includes(key.toLowerCase())
+    ) || expectedChannels.value[idx];
+
+    const min = meta?.min ?? 0;
+    const max = meta?.max ?? (key.toLowerCase().includes('aci') || key.toLowerCase().includes('servo') ? 180 : 1023);
+    const val = channelValues.value[key] ?? 0;
+    const pct = Math.min(100, Math.max(2, Math.round(((val - min) / Math.max(1, max - min)) * 100)));
+    const color = meta?.color || COLORS[idx % COLORS.length]!;
+    const hist = channelHistory.value[key] || [val];
+
+    // SVG Sparkline noktaları (300x70)
+    const pts = hist
+      .map((v, i) => {
+        const x = hist.length <= 1 ? 150 : Math.round((i / (hist.length - 1)) * 292) + 4;
+        const norm = Math.min(1, Math.max(0, (v - min) / Math.max(1, max - min)));
+        const y = Math.round(62 - norm * 52);
+        return `${x},${y}`;
+      })
+      .join(' ');
+
+    return {
+      name: key,
+      label: meta?.label || key,
+      icon: meta?.icon || '📡',
+      pinBadge: meta?.pinBadge,
+      currentValue: val,
+      min,
+      max,
+      unit: meta?.unit || '',
+      percent: pct,
+      color,
+      sparklinePoints: pts
+    };
+  });
+});
+
+const hasVisualizableData = computed(() => {
+  return channelCards.value.length > 0;
+});
+
+function onSliderAdjust(channelName: string, newVal: number) {
+  manualOverrides.value[channelName] = newVal;
+  channelValues.value[channelName] = newVal;
+
+  // Eğer çift LDR + Servo günebakan projesi ise servo açısını da anında güncelle
+  const keys = Object.keys(channelValues.value);
+  const ldrKeys = keys.filter(k => k.toLowerCase().includes('ldr'));
+  if (ldrKeys.length >= 2 && 'SERVO_ACI' in channelValues.value) {
+    const v1 = channelValues.value[ldrKeys[0]!] ?? 500;
+    const v2 = channelValues.value[ldrKeys[1]!] ?? 500;
+    const servoAngle = v1 > v2 + 30 ? 135 : v2 > v1 + 30 ? 45 : 90;
+    manualOverrides.value['SERVO_ACI'] = servoAngle;
+    channelValues.value['SERVO_ACI'] = servoAngle;
+  }
+
+  const summary = Object.entries(channelValues.value)
+    .map(([k, v]) => `${k}: ${v}`)
+    .join(' | ');
+  appendSerialLine(summary, 'simulated', { ...channelValues.value });
+}
+
+function sendManualSerialLine() {
+  const txt = manualInput.value.trim();
+  if (!txt) return;
+  appendSerialLine(`> ${txt}`, 'user');
+  manualInput.value = '';
+}
+
+function clearSerialMonitor() {
+  serialLines.value = [];
+}
 
 function triggerUpload() {
   statusMessage.value = 'Arduino Uno kartına kod derlenip gönderiliyor...';
+  appendSerialLine(`[DERLEME] "${props.projectName || 'Arduino Projem'}" derleniyor ve karta yükleniyor...`, 'system');
   emit('upload', selectedPort.value);
 }
 
-// Canlı Veri İzleme (SSE veya Gerçekçi Simülasyon)
-onMounted(() => {
-  try {
-    eventSource = new EventSource('/api/serial-events');
-    eventSource.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data && typeof data.value === 'number') {
-          liveSensorValue.value = data.value;
-        }
-      } catch {
-        // SSE yoksa yerel simülasyon
-      }
-    };
-    eventSource.onerror = () => {
-      startSimulatedSensorStream();
-    };
-  } catch {
-    startSimulatedSensorStream();
+/**
+ * Devredeki gerçek parçalara (ör. 2x LDR + Servo, Tek LDR + LED, HC-SR04 + Buzzer vb.)
+ * birebir uygun gerçekçi Serial Monitor satırları üretir.
+ */
+function startProjectAwareSerialSimulation() {
+  if (simInterval) clearInterval(simInterval);
+
+  const metas = expectedChannels.value;
+  // Başlangıç değerlerini ata
+  for (const m of metas) {
+    const initVal = m.max === 180 ? 90 : m.max === 200 ? 45 : m.max === 1 ? 0 : 480;
+    channelValues.value[m.name] = initVal;
+    channelHistory.value[m.name] = [initVal];
   }
+
+  appendSerialLine(
+    `Serial.begin(${baudRate.value}) -> "${props.projectName || 'Arduino Uno'}" seri port akışı başladı.`,
+    'system'
+  );
+
+  simInterval = setInterval(() => {
+    if (isPaused.value) return;
+
+    if (metas.length === 0) {
+      // Devrede özel sensör yoksa Arduino kodundaki Serial.print ifadelerini simüle et
+      appendSerialLine('loop() -> Arduino Uno çalışıyor...', 'simulated');
+      return;
+    }
+
+    const stepChannels: Record<string, number> = {};
+    for (const m of metas) {
+      if (m.name === 'SERVO_ACI') continue;
+      if (manualOverrides.value[m.name] !== undefined) {
+        // Kullanıcının slayder ile verdiği değer etrafında küçük titreşim
+        const base = manualOverrides.value[m.name]!;
+        const jitter = m.max > 10 ? Math.round((Math.random() - 0.5) * 8) : 0;
+        stepChannels[m.name] = Math.min(m.max, Math.max(m.min, base + jitter));
+      } else {
+        const prev = channelValues.value[m.name] ?? Math.round((m.min + m.max) / 2);
+        const delta = m.max === 1
+          ? (Math.random() > 0.8 ? 1 - prev : prev)
+          : Math.round((Math.random() - 0.48) * (m.max * 0.12));
+        stepChannels[m.name] = Math.min(m.max, Math.max(m.min, prev + delta));
+      }
+    }
+
+    // Servo motor varsa sensör değerlerine göre hedef açıyı hesapla
+    const hasServo = metas.some(m => m.name === 'SERVO_ACI');
+    if (hasServo) {
+      const ldrMetas = metas.filter(m => m.name.startsWith('LDR'));
+      if (ldrMetas.length >= 2) {
+        const vSol = stepChannels[ldrMetas[0]!.name] ?? 500;
+        const vSag = stepChannels[ldrMetas[1]!.name] ?? 500;
+        stepChannels['SERVO_ACI'] = vSol > vSag + 30 ? 135 : vSag > vSol + 30 ? 45 : 90;
+      } else if (ldrMetas.length === 1) {
+        const v = stepChannels[ldrMetas[0]!.name] ?? 500;
+        stepChannels['SERVO_ACI'] = v > 500 ? 120 : 30;
+      } else {
+        stepChannels['SERVO_ACI'] = manualOverrides.value['SERVO_ACI'] ?? 90;
+      }
+    }
+
+    const parts = Object.entries(stepChannels).map(([k, v]) => `${k}: ${v}`);
+    appendSerialLine(parts.join(' | '), 'simulated', stepChannels);
+  }, 1100);
+}
+
+function connectSerialStream() {
+  if (eventSource) {
+    eventSource.close();
+    eventSource = null;
+  }
+  if (simInterval) {
+    clearInterval(simInterval);
+    simInterval = null;
+  }
+
+  // Gerçek donanım portu varsa SSE üzerinden pyserial akışını dinle
+  if (hasRealHardwarePort.value) {
+    try {
+      const url = `/api/serial-events?port=${encodeURIComponent(selectedPort.value)}&baudrate=${baudRate.value}`;
+      eventSource = new EventSource(url);
+      eventSource.onmessage = (ev) => {
+        try {
+          const data = JSON.parse(ev.data);
+          if (data?.source === 'error') {
+            appendSerialLine(data.text, 'system', undefined, data.timestamp);
+            startProjectAwareSerialSimulation();
+            return;
+          }
+          if (data?.text) {
+            appendSerialLine(
+              data.text,
+              data.source === 'hardware' ? 'hardware' : 'system',
+              data.channels,
+              data.timestamp
+            );
+          }
+        } catch {
+          // ignore
+        }
+      };
+      eventSource.onerror = () => {
+        if (eventSource) eventSource.close();
+        startProjectAwareSerialSimulation();
+      };
+      return;
+    } catch {
+      // Fallback to project-aware simulation
+    }
+  }
+
+  startProjectAwareSerialSimulation();
+}
+
+watch([selectedPort, baudRate], () => {
+  connectSerialStream();
 });
 
-function startSimulatedSensorStream() {
-  if (simulatedTimer) return;
-  simulatedTimer = setInterval(() => {
-    // 150 ile 850 arasında yumuşak salınım
-    const delta = (Math.random() - 0.48) * 40;
-    liveSensorValue.value = Math.min(Math.max(Math.round(liveSensorValue.value + delta), 80), 960);
-  }, 1200);
-}
+onMounted(() => {
+  connectSerialStream();
+});
 
 onUnmounted(() => {
   if (eventSource) eventSource.close();
-  if (simulatedTimer) clearInterval(simulatedTimer);
+  if (simInterval) clearInterval(simInterval);
 });
 </script>

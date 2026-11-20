@@ -90,8 +90,10 @@ export class WokwiBreadboardHalfElement extends HTMLElement {
     const activeCols = rawCols.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
 
     const rawRails = (this.getAttribute('highlighted-rails') || '').toLowerCase();
-    const highlightTopPlus = rawRails.includes('top-+') || rawRails.includes('5v');
-    const highlightTopMinus = rawRails.includes('top--') || rawRails.includes('gnd');
+    const highlightTopPlus = rawRails.includes('top-+') || rawRails.includes('tp.+');
+    const highlightTopMinus = rawRails.includes('top--') || rawRails.includes('tp.-');
+    const highlightBottomPlus = rawRails.includes('bottom-+') || rawRails.includes('bp.+') || rawRails.includes('5v');
+    const highlightBottomMinus = rawRails.includes('bottom--') || rawRails.includes('bp.-') || rawRails.includes('bn') || rawRails.includes('gnd');
 
     // 1. Column Conductivity Glow Strips (İç İletkenlik Bakır Şeritleri)
     let conductivityGlowSvg = '';
@@ -115,6 +117,16 @@ export class WokwiBreadboardHalfElement extends HTMLElement {
     if (highlightTopMinus) {
       railGlowSvg += `
         <rect x="24" y="24" width="304" height="8" rx="4" fill="#3b82f6" fill-opacity="0.25" stroke="#3b82f6" stroke-width="1" />
+      `;
+    }
+    if (highlightBottomPlus) {
+      railGlowSvg += `
+        <rect x="24" y="172" width="304" height="8" rx="4" fill="#ef4444" fill-opacity="0.28" stroke="#ef4444" stroke-width="1.2" />
+      `;
+    }
+    if (highlightBottomMinus) {
+      railGlowSvg += `
+        <rect x="24" y="184" width="304" height="8" rx="4" fill="#3b82f6" fill-opacity="0.28" stroke="#3b82f6" stroke-width="1.2" />
       `;
     }
 

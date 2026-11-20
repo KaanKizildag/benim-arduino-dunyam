@@ -57,8 +57,25 @@
         </button>
       </nav>
 
-      <!-- Sağ: Malzeme Çantam, AI Modeli, Ayarlar ve Çarpı Butonu (Referans Görsel 1 Sağ Üst) -->
+      <!-- Sağ: Projelerim, Malzeme Çantam, AI Modeli, Ayarlar ve Çarpı Butonu -->
       <div class="flex items-center gap-2">
+        <!-- 0. Projelerim Butonu (Daha önce kurgulanmış projeleri ve hazır arşivleri açar) -->
+        <button
+          type="button"
+          @click="$emit('open-projects')"
+          class="px-3 py-1.5 sm:py-2 rounded-2xl bg-[#fde047] hover:bg-[#facc15] border-2 border-slate-900 shadow-[0_3px_0_#0f172a] active:translate-y-0.5 active:shadow-none text-slate-900 text-xs font-black transition flex items-center gap-1.5 cursor-pointer"
+          title="Projelerim Menüsünü Aç"
+        >
+          <span class="text-sm">📂</span>
+          <span class="hidden sm:inline">Projelerim</span>
+          <span
+            v-if="projectsCount !== undefined"
+            class="px-1.5 py-0.2 rounded-full bg-amber-600 text-white text-[10px] font-black border border-slate-900"
+          >
+            {{ projectsCount }}
+          </span>
+        </button>
+
         <!-- 1. Malzeme Çantam Butonu (Sol griddeki zengin elektronik menüsünü açar) -->
         <button
           type="button"
@@ -84,15 +101,21 @@
           <span class="hidden md:inline">AI Modeli</span>
         </button>
 
-        <!-- 3. Ayarlar Butonu -->
+        <!-- 3. Admin (AI İstek & Cevap Logları) Butonu -->
         <button
           type="button"
-          @click="$emit('open-settings')"
-          class="px-2.5 py-1.5 sm:py-2 rounded-2xl bg-[#bae6fd] hover:bg-[#7dd3fc] border-2 border-slate-900 shadow-[0_3px_0_#0f172a] active:translate-y-0.5 active:shadow-none text-slate-900 text-xs font-black transition flex items-center gap-1 cursor-pointer"
-          title="Genel Ayarlar"
+          @click="$emit('open-admin-logs')"
+          class="px-2.5 py-1.5 sm:py-2 rounded-2xl bg-slate-900 hover:bg-slate-800 border-2 border-slate-900 shadow-[0_3px_0_#334155] active:translate-y-0.5 active:shadow-none text-amber-300 text-xs font-black transition flex items-center gap-1.5 cursor-pointer"
+          title="Admin Modu: Yapay Zeka İstek ve Cevap Loglarını Gör"
         >
-          <span class="text-sm">⚙️</span>
-          <span class="hidden lg:inline">Ayarlar</span>
+          <span class="text-sm">🛠️</span>
+          <span class="hidden lg:inline">Admin (AI Log)</span>
+          <span
+            v-if="aiLogsCount !== undefined"
+            class="px-1.5 py-0.2 rounded-full bg-indigo-600 text-white text-[10px] font-black border border-indigo-400"
+          >
+            {{ aiLogsCount }}
+          </span>
         </button>
 
         <!-- 4. Kırmızı Kare Çarpı Butonu -->
@@ -114,13 +137,17 @@
 defineProps<{
   currentStep: number;
   inventoryCount: number;
+  projectsCount?: number;
+  aiLogsCount?: number;
   activeModelName?: string;
 }>();
 
 defineEmits<{
   (e: 'go-step', stepNum: number): void;
+  (e: 'open-projects'): void;
   (e: 'open-inventory'): void;
   (e: 'open-ai-model'): void;
+  (e: 'open-admin-logs'): void;
   (e: 'open-settings'): void;
   (e: 'reset-or-close'): void;
 }>();
