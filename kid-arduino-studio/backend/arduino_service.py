@@ -256,22 +256,63 @@ def compile_and_upload(code: str, port: Optional[str] = None) -> Dict[str, Any]:
             }
 
 
-def generate_simulated_serial_events(project_type: str = "general"):
+def stream_serial_port_events(port: Optional[str] = None, baudrate: int = 9600):
     """
-    Web arayüzündeki Serial Monitor için eğitici ve canlı simüle edilmiş veri üretir.
+    Gerçek bir seri port (COM3, /dev/ttyUSB0 vb.) bağlıysa pyserial üzerinden canlı satırları okur
+    ve içindeki sayısal değerleri (key=value veya tekil sayı) ayrıştırarak SSE olarak yayınlar.
+    Gerçek port bağlı değilse veya açılamazsa bağlantı durumunu bildirir.
     """
-    messages_pool = [
-        "📡 [Arduino]: Sistem başlatıldı. Sensörler dinleniyor...",
-        "💡 [LDR Işık Sensörü]: Değer = 512 (Oda normal aydınlıkta)",
-        "💡 [LDR Işık Sensörü]: Değer = 260 (Işık azaldı! Lambayı yakma eşiğine ulaşıldı)",
-        "✨ [Durum]: Kırmızı LED lambası yandı! Odan güvende.",
-        "📏 [Ultrasonik Sensör]: Mesafe = 45 cm (Engel yok)",
-        "📏 [Ultrasonik Sensör]: Mesafe = 11 cm (DİKKAT! Yaklaşan bir engel var!)",
-        "🔊 [Buzzer]: Bip! Bip! Korna sürücüyü uyardı.",
-        "💡 [LDR Işık Sensörü]: Değer = 780 (Güneş doğdu veya oda aydınlandı)",
-        "✨ [Durum]: LED lambası kapandı, enerji tasarrufu yapılıyor."
-    ]
+    import re as _re
 
-    for msg in messages_pool:
-        yield f"data: {json.dumps({'timestamp': time.strftime('%H:%M:%S'), 'text': msg}, ensure_ascii=False)}\n\n"
-        time.sleep(2)
+    target_port = port
+    if not target_port or target_port in ("auto", "simulated", "SIMULATED_PORT"):
+        detected = get_connected_ports()
+        real_ports = [p["address"] for p in detected if p["address"] != "SIMULATED_PORT"]
+        target_port = real_ports[0] if real_ports else None
+
+    if target_port and PYSERIAL_AVAILABLE:
+        ser = None
+        try:
+            ser = serial.Serial(target_port, baudrate=baudrate, timeout=1.0)
+            yield f"data: {json.dumps({'timestamp': time.strftime('%H:%M:%S'), 'source': 'hardware', 'port': target_port, 'text': f'[BAĞLANDI] {target_port} ({baudrate} baud) seri port akışı başladı.'}, ensure_ascii=False)}\n\n"
+            while True:
+                raw_line = ser.readline()
+                if raw_line:
+                    line_str = raw_line.decode("utf-8", errors="replace").strip()
+                    if line_str:
+                        # Satırdaki sayısal değerleri ayrıştır (örn: "Isik1: 420, Isik2: 680" veya "512")
+                        channels: Dict[str, float] = {}
+                        for m in _re.finditer(r"([A-Za-z0-9_ğüşıöçĞÜŞİÖÇ]+)\s*[:=]\s*(-?\d+(?:\.\d+)?)", line_str):
+                            channels[m.group(1)] = float(m.group(2))
+                        if not channels:
+                            nums = _re.findall(r"-?\d+(?:\.\d+)?", line_str)
+                            if len(nums) == 1:
+                                channels["Deger"] = float(nums[0])
+                            elif len(nums) > 1:
+                                for idx, n in enumerate(nums[:4], start=1):
+                                    channels[f"Kanal_{idx}"] = float(n)
+                        payload: Dict[str, Any] = {
+                            "timestamp": time.strftime("%H:%M:%S"),
+                            "source": "hardware",
+                            "port": target_port,
+                            "text": line_str,
+                            "channels": channels
+                        }
+                        if channels:
+                            payload["value"] = next(iter(channels.values()))
+                        yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+                else:
+                    time.sleep(0.05)
+        except Exception as e:
+            yield f"data: {json.dumps({'timestamp': time.strftime('%H:%M:%S'), 'source': 'error', 'port': target_port, 'text': f'[PORT UYARISI] {target_port} okunamadı ({e}). Simülasyon akışına geçiliyor.'}, ensure_ascii=False)}\n\n"
+        finally:
+            if ser and ser.is_open:
+                try:
+                    ser.close()
+                except Exception:
+                    pass
+
+
+def generate_simulated_serial_events(project_type: str = "general"):
+    """Geriye dönük uyumluluk için stream_serial_port_events sarmalayıcısı."""
+    yield from stream_serial_port_events(port=None)

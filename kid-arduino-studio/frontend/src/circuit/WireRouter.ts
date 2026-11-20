@@ -92,8 +92,17 @@ export class WireRouter {
 
     const usedGndRailCols = new Set<number>();
     const used5vRailCols = new Set<number>();
+    const usedBreadboardHoles = new Set<string>();
+
+    for (const p of Object.values(allocatedPins)) {
+      if (p.col >= 1 && p.col <= BREADBOARD_GEOMETRY.maxCols && p.holeName) {
+        usedBreadboardHoles.add(p.holeName.toUpperCase());
+      }
+    }
 
     // 1. ANA GÜÇ RAYI HATLARI (Arduino ➔ Breadboard)
+    // Görsel olarak kabloların üst üste binmemesi için GND rayı 1. sütuna (bn.1, y=188),
+    // 5V rayı ise 2. sütuna (bp.2, y=176) ve farklı kavis kanalından bağlanır.
     if (hasGndBus) {
       usedGndRailCols.add(1);
       const unoGnd = this.getUnoPinPos('GND.2');
@@ -104,25 +113,25 @@ export class WireRouter {
         to: { part: 'breadboard', pin: 'bn.1', holeName: 'bn.1', ...bbGnd },
         color: '#1e293b',
         laneIndex: 0,
-        path: this.buildPowerBusPath(unoGnd, bbGnd),
+        path: this.buildPowerBusPath(unoGnd, bbGnd, 28),
         isPowerBus: true,
-        description: 'Arduino GND → Breadboard Mavi Eksi (-) Rayı (bn.1 deliği)'
+        description: 'Arduino GND → Breadboard Mavi Eksi (-) Rayı (bn.1 pini)'
       });
     }
 
     if (has5vBus) {
-      used5vRailCols.add(1);
+      used5vRailCols.add(2);
       const uno5v = this.getUnoPinPos('5V');
-      const bb5v = this.getBreadboardPos(1, 'bp.+');
+      const bb5v = this.getBreadboardPos(2, 'bp.+');
       wires.push({
         id: 'main-5v-bus',
         from: { part: 'uno', pin: '5V', ...uno5v },
-        to: { part: 'breadboard', pin: 'bp.1', holeName: 'bp.1', ...bb5v },
+        to: { part: 'breadboard', pin: 'bp.2', holeName: 'bp.2', ...bb5v },
         color: '#ef4444',
         laneIndex: 1,
-        path: this.buildPowerBusPath(uno5v, bb5v),
+        path: this.buildPowerBusPath(uno5v, bb5v, 14),
         isPowerBus: true,
-        description: 'Arduino 5V → Breadboard Kırmızı Artı (+) Rayı (bp.1 deliği)'
+        description: 'Arduino 5V → Breadboard Kırmızı Artı (+) Rayı (bp.2 pini)'
       });
     }
 
@@ -169,28 +178,30 @@ export class WireRouter {
         const groupB = stripGroups[i + 1];
         const pinA = groupA.repPin;
         const pinB = groupB.repPin;
-        const fromCoords = this.getPinCanvasPos(pinA);
-        const toCoords = this.getPinCanvasPos(pinB);
+        const freeA = this.pickFreeStripHole(pinA, 'top', usedBreadboardHoles);
+        const freeB = this.pickFreeStripHole(pinB, 'top', usedBreadboardHoles);
 
         wires.push({
           id: `wire-${wireCounter++}`,
           from: {
             part: `${pinA.componentId}.${pinA.pinName}`,
             pin: pinA.pinName,
-            holeName: pinA.holeName,
-            ...fromCoords
+            holeName: freeA.holeName,
+            x: freeA.x,
+            y: freeA.y
           },
           to: {
             part: `${pinB.componentId}.${pinB.pinName}`,
             pin: pinB.pinName,
-            holeName: pinB.holeName,
-            ...toCoords
+            holeName: freeB.holeName,
+            x: freeB.x,
+            y: freeB.y
           },
           color: net.color || '#f59e0b',
           laneIndex: topLaneIndex++,
-          path: this.buildLocalJumperPath(fromCoords, toCoords, 'up'),
+          path: this.buildLocalJumperPath(freeA, freeB, 'up'),
           isPowerBus: false,
-          description: `${pinA.holeName} deliği (${groupA.label}) → ${pinB.holeName} deliği (${groupB.label})`
+          description: `${freeA.holeName} pini (${groupA.label}) → ${freeB.holeName} pini (${groupB.label})`
         });
       }
 
@@ -198,7 +209,7 @@ export class WireRouter {
       if (offBoardPins.length > 0 && stripGroups.length > 0) {
         const targetGroup = stripGroups[0];
         const targetPin = targetGroup.repPin;
-        const toCoords = this.getPinCanvasPos(targetPin);
+        const freeTarget = this.pickFreeStripHole(targetPin, 'bottom', usedBreadboardHoles);
 
         for (const offItem of offBoardPins) {
           const offPin = offItem.pin;
@@ -217,14 +228,15 @@ export class WireRouter {
             to: {
               part: `${targetPin.componentId}.${targetPin.pinName}`,
               pin: targetPin.pinName,
-              holeName: targetPin.holeName,
-              ...toCoords
+              holeName: freeTarget.holeName,
+              x: freeTarget.x,
+              y: freeTarget.y
             },
             color: net.color || '#10b981',
             laneIndex: lane,
-            path: this.buildHighwayPath(fromCoords, toCoords, 'bottom', lane),
+            path: this.buildHighwayPath(fromCoords, freeTarget, 'bottom', lane),
             isPowerBus: false,
-            description: `${offLabel} (${offPin.pinName}) → ${targetPin.holeName} deliği (${targetGroup.label})`
+            description: `${offLabel} (${offPin.pinName}) → ${freeTarget.holeName} pini (${targetGroup.label})`
           });
         }
       } else if (offBoardPins.length > 1) {
@@ -260,7 +272,7 @@ export class WireRouter {
         }
       }
 
-      // 2c. Arduino Sinyal Bağlantıları (Net başına 1 kablo ile temsilci noktaya bağlanır)
+      // 2c. Arduino Sinyal Bağlantıları (Net başına 1 kablo ile aynı sütundaki boş pine bağlanır)
       for (const unoPinFull of net.arduinoPins) {
         const unoPinName = unoPinFull.replace(/^uno\./i, '');
         const unoPos = this.getUnoPinPos(unoPinName);
@@ -271,8 +283,8 @@ export class WireRouter {
         if (stripGroups.length > 0) {
           const targetGroup = stripGroups[0];
           const targetPin = targetGroup.repPin;
-          const bbPos = this.getPinCanvasPos(targetPin);
-          const path = this.buildHighwayPath(unoPos, bbPos, side, lane);
+          const freeHole = this.pickFreeStripHole(targetPin, side, usedBreadboardHoles);
+          const path = this.buildHighwayPath(unoPos, freeHole, side, lane);
 
           wires.push({
             id: `wire-${wireCounter++}`,
@@ -280,14 +292,15 @@ export class WireRouter {
             to: {
               part: `${targetPin.componentId}.${targetPin.pinName}`,
               pin: targetPin.pinName,
-              holeName: targetPin.holeName,
-              ...bbPos
+              holeName: freeHole.holeName,
+              x: freeHole.x,
+              y: freeHole.y
             },
             color: net.color || '#3b82f6',
             laneIndex: lane,
             path,
             isPowerBus: false,
-            description: `Arduino ${unoPinName} → ${targetPin.holeName} deliği (${targetGroup.label})`
+            description: `Arduino ${unoPinName} → Breadboard ${freeHole.holeName} pini (${targetGroup.label} ile aynı sütun)`
           });
         } else if (offBoardPins.length > 0) {
           const targetPin = offBoardPins[0].pin;
@@ -325,9 +338,9 @@ export class WireRouter {
         if (stripGroups.length > 0) {
           const targetGroup = stripGroups[stripGroups.length - 1];
           const pin = targetGroup.repPin;
+          const freeFrom = this.pickFreeStripHole(pin, 'bottom', usedBreadboardHoles);
           const railCol = this.pickFreeRailCol(pin.col, usedSet);
           const railHole = `${railPrefix}.${railCol}`;
-          const fromCoords = this.getPinCanvasPos(pin);
           const toCoords = this.getBreadboardPos(railCol, railRow);
 
           wires.push({
@@ -335,8 +348,9 @@ export class WireRouter {
             from: {
               part: `${pin.componentId}.${pin.pinName}`,
               pin: pin.pinName,
-              holeName: pin.holeName,
-              ...fromCoords
+              holeName: freeFrom.holeName,
+              x: freeFrom.x,
+              y: freeFrom.y
             },
             to: {
               part: 'breadboard',
@@ -346,9 +360,9 @@ export class WireRouter {
             },
             color: net.color || defaultColor,
             laneIndex: 0,
-            path: this.buildLocalJumperPath(fromCoords, toCoords, 'down'),
+            path: this.buildLocalJumperPath(freeFrom, toCoords, 'down'),
             isPowerBus: false,
-            description: `${pin.holeName} deliği (${targetGroup.label}) → ${railTitle} (${railHole} deliği)`
+            description: `Breadboard ${freeFrom.holeName} pini (${targetGroup.label} ile aynı sütun) → ${railTitle} (${railHole} pini)`
           });
         } else if (offBoardPins.length > 0) {
           const pin = offBoardPins[0].pin;
@@ -357,6 +371,7 @@ export class WireRouter {
           const railHole = `${railPrefix}.${railCol}`;
           const fromCoords = this.getPinCanvasPos(pin);
           const toCoords = this.getBreadboardPos(railCol, railRow);
+          const lane = bottomLaneIndex++;
 
           wires.push({
             id: `wire-${wireCounter++}`,
@@ -373,16 +388,58 @@ export class WireRouter {
               ...toCoords
             },
             color: net.color || defaultColor,
-            laneIndex: bottomLaneIndex++,
-            path: this.buildLocalJumperPath(fromCoords, toCoords, 'down'),
+            laneIndex: lane,
+            path: this.buildHighwayPath(fromCoords, toCoords, 'bottom', lane),
             isPowerBus: false,
-            description: `${offLabel} (${pin.pinName}) → ${railTitle} (${railHole} deliği)`
+            description: `${offLabel} (${pin.pinName} pini) → ${railTitle} (${railHole} pini)`
           });
         }
       }
     }
 
     return wires;
+  }
+
+  /**
+   * Aynı breadboard sütun şeridi (A-E veya F-J) üzerinde bileşen bacağının takılı olduğu deliğin
+   * üstüne binmeyecek boş bir jumper deliği (örn: 4C doluysa 4A veya 4D) seçer.
+   */
+  private pickFreeStripHole(
+    pin: AllocatedPin,
+    preferSide: 'top' | 'bottom',
+    usedHoles: Set<string>
+  ): { holeName: string; x: number; y: number } {
+    const col = pin.col;
+    const rUp = (pin.row || 'C').toUpperCase();
+    const isUpper = ['A', 'B', 'C', 'D', 'E'].includes(rUp);
+
+    const candidateRows = isUpper
+      ? preferSide === 'top'
+        ? ['A', 'B', 'D', 'C', 'E']
+        : ['D', 'B', 'A', 'C', 'E']
+      : preferSide === 'top'
+        ? ['F', 'G', 'I', 'H', 'J']
+        : ['I', 'G', 'F', 'H', 'J'];
+
+    for (const row of candidateRows) {
+      const candidateHole = `${col}${row}`;
+      if (!usedHoles.has(candidateHole)) {
+        usedHoles.add(candidateHole);
+        const pos = this.getBreadboardHolePos(col, row);
+        return {
+          holeName: candidateHole,
+          x: pos.x,
+          y: pos.y
+        };
+      }
+    }
+
+    const fallbackPos = this.getBreadboardHolePos(col, rUp);
+    return {
+      holeName: `${col}${rUp}`,
+      x: fallbackPos.x,
+      y: fallbackPos.y
+    };
   }
 
   /**
@@ -492,16 +549,17 @@ export class WireRouter {
   }
 
   /**
-   * Güç Rayı Ana Hat Yolu
+   * Güç Rayı Ana Hat Yolu (5V ve GND ayrı kanallardan geçer)
    */
   private buildPowerBusPath(
     from: { x: number; y: number },
-    to: { x: number; y: number }
+    to: { x: number; y: number },
+    dropOffset = 18
   ): string {
-    const channelY = to.y + 18;
+    const channelY = Math.max(from.y, to.y) + dropOffset;
     return (
       `M ${from.x} ${from.y} ` +
-      `C ${from.x} ${channelY}, ${to.x - 20} ${channelY}, ${to.x} ${to.y}`
+      `C ${from.x} ${channelY}, ${to.x - 16} ${channelY}, ${to.x} ${to.y}`
     );
   }
 

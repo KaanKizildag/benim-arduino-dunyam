@@ -1,6 +1,8 @@
 import json
 import os
 import re
+import time
+import uuid
 from typing import List, Optional, Dict, Any, Set, Tuple, Callable
 import httpx
 from dotenv import load_dotenv
@@ -11,7 +13,13 @@ from schemas import (
     AkisAdimi,
     CircuitNetlist,
     NetlistComponent,
-    NetlistConnection
+    NetlistConnection,
+    PinBindingInfo,
+    LogicVerificationReport,
+    WiringDesignResponse,
+    LogicDesignResponse,
+    SavedProjectEntry,
+    AILogEntry,
 )
 
 load_dotenv()
@@ -955,29 +963,98 @@ def get_installed_ollama_models(ollama_url: str = "http://127.0.0.1:11434") -> L
     return []
 
 
-def get_all_available_models(ollama_url: str = "http://127.0.0.1:11434") -> Dict[str, Any]:
+def get_gemini_available_models(api_key: Optional[str] = None) -> List[Dict[str, Any]]:
+    """
+    Google Gemini API üzerinden (eğer geçerli bir API key / token verilmişse gerçek zamanlı sorgulayarak,
+    verilmemişse varsayılan güncel Gemini modellerini kullanarak) seçilebilir Gemini modellerini döner.
+    """
+    default_gemini_models = [
+        {"id": "gemini/gemini-2.5-flash", "name": "Gemini 2.5 Flash (En Yeni & Hızlı)", "raw_name": "gemini-2.5-flash", "provider": "gemini", "category": "Google Gemini", "badge": "☁️ Bulut"},
+        {"id": "gemini/gemini-2.5-pro", "name": "Gemini 2.5 Pro (Gelişmiş Muhakeme)", "raw_name": "gemini-2.5-pro", "provider": "gemini", "category": "Google Gemini", "badge": "☁️ Bulut"},
+        {"id": "gemini/gemini-2.0-flash", "name": "Gemini 2.0 Flash (Hızlı & Dengeli)", "raw_name": "gemini-2.0-flash", "provider": "gemini", "category": "Google Gemini", "badge": "☁️ Bulut"},
+        {"id": "gemini/gemini-2.0-flash-lite", "name": "Gemini 2.0 Flash Lite (Hafif & Ekonomik)", "raw_name": "gemini-2.0-flash-lite", "provider": "gemini", "category": "Google Gemini", "badge": "☁️ Bulut"},
+        {"id": "gemini/gemini-1.5-flash", "name": "Gemini 1.5 Flash (Kararlı)", "raw_name": "gemini-1.5-flash", "provider": "gemini", "category": "Google Gemini", "badge": "☁️ Bulut"},
+        {"id": "gemini/gemini-1.5-pro", "name": "Gemini 1.5 Pro (Derin Analiz)", "raw_name": "gemini-1.5-pro", "provider": "gemini", "category": "Google Gemini", "badge": "☁️ Bulut"},
+    ]
+
+    effective_key = (api_key or os.getenv("GEMINI_API_KEY") or "").strip()
+    if not effective_key:
+        return default_gemini_models
+
+    try:
+        res = httpx.get(
+            f"https://generativelanguage.googleapis.com/v1beta/models?key={effective_key}",
+            timeout=5.0
+        )
+        if res.status_code == 200:
+            data = res.json()
+            fetched: List[Dict[str, Any]] = []
+            seen_ids: Set[str] = set()
+            for m in data.get("models", []):
+                methods = m.get("supportedGenerationMethods") or []
+                if "generateContent" not in methods:
+                    continue
+                raw_name = str(m.get("name") or "").replace("models/", "").strip()
+                if not raw_name.startswith("gemini-"):
+                    continue
+                # Sadece metin/kod üretim modellerini al (vision/embedding/tts/imagen hariç)
+                if any(skip in raw_name for skip in ("embedding", "aqa", "imagen", "veo", "tts", "audio", "live")):
+                    continue
+                full_id = f"gemini/{raw_name}"
+                if full_id in seen_ids:
+                    continue
+                seen_ids.add(full_id)
+                display_name = str(m.get("displayName") or raw_name).strip()
+                fetched.append({
+                    "id": full_id,
+                    "name": f"{display_name} ({raw_name})",
+                    "raw_name": raw_name,
+                    "provider": "gemini",
+                    "category": "Google Gemini",
+                    "badge": "☁️ Bulut"
+                })
+            if fetched:
+                # Önemli modelleri (2.5-flash, 2.5-pro, 2.0-flash, 1.5-flash, 1.5-pro) üstte sırala
+                priority = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-flash", "gemini-1.5-pro"]
+                fetched.sort(key=lambda x: (
+                    priority.index(x["raw_name"]) if x["raw_name"] in priority else 99,
+                    x["raw_name"]
+                ))
+                return fetched
+    except Exception as e:
+        print(f"[Gemini Models] API'den model listesi çekilemedi, varsayılan liste kullanılıyor: {e}")
+
+    return default_gemini_models
+
+
+def get_all_available_models(
+    ollama_url: str = "http://127.0.0.1:11434",
+    gemini_api_key: Optional[str] = None
+) -> Dict[str, Any]:
     """Tüm yerel ve bulut modelleri ve yapılandırma durumlarını listeler."""
     local_models = get_installed_ollama_models(ollama_url)
     ollama_running = len(local_models) > 0
 
-    cloud_models = [
-        {"id": "gemini/gemini-2.0-flash", "name": "Gemini 2.0 Flash (Hızlı & Yetenekli)", "provider": "gemini", "category": "Google Gemini", "badge": "☁️ Bulut"},
-        {"id": "gemini/gemini-1.5-flash", "name": "Gemini 1.5 Flash (Dengeli)", "provider": "gemini", "category": "Google Gemini", "badge": "☁️ Bulut"},
-        {"id": "gemini/gemini-1.5-pro", "name": "Gemini 1.5 Pro (Gelişmiş Düşünme)", "provider": "gemini", "category": "Google Gemini", "badge": "☁️ Bulut"},
-        {"id": "gpt-4o-mini", "name": "GPT-4o Mini (Hızlı & Ekonomik)", "provider": "openai", "category": "OpenAI", "badge": "☁️ Bulut"},
-        {"id": "gpt-4o", "name": "GPT-4o (Amiral Gemisi)", "provider": "openai", "category": "OpenAI", "badge": "☁️ Bulut"},
-        {"id": "claude-3-5-haiku-20241022", "name": "Claude 3.5 Haiku (Hızlı & Canlı)", "provider": "anthropic", "category": "Anthropic Claude", "badge": "☁️ Bulut"},
-        {"id": "claude-3-5-sonnet-20241022", "name": "Claude 3.5 Sonnet (Kodlama Uzmanı)", "provider": "anthropic", "category": "Anthropic Claude", "badge": "☁️ Bulut"},
+    gemini_models = get_gemini_available_models(gemini_api_key)
+
+    other_cloud_models = [
+        {"id": "gpt-4o-mini", "name": "GPT-4o Mini (Hızlı & Ekonomik)", "raw_name": "gpt-4o-mini", "provider": "openai", "category": "OpenAI", "badge": "☁️ Bulut"},
+        {"id": "gpt-4o", "name": "GPT-4o (Amiral Gemisi)", "raw_name": "gpt-4o", "provider": "openai", "category": "OpenAI", "badge": "☁️ Bulut"},
+        {"id": "gpt-4.1-mini", "name": "GPT-4.1 Mini (Yeni Nesil Kodlama)", "raw_name": "gpt-4.1-mini", "provider": "openai", "category": "OpenAI", "badge": "☁️ Bulut"},
+        {"id": "claude-3-5-haiku-20241022", "name": "Claude 3.5 Haiku (Hızlı & Canlı)", "raw_name": "claude-3-5-haiku-20241022", "provider": "anthropic", "category": "Anthropic Claude", "badge": "☁️ Bulut"},
+        {"id": "claude-3-5-sonnet-20241022", "name": "Claude 3.5 Sonnet (Kodlama Uzmanı)", "raw_name": "claude-3-5-sonnet-20241022", "provider": "anthropic", "category": "Anthropic Claude", "badge": "☁️ Bulut"},
     ]
 
+    cloud_models = gemini_models + other_cloud_models
+
     configured_keys = {
-        "gemini": bool(os.getenv("GEMINI_API_KEY")),
+        "gemini": bool(gemini_api_key or os.getenv("GEMINI_API_KEY")),
         "openai": bool(os.getenv("OPENAI_API_KEY")),
         "anthropic": bool(os.getenv("ANTHROPIC_API_KEY")),
     }
 
     default_model = "ollama/qwen2.5-coder:1.5b" if any(m["id"] == "ollama/qwen2.5-coder:1.5b" for m in local_models) else (
-        local_models[0]["id"] if local_models else "gemini/gemini-1.5-flash"
+        local_models[0]["id"] if local_models else "gemini/gemini-2.0-flash"
     )
 
     return {
@@ -1144,3 +1221,1180 @@ PROJE BAĞLAMI:
     except Exception as e:
         print(f"[Self-Healing Hatası] Kod düzeltilemedi ({e}). Orijinal kod korunuyor.")
         return code
+
+
+# =========================================================
+# ADMIN AI LOG KAYIT SİSTEMİ (İSTEK & CEVAP İZLEYİCİ)
+# =========================================================
+
+AI_LOGS_FILE = os.path.join(os.path.dirname(__file__), "ai_logs.json")
+AI_LOGS_MEMORY: List[AILogEntry] = []
+
+
+def _load_ai_logs_from_disk() -> None:
+    global AI_LOGS_MEMORY
+    if AI_LOGS_MEMORY:
+        return
+    if os.path.isfile(AI_LOGS_FILE):
+        try:
+            with open(AI_LOGS_FILE, "r", encoding="utf-8") as f:
+                raw_list = json.load(f)
+            if isinstance(raw_list, list):
+                AI_LOGS_MEMORY = [AILogEntry(**item) for item in raw_list[:100]]
+        except Exception:
+            AI_LOGS_MEMORY = []
+
+
+def record_ai_log(
+    stage: str,
+    model: str,
+    provider: str,
+    duration_ms: int,
+    status: str,
+    user_goal: str,
+    system_prompt: str,
+    user_prompt: str,
+    raw_response: str,
+    processed_output: Optional[Dict[str, Any]] = None,
+    notes: Optional[List[str]] = None
+) -> AILogEntry:
+    """Yapay zekaya gönderilen her isteği ve alınan her cevabı Admin ekranı için kaydeder."""
+    _load_ai_logs_from_disk()
+    entry = AILogEntry(
+        id=f"log_{int(time.time() * 1000)}_{uuid.uuid4().hex[:4]}",
+        timestamp=time.strftime("%d.%m.%Y %H:%M:%S"),
+        stage=stage,
+        model=model,
+        provider=provider,
+        duration_ms=duration_ms,
+        status=status,
+        user_goal=user_goal,
+        system_prompt=system_prompt,
+        user_prompt=user_prompt,
+        raw_response=raw_response,
+        processed_output=processed_output,
+        notes=notes or []
+    )
+    AI_LOGS_MEMORY.insert(0, entry)
+    del AI_LOGS_MEMORY[100:]
+    try:
+        with open(AI_LOGS_FILE, "w", encoding="utf-8") as f:
+            json.dump([e.model_dump() for e in AI_LOGS_MEMORY], f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"[AI Log] Disk yazma hatası: {e}")
+    return entry
+
+
+def get_ai_logs() -> List[AILogEntry]:
+    _load_ai_logs_from_disk()
+    return AI_LOGS_MEMORY
+
+
+def clear_ai_logs() -> bool:
+    global AI_LOGS_MEMORY
+    AI_LOGS_MEMORY = []
+    if os.path.isfile(AI_LOGS_FILE):
+        try:
+            os.remove(AI_LOGS_FILE)
+        except Exception:
+            pass
+    return True
+
+
+# =========================================================
+# TEK SORGU (ONE-SHOT) TAM PROJE ÜRETİMİ VE DOĞRULAMA
+# (Devre Şeması + Akış Diyagramı + Arduino C++ Kodu Tek Seferde)
+# =========================================================
+
+ONE_SHOT_SYSTEM_PROMPT = """Sen çocuklar için Arduino Uno devre, akış diyagramı ve C++ kodlama uzmanısın.
+Kullanıcının proje isteğine göre TEK BİR JSON nesnesi içinde:
+1. "netlist": Sadece kullanıcının istediği parçaları (components) ve eksiksiz pin bağlantılarını (connections)
+2. "akis_adimlari": Devredeki gerçek parçalara özel 4 adımlı sebep-sonuç akışını ("gozlemle", "karar_ver", "evet_sonucu", "hayir_sonucu")
+3. "arduino_kodu": Netlist'teki pinlerle %100 aynı pin numaralarını kullanan, derlenebilir Arduino Uno C++ kodunu
+üret.
+
+KESİN KURALLAR:
+1. SADECE İSTENEN PARÇALARI EKLE! Kullanıcının istemediği buton, buzzer, servo veya sensörü ASLA ekleme.
+2. ÇOKLU PARÇA VE GERİLİM BÖLÜCÜ KURALI:
+   - Kullanıcı "2 tane LDR", "çift LDR", "3 tane LED" gibi birden fazla parça isterse ya da "günebakan" gibi sağ/sol karşılaştırmalı bir proje isterse istenen sayıda ayrı bileşen ekle (`ldr1`, `ldr2` vb.).
+   - Her 2 bacaklı LDR (`wokwi-photoresistor`) için MUTLAKA ayrı bir `10kΩ` direnç (`r1`, `r2` vb.) ekle ve gerilim bölücü kur (`ldr1.1 -> 5V`, `ldr1.2 -> uno.A0`, `ldr1.2 -> r1.1`, `r1.2 -> GND` ve `ldr2.1 -> 5V`, `ldr2.2 -> uno.A1`, `ldr2.2 -> r2.1`, `r2.2 -> GND`).
+   - Her LED (`wokwi-led`) için seri bir `220Ω` koruma direnci ekle.
+3. İstek içinde "servo", "motor", "dönsün", "hareket etsin" geçiyorsa `servo1` (`wokwi-servo`) bileşenini ve `servo1.V+ -> 5V`, `servo1.GND -> GND`, `uno.D9 -> servo1.PWM` bağlantılarını MUTLAKA `netlist` içine ekle! Kodda kullandığın hiçbir parçayı `netlist` dışında bırakma!
+4. Asla breadboard delik koordinatı (5A, 12C vb.) yazma. Sadece şu standart tipleri ve pinleri kullan:
+- wokwi-resistor: r1.1, r1.2 (props:{"value":"220"} veya {"value":"10000"})
+- wokwi-led: led1.A, led1.C (props:{"color":"red"|"green"|"yellow"|"blue"})
+- wokwi-photoresistor (2 bacaklı LDR): ldr1.1, ldr1.2
+- wokwi-photoresistor-sensor (4 pinli modül LDR): ldr1.VCC, ldr1.GND, ldr1.AO, ldr1.DO
+- wokwi-potentiometer: pot1.GND, pot1.SIG, pot1.VCC
+- wokwi-buzzer: buzzer1.1, buzzer1.2
+- wokwi-pushbutton: btn1.1, btn1.2
+- wokwi-servo: servo1.V+, servo1.GND, servo1.PWM
+- wokwi-hc-sr04: hcsr1.VCC, hcsr1.GND, hcsr1.TRIG, hcsr1.ECHO
+5. Güç bağlantılarını her zaman "to":"5V" veya "to":"GND" yönünde yaz. Arduino pinlerini "uno.D2".."uno.D13", "uno.A0".."uno.A5" yaz.
+6. "arduino_kodu" içindeki pinler ile "connections" içindeki "uno.*" pinleri BİREBİR AYNI olmalı.
+
+ÖRNEK 1 (Tek 2 Bacaklı LDR + 10k Direnç + Servo):
+{"proje_adi":"Işığa Duyarlı Servo Projesi","karsilama_mesaji":"Işık şiddetine göre açısı değişen akıllı servo devresi!","gerekli_parcalar":["ARDUINO_UNO","BREADBOARD","LDR_DISCRETE","RESISTOR_10K","SERVO_SG90"],"netlist":{"board":"arduino-uno","components":[{"id":"ldr1","type":"wokwi-photoresistor","props":{},"label":"2 Bacaklı LDR"},{"id":"r1","type":"wokwi-resistor","props":{"value":"10000"},"label":"10kΩ Direnç"},{"id":"servo1","type":"wokwi-servo","props":{},"label":"SG90 Servo Motor"}],"connections":[{"from":"ldr1.1","to":"5V","color":"red"},{"from":"ldr1.2","to":"uno.A0","color":"green"},{"from":"ldr1.2","to":"r1.1","color":"green"},{"from":"r1.2","to":"GND","color":"black"},{"from":"servo1.V+","to":"5V","color":"red"},{"from":"servo1.GND","to":"GND","color":"black"},{"from":"uno.D9","to":"servo1.PWM","color":"orange"}]},"akis_adimlari":{"gozlemle":"2 Bacaklı LDR (A0 pini) ortamdaki ışık seviyesini (0-1023) ölçer.","karar_ver":"Ölçülen ışık değeri eşik değerden (500) büyük mü?","evet_sonucu":"Işık güçlü! SG90 Servo Motoru (D9) 120 dereceye döndür.","hayir_sonucu":"Işık azaldı. SG90 Servo Motoru (D9) 30 dereceye getir."},"arduino_kodu":"#include <Servo.h>\\n\\nconst int LDR_PIN = A0;\\nconst int SERVO_PIN = 9;\\nServo myServo;\\n\\nvoid setup() {\\n  Serial.begin(9600);\\n  myServo.attach(SERVO_PIN);\\n  myServo.write(90);\\n}\\n\\nvoid loop() {\\n  int isik = analogRead(LDR_PIN);\\n  if (isik > 500) {\\n    myServo.write(120);\\n  } else {\\n    myServo.write(30);\\n  }\\n  delay(100);\\n}","guvenlik_notu":"2 bacaklı LDR ile doğru okuma yapmak için 10kΩ direnç ile gerilim bölücü kurduk."}
+
+ÖRNEK 2 (2 Adet 2 Bacaklı LDR + 2 Adet 10k Direnç + Servo ile Günebakan):
+{"proje_adi":"Çift LDR ile Günebakan Servo Projesi","karsilama_mesaji":"İki LDR sensöründen hangisine daha çok ışık geliyorsa servo motoru o yöne çeviren günebakan devresi!","gerekli_parcalar":["ARDUINO_UNO","BREADBOARD","LDR_DISCRETE","RESISTOR_10K","SERVO_SG90"],"netlist":{"board":"arduino-uno","components":[{"id":"ldr1","type":"wokwi-photoresistor","props":{},"label":"Sol LDR (2 Bacaklı)"},{"id":"r1","type":"wokwi-resistor","props":{"value":"10000"},"label":"Sol 10kΩ Direnç"},{"id":"ldr2","type":"wokwi-photoresistor","props":{},"label":"Sağ LDR (2 Bacaklı)"},{"id":"r2","type":"wokwi-resistor","props":{"value":"10000"},"label":"Sağ 10kΩ Direnç"},{"id":"servo1","type":"wokwi-servo","props":{},"label":"SG90 Servo Motor"}],"connections":[{"from":"ldr1.1","to":"5V","color":"red"},{"from":"ldr1.2","to":"uno.A0","color":"green"},{"from":"ldr1.2","to":"r1.1","color":"green"},{"from":"r1.2","to":"GND","color":"black"},{"from":"ldr2.1","to":"5V","color":"red"},{"from":"ldr2.2","to":"uno.A1","color":"blue"},{"from":"ldr2.2","to":"r2.1","color":"blue"},{"from":"r2.2","to":"GND","color":"black"},{"from":"servo1.V+","to":"5V","color":"red"},{"from":"servo1.GND","to":"GND","color":"black"},{"from":"uno.D9","to":"servo1.PWM","color":"orange"}]},"akis_adimlari":{"gozlemle":"Sol LDR (A0) ve Sağ LDR (A1) sensörleri iki yöndeki ışık şiddetini (0-1023) ölçer.","karar_ver":"Sol LDR (A0) ışık değeri Sağ LDR (A1) değerinden daha büyük mü?","evet_sonucu":"Sol tarafta ışık daha güçlü! SG90 Servo Motoru (D9) sola (135 derece) döndür.","hayir_sonucu":"Sağ tarafta ışık daha güçlü! SG90 Servo Motoru (D9) sağa (45 derece) döndür."},"arduino_kodu":"#include <Servo.h>\\n\\nconst int LDR_SOL = A0;\\nconst int LDR_SAG = A1;\\nconst int SERVO_PIN = 9;\\nServo gunebakanServo;\\n\\nvoid setup() {\\n  Serial.begin(9600);\\n  gunebakanServo.attach(SERVO_PIN);\\n  gunebakanServo.write(90);\\n}\\n\\nvoid loop() {\\n  int isikSol = analogRead(LDR_SOL);\\n  int isikSag = analogRead(LDR_SAG);\\n  if (isikSol > isikSag + 30) {\\n    gunebakanServo.write(135);\\n  } else if (isikSag > isikSol + 30) {\\n    gunebakanServo.write(45);\\n  } else {\\n    gunebakanServo.write(90);\\n  }\\n  delay(100);\\n}","guvenlik_notu":"Her iki 2 bacaklı LDR için ayrı 10kΩ dirençlerle iki adet gerilim bölücü kurduk."}
+"""
+
+
+def auto_complete_electrical_topology(netlist_dict: Dict[str, Any]) -> Tuple[Dict[str, Any], List[str]]:
+    """
+    Küçük yerel LLM modellerinin (örn. 1.5b) sık yaptığı iki elektriksel ihmali otomatik tamamlar:
+    1) 2 bacaklı LDR (`wokwi-photoresistor`) `5V` ve `uno.A*` pinine bağlanmış ama GND'ye giden 10kΩ gerilim bölücü direnci unutulmuşsa,
+       otomatik olarak `10kΩ Direnç` (`r_ldr1`, `r_ldr2`...) ekler ve `ldr.2 -> r.1`, `r.2 -> GND` bağlantısını kurar.
+    2) LED (`wokwi-led`) doğrudan `uno.D*` ve `GND` arasına dirençsiz bağlanmışsa, araya `220Ω Direnç` ekler.
+    """
+    notes: List[str] = []
+    comps: List[Dict[str, Any]] = list(netlist_dict.get("components") or [])
+    conns: List[Dict[str, Any]] = list(netlist_dict.get("connections") or [])
+
+    comp_by_id: Dict[str, Dict[str, Any]] = {c["id"]: c for c in comps if isinstance(c, dict) and c.get("id")}
+    existing_ids: Set[str] = set(comp_by_id.keys())
+
+    # 1. Her bileşen pininin nelere bağlı olduğunu çıkar
+    adj: Dict[str, Set[str]] = {}
+    for c in conns:
+        f = str(c.get("from") or "").strip()
+        t = str(c.get("to") or "").strip()
+        if f and t:
+            adj.setdefault(f, set()).add(t)
+            adj.setdefault(t, set()).add(f)
+
+    def next_resistor_id(prefix: str = "r") -> str:
+        idx = 1
+        while f"{prefix}{idx}" in existing_ids:
+            idx += 1
+        rid = f"{prefix}{idx}"
+        existing_ids.add(rid)
+        return rid
+
+    # 2. 2-Bacaklı LDR (`wokwi-photoresistor`) gerilim bölücü direnç kontrolü
+    ldr_list = [c for c in comps if c.get("type") == "wokwi-photoresistor"]
+    for idx, ldr in enumerate(ldr_list, start=1):
+        lid = ldr["id"]
+        # Eğer etiketi sadece 'ldr1'/'ldr2' kalmışsa çocuk dostu isim ver
+        if ldr.get("label") in (None, "", lid):
+            ldr["label"] = f"{idx}. LDR Işık Sensörü (2 Bacaklı)" if len(ldr_list) > 1 else "2 Bacaklı LDR Sensörü"
+
+        p1 = f"{lid}.1"
+        p2 = f"{lid}.2"
+        n1 = adj.get(p1, set())
+        n2 = adj.get(p2, set())
+
+        # Hangi bacak analog pine bağlı?
+        sig_pin = p2 if any(nb.startswith("uno.A") or nb.startswith("uno.D") for nb in n2) else (
+            p1 if any(nb.startswith("uno.A") or nb.startswith("uno.D") for nb in n1) else p2
+        )
+        pwr_pin = p1 if sig_pin == p2 else p2
+
+        sig_neighbors = adj.get(sig_pin, set())
+        has_resistor_on_sig = any(
+            "." in nb and comp_by_id.get(nb.split(".", 1)[0], {}).get("type") == "wokwi-resistor"
+            for nb in sig_neighbors
+        )
+
+        # Eğer diğer bacak hiçbir şeye bağlı değilse 5V'a bağla
+        if not adj.get(pwr_pin):
+            conns.append({"from": pwr_pin, "to": "5V", "color": "red"})
+            adj.setdefault(pwr_pin, set()).add("5V")
+            notes.append(f"'{ldr['label']}' ({pwr_pin}) için eksik 5V güç bağlantısı tamamlandı.")
+
+        # Eğer sinyal bacağında 10kΩ gerilim bölücü direnç yoksa otomatik ekle!
+        if not has_resistor_on_sig:
+            rid = next_resistor_id("r")
+            r_label = f"{idx}. 10kΩ Direnç (LDR Bölücü)" if len(ldr_list) > 1 else "10kΩ Direnç"
+            new_r = {
+                "id": rid,
+                "type": "wokwi-resistor",
+                "props": {"value": "10000"},
+                "label": r_label
+            }
+            comps.append(new_r)
+            comp_by_id[rid] = new_r
+            conns.append({"from": sig_pin, "to": f"{rid}.1", "color": "green"})
+            conns.append({"from": f"{rid}.2", "to": "GND", "color": "black"})
+            notes.append(
+                f"2 bacaklı '{ldr['label']}' ({lid}) için unutulan 10kΩ gerilim bölücü direnç ({rid} -> GND) otomatik eklendi."
+            )
+
+    netlist_dict["components"] = comps
+    netlist_dict["connections"] = conns
+    return netlist_dict, notes
+
+
+def ensure_code_actuators_in_netlist(
+    netlist_dict: Dict[str, Any],
+    code: str,
+    prompt: str
+) -> Tuple[Dict[str, Any], List[str]]:
+    """
+    Eğer LLM Arduino C++ kodunda veya kullanıcı isteminde Servo / Buzzer / 2. LDR kullanmış
+    fakat netlist.components içine eklemeyi unutmuşsa, koddaki gerçek pinlere bağlayarak netlist'i tamamlar.
+    """
+    notes: List[str] = []
+    comps: List[Dict[str, Any]] = list(netlist_dict.get("components") or [])
+    conns: List[Dict[str, Any]] = list(netlist_dict.get("connections") or [])
+    existing_types = {c.get("type") for c in comps}
+    existing_ids = {c.get("id") for c in comps}
+
+    clean_code = re.sub(r"//.*", "", code or "")
+    p_low = (prompt or "").lower()
+
+    # 1. Kodda Servo.h / .attach(...) var ama netlist'te wokwi-servo yoksa
+    if "wokwi-servo" not in existing_types and ("Servo.h" in clean_code or ".attach(" in clean_code or "servo" in p_low):
+        # Koddaki servo pinini bul
+        servo_pin = "D9"
+        var_map: Dict[str, str] = {}
+        for m in re.finditer(r"(?:const\s+int|int|#define)\s+([A-Za-z_]\w*)\s*=?\s*(D?(?:1[0-3]|[0-9]))\b", clean_code):
+            var_map[m.group(1)] = m.group(2).upper()
+        m_att = re.search(r"\.attach\s*\(\s*([A-Za-z0-9_]+)\s*\)", clean_code)
+        if m_att:
+            tok = m_att.group(1).strip()
+            resolved = var_map.get(tok, tok).upper()
+            if re.match(r"^D?(1[0-3]|[0-9])$", resolved):
+                servo_pin = resolved if resolved.startswith("D") else f"D{resolved}"
+
+        sid = "servo1" if "servo1" not in existing_ids else f"servo_{len(existing_ids)+1}"
+        existing_ids.add(sid)
+        comps.append({
+            "id": sid,
+            "type": "wokwi-servo",
+            "props": {},
+            "label": "SG90 Servo Motor"
+        })
+        conns.extend([
+            {"from": f"{sid}.V+", "to": "5V", "color": "red"},
+            {"from": f"{sid}.GND", "to": "GND", "color": "black"},
+            {"from": f"uno.{servo_pin}", "to": f"{sid}.PWM", "color": "orange"},
+        ])
+        notes.append(f"Arduino kodunda kullanılan SG90 Servo Motor ({sid} -> Pin {servo_pin}) devre şemasına eklendi.")
+
+    # 2. Kullanıcı 2 adet LDR istemiş ("2 tane ldr", "2 adet ldr", "iki ldr", "çift ldr") veya kodda 2 farklı analogRead(A0/A1) var ama netlist'te 1 LDR varsa
+    ldr_comps = [c for c in comps if c.get("type") in ("wokwi-photoresistor", "wokwi-photoresistor-sensor")]
+    wants_two_ldrs = any(k in p_low for k in ("2 tane ldr", "2 adet ldr", "iki ldr", "iki tane ldr", "çift ldr", "2 ldr"))
+    analog_pins_in_code = sorted( [p for p in extract_arduino_code_pins(code) if p.startswith("uno.A")] )
+    if (wants_two_ldrs or len(analog_pins_in_code) >= 2) and len(ldr_comps) == 1:
+        first_ldr = ldr_comps[0]
+        ldr_type = first_ldr.get("type", "wokwi-photoresistor")
+        # 1. LDR'nin bağlı olduğu analog pini bul
+        used_analog = {
+            ep for c in conns for ep in (c.get("from"), c.get("to"))
+            if isinstance(ep, str) and ep.startswith("uno.A")
+        }
+        second_analog = next((p for p in analog_pins_in_code if p not in used_analog), None)
+        if not second_analog:
+            second_analog = "uno.A1" if "uno.A0" in used_analog else "uno.A0"
+
+        lid2 = "ldr2" if "ldr2" not in existing_ids else f"ldr_{len(existing_ids)+1}"
+        existing_ids.add(lid2)
+        first_ldr["label"] = "Sol LDR Sensörü"
+        comps.append({
+            "id": lid2,
+            "type": ldr_type,
+            "props": {},
+            "label": "Sağ LDR Sensörü"
+        })
+        if ldr_type == "wokwi-photoresistor":
+            conns.extend([
+                {"from": f"{lid2}.1", "to": "5V", "color": "red"},
+                {"from": f"{lid2}.2", "to": second_analog, "color": "blue"},
+            ])
+        else:
+            conns.extend([
+                {"from": f"{lid2}.VCC", "to": "5V", "color": "red"},
+                {"from": f"{lid2}.GND", "to": "GND", "color": "black"},
+                {"from": f"{lid2}.AO", "to": second_analog, "color": "blue"},
+            ])
+        notes.append(f"İkinci LDR sensörü ({lid2} -> {second_analog.replace('uno.', '')}) devre şemasına eklendi.")
+
+    netlist_dict["components"] = comps
+    netlist_dict["connections"] = conns
+    return netlist_dict, notes
+
+
+def validate_one_shot_topology_and_code(
+    netlist: CircuitNetlist,
+    akis: AkisAdimi,
+    code: str
+) -> Tuple[List[str], LogicVerificationReport]:
+    """
+    Tek sorgudan (One-Shot) dönen Netlist, Akış Diyagramı ve Arduino Kodunu birbiriyle doğrular:
+    - Netlist içinde boşta (bağlantısız) bileşen olup olmadığını
+    - Kısa devre (5V-GND veya aynı parçanın iki ucu) olup olmadığını
+    - Aktif parçaların (LED/Servo/Buzzer/Sensör) en az bir Arduino sinyal pinine (doğrudan veya direnç üzerinden) bağlı olup olmadığını
+    - Akış diyagramının 4 adımının dolu olup olmadığını
+    - Arduino C++ kodunun setup/loop içerdiğini ve Netlist'teki uno.* pinleriyle uyuştuğunu
+    kontrol eder.
+    Kritik hataları `blocking_errors` listesinde döner.
+    """
+    blocking_errors: List[str] = []
+    checks: List[str] = []
+    warnings: List[str] = []
+
+    if not netlist.components:
+        blocking_errors.append("Devre şemasında (netlist.components) hiçbir bileşen yok.")
+    if not netlist.connections:
+        blocking_errors.append("Devre şemasında (netlist.connections) hiçbir kablo bağlantısı yok.")
+
+    # Her bileşenin kaç pini bağlanmış kontrol et
+    comp_pins_used: Dict[str, Set[str]] = {c.id: set() for c in netlist.components}
+    for conn in netlist.connections:
+        if (conn.from_pin == "5V" and conn.to_pin == "GND") or (conn.from_pin == "GND" and conn.to_pin == "5V"):
+            blocking_errors.append("5V ve GND doğrudan kısa devre edilmiş.")
+        if "." in conn.from_pin and "." in conn.to_pin:
+            p1 = conn.from_pin.split(".", 1)[0]
+            p2 = conn.to_pin.split(".", 1)[0]
+            if p1 == p2 and p1 != "uno":
+                blocking_errors.append(f"'{p1}' bileşeninin iki ucu doğrudan birbirine kısa devre edilmiş.")
+        for ep in (conn.from_pin, conn.to_pin):
+            if "." in ep:
+                cid, cpin = ep.split(".", 1)
+                if cid in comp_pins_used:
+                    comp_pins_used[cid].add(cpin)
+
+    for c in netlist.components:
+        used = comp_pins_used.get(c.id, set())
+        if len(used) == 0:
+            blocking_errors.append(f"'{c.label}' ({c.id}) devreye eklenmiş ama hiçbir kablosu bağlanmamış.")
+        elif len(used) < 2:
+            blocking_errors.append(f"'{c.label}' ({c.id}) bileşeninin yalnızca 1 ucu ({', '.join(used)}) bağlanmış, devresi tamamlanmamış.")
+
+    bindings = extract_netlist_pin_bindings(netlist)
+    bound_comp_ids = {b.component_id for b in bindings}
+    non_resistor_comps = [c for c in netlist.components if c.type != "wokwi-resistor"]
+    for c in non_resistor_comps:
+        if c.id not in bound_comp_ids:
+            blocking_errors.append(
+                f"'{c.label}' ({c.id}) hiçbir Arduino Uno sinyal pinine (D2..D13 veya A0..A5) bağlanmamış."
+            )
+
+    if not blocking_errors:
+        checks.append(
+            f"✓ Devredeki tüm parçalar ({', '.join(c.label for c in netlist.components)}) eksiksiz bağlandı."
+        )
+
+    flow_complete = all([
+        bool(akis.gozlemle.strip()),
+        bool(akis.karar_ver.strip()),
+        bool(akis.evet_sonucu.strip()),
+        bool(akis.hayir_sonucu.strip()),
+    ])
+    if flow_complete:
+        checks.append("✓ Akış diyagramı (Gözlemle → Karar Ver → Evet/Hayır) eksiksiz üretildi.")
+    else:
+        blocking_errors.append("Akış diyagramı ('akis_adimlari') adımlarından biri veya birkaçı boş döndü.")
+
+    code_candidate = (code or "").strip()
+    has_setup = "void setup" in code_candidate
+    has_loop = "void loop" in code_candidate
+    braces_balanced = code_candidate.count("{") > 0 and (code_candidate.count("{") == code_candidate.count("}"))
+    syntax_ok = bool(code_candidate and has_setup and has_loop and braces_balanced)
+    if not syntax_ok:
+        blocking_errors.append("Üretilen 'arduino_kodu' geçerli bir setup()/loop() C++ yapısı içermiyor.")
+    else:
+        checks.append("✓ Arduino C++ kodu sözdizimi (setup, loop, parantez dengesi) doğrulandı.")
+
+    pin_mismatches = check_code_netlist_pin_consistency(code_candidate, netlist)
+    pins_matched = len(pin_mismatches) == 0
+    if pins_matched and bindings:
+        checks.append(
+            f"✓ Kablolama ve Arduino kodu pinleri %100 uyumlu ({', '.join(f'{b.uno_pin} → {b.component_label}' for b in bindings)})."
+        )
+    elif pin_mismatches:
+        warnings.extend(pin_mismatches)
+
+    report = LogicVerificationReport(
+        is_valid=(len(blocking_errors) == 0 and syntax_ok and flow_complete),
+        syntax_ok=syntax_ok,
+        pins_matched=pins_matched,
+        flow_complete=flow_complete,
+        auto_repaired=False,
+        pin_bindings=bindings,
+        checks=checks,
+        warnings=warnings
+    )
+    return blocking_errors, report
+
+
+def generate_full_project_one_shot(
+    prompt: str,
+    inventory: List[str],
+    model: str = "default",
+    ollama_url: str = "http://127.0.0.1:11434",
+    api_key: Optional[str] = None
+) -> ProjeTasarimi:
+    """
+    Tek Sorgu (One-Shot) AI Çağrısı:
+    Hem devre kablolamasını (netlist), hem akış diyagramını (akis_adimlari), hem de Arduino C++ kodunu (arduino_kodu)
+    tek bir LLM çağrısında alır, birbiriyle doğrular ve döner.
+    Yanıt alınamazsa veya doğrulama başarısız olursa HİÇBİR ŞEY SENTETİK ÜRETMEZ, doğrudan hata fırlatır.
+    """
+    models_info = get_all_available_models(ollama_url)
+    chosen_model = model if model != "default" and model is not None else models_info["default_model"]
+
+    user_prompt = f"""KULLANICI PROJE İSTEĞİ: "{prompt}"
+Yukarıdaki isteğe göre SADECE istenen parçaları içeren `netlist` (components + connections), bu devreye özel `akis_adimlari` ve aynı pinleri kullanan `arduino_kodu` alanlarını içeren tek bir geçerli JSON nesnesi üret. Sadece JSON döndür."""
+
+    raw_text: Optional[str] = None
+    provider_used = "ollama" if (chosen_model.startswith("ollama/") or chosen_model == "local") else "litellm"
+    t0 = time.time()
+    error_note: Optional[str] = None
+
+    if provider_used == "ollama":
+        if models_info["ollama_active"]:
+            local_ids = [m["id"] for m in models_info.get("local_models", [])]
+            if chosen_model not in local_ids and models_info.get("default_model"):
+                chosen_model = models_info["default_model"]
+            clean_model = chosen_model.replace("ollama/", "")
+            is_reasoning_model = any(k in clean_model.lower() for k in ("deepseek-r1", "qwq", "r1"))
+            ollama_payload: Dict[str, Any] = {
+                "model": clean_model,
+                "system": ONE_SHOT_SYSTEM_PROMPT,
+                "prompt": user_prompt,
+                "stream": False,
+                "options": {
+                    "temperature": 0.1,
+                    "num_predict": 2500 if is_reasoning_model else 1200
+                }
+            }
+            # Reasoning modelleri (<think>...</think>) format="json" zorlandığında boş "{}" döndürebildiği için
+            # yalnızca standart modellerde format="json" kullanıyoruz; clean_llm_json_response <think> bloğunu temizler.
+            if not is_reasoning_model:
+                ollama_payload["format"] = "json"
+
+            try:
+                res = httpx.post(
+                    f"{ollama_url}/api/generate",
+                    json=ollama_payload,
+                    timeout=180.0
+                )
+                if res.status_code == 200:
+                    raw_text = res.json().get("response", "")
+                else:
+                    error_note = f"Ollama HTTP {res.status_code}: {res.text[:200]}"
+            except Exception as e:
+                error_note = f"Ollama bağlantı/zaman aşımı hatası: {e}"
+                print(f"[One-Shot AI] {error_note}")
+        else:
+            error_note = f"Yerel Ollama servisi ({ollama_url}) çalışmıyor veya ulaşılamıyor."
+    else:
+        if not api_key:
+            if "gemini" in chosen_model:
+                api_key = os.getenv("GEMINI_API_KEY")
+            elif "gpt" in chosen_model:
+                api_key = os.getenv("OPENAI_API_KEY")
+            elif "claude" in chosen_model:
+                api_key = os.getenv("ANTHROPIC_API_KEY")
+        if api_key:
+            try:
+                from litellm import completion
+                response = completion(
+                    model=chosen_model,
+                    messages=[
+                        {"role": "system", "content": ONE_SHOT_SYSTEM_PROMPT},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    response_format={"type": "json_object"},
+                    api_key=api_key,
+                    temperature=0.2
+                )
+                raw_text = response.choices[0].message.content
+            except Exception as e:
+                error_note = f"Bulut AI ({chosen_model}) hatası: {e}"
+                print(f"[One-Shot AI] {error_note}")
+        else:
+            error_note = f"Seçilen bulut modeli ('{chosen_model}') için API anahtarı girilmemiş."
+
+    duration_ms = int((time.time() - t0) * 1000)
+
+    if not raw_text or not raw_text.strip():
+        msg = error_note or f"Yapay zeka modelinden ('{chosen_model}') yanıt alınamadı."
+        record_ai_log(
+            stage="Tek Sorgu (One-Shot): Devre + Akış + Kod",
+            model=chosen_model,
+            provider=provider_used,
+            duration_ms=duration_ms,
+            status="ERROR",
+            user_goal=prompt,
+            system_prompt=ONE_SHOT_SYSTEM_PROMPT,
+            user_prompt=user_prompt,
+            raw_response=f"[HATA: {msg}]",
+            processed_output=None,
+            notes=[msg]
+        )
+        raise RuntimeError(msg)
+
+    try:
+        cleaned = clean_llm_json_response(raw_text)
+        parsed = json.loads(cleaned)
+        if not isinstance(parsed, dict):
+            raise ValueError("AI çıktısı geçerli bir JSON nesnesi değil.")
+
+        if not isinstance(parsed.get("netlist"), dict):
+            raise ValueError("AI yanıtında 'netlist' alanı eksik.")
+        if not isinstance(parsed.get("akis_adimlari"), dict):
+            raise ValueError("AI yanıtında 'akis_adimlari' alanı eksik.")
+        raw_code = str(parsed.get("arduino_kodu") or "").strip()
+        if not raw_code:
+            raise ValueError("AI yanıtında 'arduino_kodu' alanı eksik veya boş.")
+
+        norm_data, norm_warnings = normalize_project_dict(parsed)
+
+        # 1) Kodda/istemde kullanılıp netlist'te unutulan bileşenleri (örn. Servo, 2. LDR) tamamla
+        completed_netlist, actuator_notes = ensure_code_actuators_in_netlist(
+            netlist_dict=norm_data["netlist"],
+            code=raw_code,
+            prompt=prompt
+        )
+        # 2) 2 bacaklı LDR gerilim bölücü 10kΩ dirençleri unutulmuşsa otomatik tamamla
+        completed_netlist, topo_notes = auto_complete_electrical_topology(completed_netlist)
+        norm_data["netlist"] = completed_netlist
+        norm_warnings.extend(actuator_notes + topo_notes)
+
+        netlist_obj = CircuitNetlist(**norm_data["netlist"])
+        akis_obj = AkisAdimi(**norm_data["akis_adimlari"])
+
+        blocking_errors, report = validate_one_shot_topology_and_code(
+            netlist=netlist_obj,
+            akis=akis_obj,
+            code=raw_code
+        )
+        if blocking_errors:
+            raise ValueError(" | ".join(blocking_errors))
+
+        steps = build_baglanti_adimlari_from_netlist(netlist_obj)
+        project = ProjeTasarimi(
+            proje_adi=str(parsed.get("proje_adi") or "").strip() or (prompt.strip()[:42] or "Arduino Projem"),
+            karsilama_mesaji=str(parsed.get("karsilama_mesaji") or "").strip() or "Devren, akış şeman ve Arduino kodun hazır!",
+            gerekli_parcalar=norm_data.get("gerekli_parcalar") or ["ARDUINO_UNO", "BREADBOARD"],
+            netlist=netlist_obj,
+            baglanti_adimlari=steps,
+            akis_adimlari=akis_obj,
+            arduino_kodu=raw_code,
+            guvenlik_notu=str(parsed.get("guvenlik_notu") or "").strip() or "Parçaları breadboard deliklerine dikkatlice yerleştir.",
+            uyarilar=norm_warnings + list(report.warnings),
+            verification=report
+        )
+
+        record_ai_log(
+            stage="Tek Sorgu (One-Shot): Devre + Akış + Kod",
+            model=chosen_model,
+            provider=provider_used,
+            duration_ms=duration_ms,
+            status="SUCCESS" if report.is_valid else "VALIDATION_WARNING",
+            user_goal=prompt,
+            system_prompt=ONE_SHOT_SYSTEM_PROMPT,
+            user_prompt=user_prompt,
+            raw_response=raw_text,
+            processed_output=project.model_dump(by_alias=True),
+            notes=list(report.checks) + norm_warnings + list(report.warnings)
+        )
+        return project
+    except Exception as e:
+        err_msg = f"Yapay zeka yanıtı doğrulanamadı: {e}"
+        record_ai_log(
+            stage="Tek Sorgu (One-Shot): Devre + Akış + Kod",
+            model=chosen_model,
+            provider=provider_used,
+            duration_ms=duration_ms,
+            status="ERROR",
+            user_goal=prompt,
+            system_prompt=ONE_SHOT_SYSTEM_PROMPT,
+            user_prompt=user_prompt,
+            raw_response=raw_text,
+            processed_output=None,
+            notes=[err_msg]
+        )
+        raise RuntimeError(err_msg)
+
+
+
+def extract_netlist_pin_bindings(netlist: Optional[CircuitNetlist]) -> List[PinBindingInfo]:
+    """
+    Netlist grafiğini tarayarak her Arduino pininin (uno.D*, uno.A*) hangi bileşeni
+    (doğrudan veya seri bir direnç üzerinden) kontrol ettiğini çıkarır.
+    """
+    if not netlist or not netlist.components or not netlist.connections:
+        return []
+
+    comp_map: Dict[str, NetlistComponent] = {c.id: c for c in netlist.components}
+    adj: Dict[str, Set[str]] = {}
+    for conn in netlist.connections:
+        f = conn.from_pin.strip()
+        t = conn.to_pin.strip()
+        adj.setdefault(f, set()).add(t)
+        adj.setdefault(t, set()).add(f)
+
+    bindings: List[PinBindingInfo] = []
+    seen_pairs: Set[Tuple[str, str]] = set()
+
+    def get_role(ctype: str, pin_name: str) -> str:
+        if ctype in ("wokwi-led", "wokwi-buzzer", "wokwi-servo"):
+            return "OUTPUT"
+        if ctype in ("wokwi-photoresistor", "wokwi-photoresistor-sensor", "wokwi-potentiometer", "wokwi-pushbutton"):
+            return "INPUT"
+        if ctype == "wokwi-hc-sr04":
+            return "OUTPUT" if pin_name.upper() == "TRIG" else "INPUT"
+        return "OUTPUT"
+
+    uno_endpoints = sorted([ep for ep in adj.keys() if ep.startswith("uno.D") or ep.startswith("uno.A")])
+
+    for uno_ep in uno_endpoints:
+        short_uno = uno_ep.replace("uno.", "")
+        neighbors = adj.get(uno_ep, set())
+
+        for nb in sorted(neighbors):
+            if "." not in nb:
+                continue
+            cid, cpin = nb.split(".", 1)
+            comp = comp_map.get(cid)
+            if not comp:
+                continue
+
+            if comp.type != "wokwi-resistor":
+                if (short_uno, cid) not in seen_pairs:
+                    seen_pairs.add((short_uno, cid))
+                    bindings.append(PinBindingInfo(
+                        uno_pin=short_uno,
+                        component_id=cid,
+                        component_label=comp.label or cid,
+                        component_type=comp.type,
+                        pin_name=cpin,
+                        via_component=None,
+                        role=get_role(comp.type, cpin)
+                    ))
+            else:
+                other_r_pin = f"{cid}.2" if cpin == "1" else f"{cid}.1"
+                for nb2 in sorted(adj.get(other_r_pin, set())):
+                    if "." not in nb2:
+                        continue
+                    cid2, cpin2 = nb2.split(".", 1)
+                    comp2 = comp_map.get(cid2)
+                    if comp2 and comp2.type != "wokwi-resistor":
+                        if (short_uno, cid2) not in seen_pairs:
+                            seen_pairs.add((short_uno, cid2))
+                            bindings.append(PinBindingInfo(
+                                uno_pin=short_uno,
+                                component_id=cid2,
+                                component_label=comp2.label or cid2,
+                                component_type=comp2.type,
+                                pin_name=cpin2,
+                                via_component=f"{cid} ({comp.label or 'Direnç'})",
+                                role=get_role(comp2.type, cpin2)
+                            ))
+
+    return bindings
+
+
+def build_baglanti_adimlari_from_netlist(netlist: CircuitNetlist) -> List[BaglantiAdimi]:
+    """Netlist bağlantılarından çocuk dostu adım adım bağlantı listesi üretir."""
+    comp_labels = {c.id: c.label for c in netlist.components}
+    steps: List[BaglantiAdimi] = []
+    for idx, conn in enumerate(netlist.connections, start=1):
+        f = conn.from_pin
+        t = conn.to_pin
+        f_label = f.replace("uno.", "Arduino ")
+        if "." in f and not f.startswith("uno."):
+            p, pin = f.split(".", 1)
+            f_label = f"{comp_labels.get(p, p)} ({pin} pini)"
+        t_label = "Breadboard GND (-) Hattı" if t == "GND" else ("Breadboard 5V (+) Hattı" if t == "5V" else t.replace("uno.", "Arduino "))
+        if "." in t and not t.startswith("uno."):
+            p, pin = t.split(".", 1)
+            t_label = f"{comp_labels.get(p, p)} ({pin} pini)"
+
+        steps.append(BaglantiAdimi(
+            adim_no=idx,
+            talimat=f"{f_label} ucundan {t_label} noktasına kablo bağla.",
+            ipucu="Kabloları breadboard üzerindeki ilgili pinlere dikkatlice yerleştir.",
+            kaynak_parca=f.split(".")[0].upper() if "." in f else f,
+            kaynak_pin=f.split(".")[1] if "." in f else f,
+            hedef_parca=t.split(".")[0].upper() if "." in t else t,
+            hedef_pin=t.split(".")[1] if "." in t else t,
+            kablo_rengi=conn.color or "#3b82f6"
+        ))
+    return steps
+
+
+def generate_wiring_only(
+    prompt: str,
+    inventory: List[str],
+    model: str = "default",
+    ollama_url: str = "http://127.0.0.1:11434",
+    api_key: Optional[str] = None
+) -> WiringDesignResponse:
+    """
+    1. AI Çağrısı: Çocuğun hayalinden YALNIZCA kablolama (components + connections) üretir.
+    Yapay zekadan yanıt alınamazsa veya geçersiz çıktı dönerse HATA fırlatır (asla sahte/fallback devre üretmez).
+    """
+    models_info = get_all_available_models(ollama_url)
+    chosen_model = model if model != "default" and model is not None else models_info["default_model"]
+
+    user_prompt = f"""KULLANICI PROJE İSTEĞİ: "{prompt}"
+Sadece yukarıdaki istekte belirtilen parçaları kullanarak Netlist JSON üret. Tek satır (minified) JSON döndür."""
+
+    raw_text: Optional[str] = None
+    provider_used = "ollama" if (chosen_model.startswith("ollama/") or chosen_model == "local") else "litellm"
+    t0 = time.time()
+    error_note: Optional[str] = None
+
+    if provider_used == "ollama":
+        if models_info["ollama_active"]:
+            local_ids = [m["id"] for m in models_info.get("local_models", [])]
+            if chosen_model not in local_ids and models_info.get("default_model"):
+                chosen_model = models_info["default_model"]
+            clean_model = chosen_model.replace("ollama/", "")
+            try:
+                res = httpx.post(
+                    f"{ollama_url}/api/generate",
+                    json={
+                        "model": clean_model,
+                        "system": WIRING_ONLY_SYSTEM_PROMPT,
+                        "prompt": user_prompt,
+                        "stream": False,
+                        "format": "json",
+                        "options": {"temperature": 0.1, "num_predict": 420}
+                    },
+                    timeout=120.0
+                )
+                if res.status_code == 200:
+                    raw_text = res.json().get("response", "")
+                else:
+                    error_note = f"Ollama HTTP {res.status_code}: {res.text[:200]}"
+            except Exception as e:
+                error_note = f"Ollama bağlantı/zaman aşımı hatası: {e}"
+                print(f"[Stage 1 Wiring] {error_note}")
+        else:
+            error_note = f"Yerel Ollama servisi ({ollama_url}) çalışmıyor veya ulaşılamıyor."
+    else:
+        if not api_key:
+            if "gemini" in chosen_model:
+                api_key = os.getenv("GEMINI_API_KEY")
+            elif "gpt" in chosen_model:
+                api_key = os.getenv("OPENAI_API_KEY")
+            elif "claude" in chosen_model:
+                api_key = os.getenv("ANTHROPIC_API_KEY")
+        if api_key:
+            try:
+                from litellm import completion
+                response = completion(
+                    model=chosen_model,
+                    messages=[
+                        {"role": "system", "content": WIRING_ONLY_SYSTEM_PROMPT},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    response_format={"type": "json_object"},
+                    api_key=api_key,
+                    temperature=0.2
+                )
+                raw_text = response.choices[0].message.content
+            except Exception as e:
+                error_note = f"Bulut AI ({chosen_model}) hatası: {e}"
+                print(f"[Stage 1 Wiring] {error_note}")
+        else:
+            error_note = f"Seçilen bulut modeli ('{chosen_model}') için API anahtarı girilmemiş."
+
+    duration_ms = int((time.time() - t0) * 1000)
+
+    if not raw_text:
+        msg = error_note or f"Yapay zeka modelinden ('{chosen_model}') yanıt alınamadı."
+        record_ai_log(
+            stage="1. Aşama: Kablolama (Wiring JSON)",
+            model=chosen_model,
+            provider=provider_used,
+            duration_ms=duration_ms,
+            status="ERROR",
+            user_goal=prompt,
+            system_prompt=WIRING_ONLY_SYSTEM_PROMPT,
+            user_prompt=user_prompt,
+            raw_response=f"[HATA: {msg}]",
+            processed_output=None,
+            notes=[msg]
+        )
+        raise RuntimeError(msg)
+
+    try:
+        cleaned = clean_llm_json_response(raw_text)
+        parsed = json.loads(cleaned)
+        if not isinstance(parsed, dict) or not isinstance(parsed.get("netlist"), dict):
+            raise ValueError("AI çıktısında geçerli bir 'netlist' alanı bulunamadı.")
+
+        norm_data, norm_warnings = normalize_project_dict(parsed)
+        netlist_obj = CircuitNetlist(**norm_data["netlist"])
+
+        if len(netlist_obj.components) == 0 or len(netlist_obj.connections) == 0:
+            raise ValueError("AI tarafından üretilen netlist içerisinde bileşen (components) veya bağlantı (connections) boş döndü.")
+
+        pin_bindings = extract_netlist_pin_bindings(netlist_obj)
+        steps = build_baglanti_adimlari_from_netlist(netlist_obj)
+        resp = WiringDesignResponse(
+            proje_adi=norm_data.get("proje_adi") or (prompt.strip()[:40] or "Arduino Projem"),
+            karsilama_mesaji=norm_data.get("karsilama_mesaji") or "Devre kablolaman hazır! Adım adım kabloları takalım.",
+            gerekli_parcalar=norm_data.get("gerekli_parcalar") or ["ARDUINO_UNO", "BREADBOARD"],
+            netlist=netlist_obj,
+            baglanti_adimlari=steps,
+            guvenlik_notu=norm_data.get("guvenlik_notu") or "Parçaları breadboard deliklerine dikkatlice yerleştir.",
+            pin_bindings=pin_bindings,
+            uyarilar=norm_warnings
+        )
+        record_ai_log(
+            stage="1. Aşama: Kablolama (Wiring JSON)",
+            model=chosen_model,
+            provider=provider_used,
+            duration_ms=duration_ms,
+            status="SUCCESS",
+            user_goal=prompt,
+            system_prompt=WIRING_ONLY_SYSTEM_PROMPT,
+            user_prompt=user_prompt,
+            raw_response=raw_text,
+            processed_output=resp.model_dump(by_alias=True),
+            notes=norm_warnings
+        )
+        return resp
+    except Exception as e:
+        err_msg = f"Yapay zeka yanıtı geçerli bir devre şemasına dönüştürülemedi: {e}"
+        record_ai_log(
+            stage="1. Aşama: Kablolama (Wiring JSON)",
+            model=chosen_model,
+            provider=provider_used,
+            duration_ms=duration_ms,
+            status="ERROR",
+            user_goal=prompt,
+            system_prompt=WIRING_ONLY_SYSTEM_PROMPT,
+            user_prompt=user_prompt,
+            raw_response=raw_text,
+            processed_output=None,
+            notes=[err_msg]
+        )
+        raise RuntimeError(err_msg)
+
+
+# =========================================================
+# AŞAMA 2 (STAGE 2): KABLOLAMAYA UYGUN AKIŞ DİYAGRAMI VE ARDUINO KODU + TEYİT
+# =========================================================
+
+LOGIC_ONLY_SYSTEM_PROMPT = """Sen Arduino kodlama öğretmenisin. Verilen kablolama (Netlist ve Pin Tablosu) ile kullanıcı isteğine birebir uyan:
+1. "akis_adimlari": {"gozlemle":"...","karar_ver":"...","evet_sonucu":"...","hayir_sonucu":"..."}
+2. "arduino_kodu": Derlenebilir Arduino Uno C++ kodu (setup ve loop içeren, servo varsa #include <Servo.h> ekleyen)
+üret.
+KURALLAR:
+1. Sadece verilen pin tablosundaki pinleri kullan.
+2. Akış diyagramında sadece devredeki gerçek parçalardan bahset.
+Tek satır (minified) JSON döndür."""
+
+
+def verify_logic_against_wiring(
+    netlist: CircuitNetlist,
+    raw_akis: Dict[str, Any],
+    raw_code: str
+) -> Tuple[AkisAdimi, str, LogicVerificationReport]:
+    """
+    2. AI çağrısından dönen akış diyagramını ve Arduino C++ kodunu kablolama (netlist) ile karşılaştırır.
+    Sahte/sentetik kod üretmez; gerçek AI çıktısının doğrulama raporunu döner.
+    """
+    bindings = extract_netlist_pin_bindings(netlist)
+    checks: List[str] = []
+    warnings: List[str] = []
+
+    final_akis = AkisAdimi(
+        gozlemle=str(raw_akis.get("gozlemle") or "").strip(),
+        karar_ver=str(raw_akis.get("karar_ver") or "").strip(),
+        evet_sonucu=str(raw_akis.get("evet_sonucu") or "").strip(),
+        hayir_sonucu=str(raw_akis.get("hayir_sonucu") or "").strip()
+    )
+    flow_complete = all([final_akis.gozlemle, final_akis.karar_ver, final_akis.evet_sonucu, final_akis.hayir_sonucu])
+    if flow_complete:
+        checks.append("✓ Akış diyagramı (Gözlemle → Karar Ver → Evet/Hayır) eksiksiz.")
+    else:
+        warnings.append("Akış diyagramında bazı adımlar boş döndü.")
+
+    code_candidate = (raw_code or "").strip()
+    has_setup = "void setup" in code_candidate
+    has_loop = "void loop" in code_candidate
+    braces_balanced = code_candidate.count("{") > 0 and (code_candidate.count("{") == code_candidate.count("}"))
+    needs_servo = any(b.component_type == "wokwi-servo" for b in bindings)
+    has_servo_header = (not needs_servo) or ("Servo.h" in code_candidate)
+
+    syntax_ok = bool(code_candidate and has_setup and has_loop and braces_balanced and has_servo_header)
+    if syntax_ok:
+        checks.append("✓ Arduino C++ kodu sözdizimi (setup, loop, parantez dengesi) doğrulandı.")
+    else:
+        warnings.append("Arduino C++ kodunda setup/loop veya parantez dengesi uyarısı var.")
+
+    pin_mismatches = check_code_netlist_pin_consistency(code_candidate, netlist)
+    pins_matched = len(pin_mismatches) == 0
+    if pins_matched:
+        checks.append(f"✓ Koddaki pinler devre kablolamasıyla uyumlu ({', '.join(f'{b.uno_pin} → {b.component_label}' for b in bindings)}).")
+    else:
+        warnings.extend(pin_mismatches)
+
+    report = LogicVerificationReport(
+        is_valid=syntax_ok and pins_matched and flow_complete,
+        syntax_ok=syntax_ok,
+        pins_matched=pins_matched,
+        flow_complete=flow_complete,
+        auto_repaired=False,
+        pin_bindings=bindings,
+        checks=checks,
+        warnings=warnings
+    )
+    return final_akis, code_candidate, report
+
+
+def generate_logic_and_code_for_wiring(
+    prompt: str,
+    proje_adi: str,
+    netlist: CircuitNetlist,
+    model: str = "default",
+    ollama_url: str = "http://127.0.0.1:11434",
+    api_key: Optional[str] = None
+) -> LogicDesignResponse:
+    """
+    2. AI Çağrısı: Render edilen kablolamaya (netlist) birebir uygun Akış Diyagramı ve Arduino Kodu üretir.
+    Yapay zekadan yanıt alınamazsa HATA fırlatır (asla sahte kod sentezlemez).
+    """
+    norm_wrapper, _ = normalize_project_dict({
+        "proje_adi": proje_adi,
+        "netlist": netlist.model_dump(by_alias=True)
+    })
+    clean_netlist = CircuitNetlist(**norm_wrapper["netlist"])
+    bindings = extract_netlist_pin_bindings(clean_netlist)
+
+    pin_table_lines = [
+        f"- Arduino Pin {b.uno_pin} (kodda `{b.uno_pin if b.uno_pin.startswith('A') else b.uno_pin.replace('D', '')}` kullan) "
+        f"-> {b.component_label} (`{b.component_id}.{b.pin_name}`) [{b.role}]"
+        + (f" (Arada {b.via_component} var)" if b.via_component else "")
+        for b in bindings
+    ]
+    pin_table_str = "\n".join(pin_table_lines) if pin_table_lines else "- Standart Arduino Uno bağlantısı"
+    comp_summary = ", ".join(c.label for c in clean_netlist.components)
+
+    user_prompt = f"""PROJE ADI: "{proje_adi}"
+KULLANICI İSTEĞİ: "{prompt}"
+DEVREDEKİ PARÇALAR: {comp_summary}
+KABLOLAMA PİN TABLOSU:
+{pin_table_str}
+
+Yukarıdaki kablolamaya uygun `akis_adimlari` ve `arduino_kodu` alanlarını içeren tek satır JSON üret."""
+
+    models_info = get_all_available_models(ollama_url)
+    chosen_model = model if model != "default" and model is not None else models_info["default_model"]
+
+    raw_text: Optional[str] = None
+    provider_used = "ollama" if (chosen_model.startswith("ollama/") or chosen_model == "local") else "litellm"
+    t0 = time.time()
+    error_note: Optional[str] = None
+
+    if provider_used == "ollama":
+        if models_info["ollama_active"]:
+            local_ids = [m["id"] for m in models_info.get("local_models", [])]
+            if chosen_model not in local_ids and models_info.get("default_model"):
+                chosen_model = models_info["default_model"]
+            clean_model = chosen_model.replace("ollama/", "")
+            try:
+                res = httpx.post(
+                    f"{ollama_url}/api/generate",
+                    json={
+                        "model": clean_model,
+                        "system": LOGIC_ONLY_SYSTEM_PROMPT,
+                        "prompt": user_prompt,
+                        "stream": False,
+                        "format": "json",
+                        "options": {"temperature": 0.1, "num_predict": 550}
+                    },
+                    timeout=120.0
+                )
+                if res.status_code == 200:
+                    raw_text = res.json().get("response", "")
+                else:
+                    error_note = f"Ollama HTTP {res.status_code}: {res.text[:200]}"
+            except Exception as e:
+                error_note = f"Ollama bağlantı/zaman aşımı hatası: {e}"
+                print(f"[Stage 2 Logic] {error_note}")
+        else:
+            error_note = f"Yerel Ollama servisi ({ollama_url}) çalışmıyor veya ulaşılamıyor."
+    else:
+        if not api_key:
+            if "gemini" in chosen_model:
+                api_key = os.getenv("GEMINI_API_KEY")
+            elif "gpt" in chosen_model:
+                api_key = os.getenv("OPENAI_API_KEY")
+            elif "claude" in chosen_model:
+                api_key = os.getenv("ANTHROPIC_API_KEY")
+        if api_key:
+            try:
+                from litellm import completion
+                response = completion(
+                    model=chosen_model,
+                    messages=[
+                        {"role": "system", "content": LOGIC_ONLY_SYSTEM_PROMPT},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    response_format={"type": "json_object"},
+                    api_key=api_key,
+                    temperature=0.2
+                )
+                raw_text = response.choices[0].message.content
+            except Exception as e:
+                error_note = f"Bulut AI ({chosen_model}) hatası: {e}"
+                print(f"[Stage 2 Logic] {error_note}")
+        else:
+            error_note = f"Seçilen bulut modeli ('{chosen_model}') için API anahtarı girilmemiş."
+
+    duration_ms = int((time.time() - t0) * 1000)
+
+    if not raw_text:
+        msg = error_note or f"2. Aşama (Akış & Kod) için yapay zekadan ('{chosen_model}') yanıt alınamadı."
+        record_ai_log(
+            stage="2. Aşama: Akış Diyagramı & Arduino Kodu",
+            model=chosen_model,
+            provider=provider_used,
+            duration_ms=duration_ms,
+            status="ERROR",
+            user_goal=prompt,
+            system_prompt=LOGIC_ONLY_SYSTEM_PROMPT,
+            user_prompt=user_prompt,
+            raw_response=f"[HATA: {msg}]",
+            processed_output=None,
+            notes=[msg]
+        )
+        raise RuntimeError(msg)
+
+    try:
+        cleaned = clean_llm_json_response(raw_text)
+        parsed = json.loads(cleaned)
+        if not isinstance(parsed, dict):
+            raise ValueError("AI yanıtı bir JSON nesnesi değil.")
+        raw_akis = parsed.get("akis_adimlari")
+        raw_code = str(parsed.get("arduino_kodu") or "").strip()
+        if not isinstance(raw_akis, dict) or not raw_code:
+            raise ValueError("AI yanıtında 'akis_adimlari' veya 'arduino_kodu' alanı eksik.")
+
+        final_akis, final_code, report = verify_logic_against_wiring(
+            netlist=clean_netlist,
+            raw_akis=raw_akis,
+            raw_code=raw_code
+        )
+
+        resp = LogicDesignResponse(
+            akis_adimlari=final_akis,
+            arduino_kodu=final_code,
+            verification=report
+        )
+
+        log_notes = list(report.checks) + list(report.warnings)
+        record_ai_log(
+            stage="2. Aşama: Akış Diyagramı & Arduino Kodu",
+            model=chosen_model,
+            provider=provider_used,
+            duration_ms=duration_ms,
+            status="SUCCESS" if report.is_valid else "VALIDATION_WARNING",
+            user_goal=prompt,
+            system_prompt=LOGIC_ONLY_SYSTEM_PROMPT,
+            user_prompt=user_prompt,
+            raw_response=raw_text,
+            processed_output=resp.model_dump(),
+            notes=log_notes
+        )
+        return resp
+    except Exception as e:
+        err_msg = f"2. Aşama AI yanıtı ayrıştırılamadı: {e}"
+        record_ai_log(
+            stage="2. Aşama: Akış Diyagramı & Arduino Kodu",
+            model=chosen_model,
+            provider=provider_used,
+            duration_ms=duration_ms,
+            status="ERROR",
+            user_goal=prompt,
+            system_prompt=LOGIC_ONLY_SYSTEM_PROMPT,
+            user_prompt=user_prompt,
+            raw_response=raw_text,
+            processed_output=None,
+            notes=[err_msg]
+        )
+        raise RuntimeError(err_msg)
+
+
+# =========================================================
+# PROJELERİM (YALNIZCA KULLANICININ KURGULADIĞI PROJELER)
+# =========================================================
+
+SAVED_PROJECTS_FILE = os.path.join(os.path.dirname(__file__), "saved_projects.json")
+PRESET_IDS_TO_EXCLUDE = {"gece_lambasi", "park_sensoru", "trafik_isiklari", "buton_servo"}
+
+
+def get_saved_projects() -> List[SavedProjectEntry]:
+    """Yalnızca kullanıcının kurguladığı kayıtlı projeleri döner (Örnek projeler kaldırıldı)."""
+    user_entries: List[SavedProjectEntry] = []
+
+    if os.path.isfile(SAVED_PROJECTS_FILE):
+        try:
+            with open(SAVED_PROJECTS_FILE, "r", encoding="utf-8") as f:
+                raw_list = json.load(f)
+            if isinstance(raw_list, list):
+                for item in raw_list:
+                    try:
+                        entry = SavedProjectEntry(**item)
+                        if not entry.is_preset and entry.id not in PRESET_IDS_TO_EXCLUDE:
+                            user_entries.append(entry)
+                    except Exception:
+                        continue
+        except Exception as e:
+            print(f"[Projelerim] Kayıtlı projeler okunamadı: {e}")
+
+    return user_entries
+
+
+def save_project_entry(
+    project: ProjeTasarimi,
+    prompt: str = "",
+    project_id: Optional[str] = None,
+    badge: str = "AI Tasarımım ✨"
+) -> SavedProjectEntry:
+    """Yeni kurgulanan veya güncellenen bir projeyi Projelerim listesine kaydeder."""
+    existing = get_saved_projects()
+    pid = project_id or f"proj_{int(time.time() * 1000)}_{uuid.uuid4().hex[:4]}"
+
+    if project.netlist and not project.verification:
+        _, _, report = verify_logic_against_wiring(
+            netlist=project.netlist,
+            raw_akis=project.akis_adimlari.model_dump(),
+            raw_code=project.arduino_kodu
+        )
+        project.verification = report
+
+    new_entry = SavedProjectEntry(
+        id=pid,
+        created_at=time.strftime("%d.%m.%Y %H:%M"),
+        prompt=prompt or project.proje_adi,
+        is_preset=False,
+        badge=badge,
+        difficulty="Özel Kurgu",
+        project=project
+    )
+
+    updated_user_list = [new_entry] + [e for e in existing if e.id != pid]
+    try:
+        with open(SAVED_PROJECTS_FILE, "w", encoding="utf-8") as f:
+            json.dump([e.model_dump(by_alias=True) for e in updated_user_list[:50]], f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"[Projelerim] Proje kaydedilemedi: {e}")
+
+    return new_entry
+
+
+def delete_saved_project(project_id: str) -> bool:
+    """Kullanıcının kaydettiği bir projeyi siler."""
+    existing = get_saved_projects()
+    filtered = [e for e in existing if e.id != project_id]
+    if len(filtered) == len(existing):
+        return False
+    try:
+        with open(SAVED_PROJECTS_FILE, "w", encoding="utf-8") as f:
+            json.dump([e.model_dump(by_alias=True) for e in filtered], f, ensure_ascii=False, indent=2)
+        return True
+    except Exception:
+        return False

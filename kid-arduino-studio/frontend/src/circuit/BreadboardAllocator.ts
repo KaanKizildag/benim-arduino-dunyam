@@ -62,12 +62,21 @@ export function getHoleCoords(col: number, row: string): { x: number; y: number 
   const x = BREADBOARD_GEOMETRY.startX + (clampedCol - 1) * BREADBOARD_GEOMETRY.colPitch;
 
   let y = BREADBOARD_GEOMETRY.rowY.A;
-  const upperRow = row.toUpperCase();
-  if (upperRow in BREADBOARD_GEOMETRY.rowY) {
-    y = (BREADBOARD_GEOMETRY.rowY as any)[upperRow];
-  } else if (upperRow.startsWith('BN') || upperRow === 'GND' || upperRow === '-') {
+  const rawTrimmed = (row || '').trim();
+  const lowerRow = rawTrimmed.toLowerCase();
+  const upperRow = rawTrimmed.toUpperCase();
+
+  if (lowerRow in BREADBOARD_GEOMETRY.rowY) {
+    y = (BREADBOARD_GEOMETRY.rowY as Record<string, number>)[lowerRow];
+  } else if (upperRow in BREADBOARD_GEOMETRY.rowY) {
+    y = (BREADBOARD_GEOMETRY.rowY as Record<string, number>)[upperRow];
+  } else if (upperRow.startsWith('TN') || upperRow === 'TP.-' || upperRow === 'TOP--') {
+    y = BREADBOARD_GEOMETRY.rowY['tp.-'];
+  } else if (upperRow.startsWith('TP') || upperRow === 'TP.+' || upperRow === 'TOP-+') {
+    y = BREADBOARD_GEOMETRY.rowY['tp.+'];
+  } else if (upperRow.startsWith('BN') || upperRow === 'BP.-' || upperRow === 'BOTTOM--' || upperRow === 'GND' || upperRow === '-') {
     y = BREADBOARD_GEOMETRY.rowY['bp.-'];
-  } else if (upperRow.startsWith('BP') || upperRow === '5V' || upperRow === '+') {
+  } else if (upperRow.startsWith('BP') || upperRow === 'BP.+' || upperRow === 'BOTTOM-+' || upperRow === '5V' || upperRow === '+') {
     y = BREADBOARD_GEOMETRY.rowY['bp.+'];
   }
 
@@ -278,9 +287,9 @@ export class BreadboardAllocator {
     const otherSharedPin = isAResistor ? pinB : pinA;
     const otherNonSharedPin = this.getOtherPinName(otherComp.type, otherSharedPin);
 
-    // Durum 1: Direnç + LED Çifti
+    // Durum 1: Direnç + LED Çifti (Direnç 6 sütun = 57px, LED 1 sütun = 9.5px)
     if (otherComp.type === 'wokwi-led') {
-      if (!this.ensureSpace(5, `${resistor.label} + ${otherComp.label}`)) return;
+      if (!this.ensureSpace(7, `${resistor.label} + ${otherComp.label}`)) return;
 
       const resRow = this.getResistorRow();
       const ledRow = this.getComponentRow();
@@ -289,7 +298,7 @@ export class BreadboardAllocator {
       if (otherSharedPin === 'A') {
         // Direnç solda (startCol .. sharedCol), LED sağda (sharedCol=A .. ledEndCol=C)
         const startCol = this.currentCol;
-        const sharedCol = startCol + 4;
+        const sharedCol = startCol + 6;
         const ledEndCol = sharedCol + 1;
 
         this.placeResistorAt(resistor, startCol, sharedCol, resRow, resOtherPin, resSharedPin);
@@ -302,12 +311,12 @@ export class BreadboardAllocator {
           label: `Sütun ${sharedCol}: ${resistor.label} (${resSharedPin}) ➔ ${otherComp.label} (A) İç İletkenlik`
         });
 
-        this.currentCol = ledEndCol + 3;
+        this.currentCol = ledEndCol + 2;
       } else {
         // Direnç katot (C) tarafında! LED solda (startCol=A .. sharedCol=C), Direnç sağda (sharedCol .. resEndCol)
         const startCol = this.currentCol;
         const sharedCol = startCol + 1;
-        const resEndCol = sharedCol + 4;
+        const resEndCol = sharedCol + 6;
 
         this.placeLedAt(otherComp, startCol, sharedCol, ledRow);
         this.placeResistorAt(resistor, sharedCol, resEndCol, resRow, resSharedPin, resOtherPin);
@@ -319,7 +328,7 @@ export class BreadboardAllocator {
           label: `Sütun ${sharedCol}: ${otherComp.label} (C) ➔ ${resistor.label} (${resSharedPin}) İç İletkenlik`
         });
 
-        this.currentCol = resEndCol + 3;
+        this.currentCol = resEndCol + 2;
       }
       return;
     }
@@ -330,11 +339,12 @@ export class BreadboardAllocator {
       otherComp.type === 'wokwi-pushbutton' ||
       otherComp.type === 'wokwi-buzzer'
     ) {
-      if (!this.ensureSpace(6, `${otherComp.label} + ${resistor.label}`)) return;
+      const compSpan = otherComp.type === 'wokwi-buzzer' ? 1 : otherComp.type === 'wokwi-pushbutton' ? 7 : 2;
+      if (!this.ensureSpace(compSpan + 6, `${otherComp.label} + ${resistor.label}`)) return;
 
       const startCol = this.currentCol;
-      const sharedCol = startCol + 2;
-      const resEndCol = sharedCol + 4;
+      const sharedCol = startCol + compSpan;
+      const resEndCol = sharedCol + 6;
       const compRow = this.getComponentRow();
       const resRow = this.getResistorRow();
       const half = this.currentHalf;
@@ -351,17 +361,17 @@ export class BreadboardAllocator {
         label: `Sütun ${sharedCol}: ${otherComp.label} (${otherSharedPin}) ➔ ${resistor.label} (${resSharedPin}) İç İletkenlik`
       });
 
-      this.currentCol = resEndCol + 3;
+      this.currentCol = resEndCol + 2;
       return;
     }
 
     // Durum 3: İki Direnç Seri
     if (otherComp.type === 'wokwi-resistor') {
-      if (!this.ensureSpace(8, `${otherComp.label} + ${resistor.label}`)) return;
+      if (!this.ensureSpace(12, `${otherComp.label} + ${resistor.label}`)) return;
 
       const startCol = this.currentCol;
-      const sharedCol = startCol + 4;
-      const endCol = sharedCol + 4;
+      const sharedCol = startCol + 6;
+      const endCol = sharedCol + 6;
       const row1 = this.currentHalf === 'upper' ? 'C' : 'H';
       const row2 = this.currentHalf === 'upper' ? 'D' : 'I';
       const half = this.currentHalf;
@@ -376,7 +386,7 @@ export class BreadboardAllocator {
         label: `Sütun ${sharedCol}: ${otherComp.label} ➔ ${resistor.label} İç İletkenlik`
       });
 
-      this.currentCol = endCol + 3;
+      this.currentCol = endCol + 2;
     }
   }
 
@@ -410,15 +420,16 @@ export class BreadboardAllocator {
       }
     };
 
+    // Wokwi resistor-element pinInfo: Pin 1 = (0, 5.65), Pin 2 = (58.8, 5.65)
     this.placedComponents.push({
       id: resistor.id,
       type: resistor.type,
       props: resistor.props || {},
       label: resistor.label || '220Ω Direnç',
       isBreadboardMounted: true,
-      left: leftCoords.x + 8,
-      top: leftCoords.y - 6,
-      labelX: leftCoords.x + 15,
+      left: leftCoords.x - 1,
+      top: leftCoords.y - 5.65,
+      labelX: (leftCoords.x + rightCoords.x) / 2,
       labelY: -25,
       startCol: leftCol,
       endCol: rightCol,
@@ -437,6 +448,8 @@ export class BreadboardAllocator {
   ): void {
     const anodeCoords = getHoleCoords(anodeCol, row);
     const cathodeCoords = getHoleCoords(cathodeCol, row);
+    const isAnodeLeft = anodeCol < cathodeCol;
+    const leftPinX = Math.min(anodeCoords.x, cathodeCoords.x);
 
     const ledPins: Record<string, AllocatedPin> = {
       A: {
@@ -457,18 +470,19 @@ export class BreadboardAllocator {
       }
     };
 
+    // Wokwi led-element pinInfo: flip=true -> A=(15, 42), C=(25, 42); flip=false -> C=(15, 42), A=(25, 42)
     this.placedComponents.push({
       id: led.id,
       type: led.type,
-      props: led.props || {},
+      props: { ...(led.props || {}), flip: isAnodeLeft },
       label: led.label || 'LED',
       isBreadboardMounted: true,
-      left: anodeCoords.x - 22,
-      top: anodeCoords.y - 36,
-      labelX: anodeCoords.x,
+      left: leftPinX - 15,
+      top: anodeCoords.y - 42,
+      labelX: (anodeCoords.x + cathodeCoords.x) / 2,
       labelY: -25,
-      startCol: anodeCol,
-      endCol: cathodeCol,
+      startCol: Math.min(anodeCol, cathodeCol),
+      endCol: Math.max(anodeCol, cathodeCol),
       pins: ledPins
     });
 
@@ -505,18 +519,21 @@ export class BreadboardAllocator {
       }
     };
 
-    let offsetLeft = -10;
-    let offsetTop = -20;
-    let labelOffset = 8;
+    let offsetLeft = 0;
+    let offsetTop = -32;
 
     if (comp.type === 'wokwi-photoresistor') {
+      // wokwi-photoresistor pinInfo: 1=(8.5, 42), 2=(27.5, 42)
       offsetLeft = -8.5;
       offsetTop = -42;
-      labelOffset = 9.5;
     } else if (comp.type === 'wokwi-buzzer') {
-      offsetLeft = -14;
-      offsetTop = -10;
-      labelOffset = 8;
+      // wokwi-buzzer pinInfo: 1=(27, 84), 2=(37, 84)
+      offsetLeft = -27;
+      offsetTop = -84;
+    } else if (comp.type === 'wokwi-pushbutton') {
+      // wokwi-pushbutton pinInfo: 2.l=(0, 32), 2.r=(67, 32)
+      offsetLeft = 0;
+      offsetTop = -32;
     }
 
     this.placedComponents.push({
@@ -527,7 +544,7 @@ export class BreadboardAllocator {
       isBreadboardMounted: true,
       left: pLeft.x + offsetLeft,
       top: pLeft.y + offsetTop,
-      labelX: pLeft.x + labelOffset,
+      labelX: (pLeft.x + pRight.x) / 2,
       labelY: -25,
       startCol: leftCol,
       endCol: rightCol,
@@ -546,11 +563,12 @@ export class BreadboardAllocator {
       case 'wokwi-photoresistor':
       case 'wokwi-pushbutton':
       case 'wokwi-buzzer': {
-        if (!this.ensureSpace(2, comp.label || comp.id)) return;
+        const span = comp.type === 'wokwi-buzzer' ? 1 : comp.type === 'wokwi-pushbutton' ? 7 : 2;
+        if (!this.ensureSpace(span, comp.label || comp.id)) return;
         const col = this.currentCol;
         const row = this.getComponentRow();
-        this.placeTwoPinSpan2At(comp, col, col + 2, row, '1', '2');
-        this.currentCol = col + 2 + 3;
+        this.placeTwoPinSpan2At(comp, col, col + span, row, '1', '2');
+        this.currentCol = col + span + 2;
         break;
       }
 
@@ -559,16 +577,16 @@ export class BreadboardAllocator {
         const col = this.currentCol;
         const row = this.getComponentRow();
         this.placeLedAt(comp, col, col + 1, row);
-        this.currentCol = col + 1 + 3;
+        this.currentCol = col + 1 + 2;
         break;
       }
 
       case 'wokwi-resistor': {
-        if (!this.ensureSpace(4, comp.label || comp.id)) return;
+        if (!this.ensureSpace(6, comp.label || comp.id)) return;
         const col = this.currentCol;
         const row = this.getResistorRow();
-        this.placeResistorAt(comp, col, col + 4, row, '1', '2');
-        this.currentCol = col + 4 + 3;
+        this.placeResistorAt(comp, col, col + 6, row, '1', '2');
+        this.currentCol = col + 6 + 2;
         break;
       }
 
@@ -642,15 +660,34 @@ export class BreadboardAllocator {
 
   /**
    * Modül / Harici Bileşenler (4 Pin LDR, Servo, HC-SR04)
-   * Sağdaki modül dock'unda dikey olarak sıralanır (üst üste binmez).
+   * Sağdaki modül dock'unda dikey olarak sıralanır.
+   * Her modülün alt kenarında 28px aralıklı net pin soketleri (VCC, GND, AO, PWM, TRIG, ECHO) yer alır.
    */
   private allocateOffBoardComponent(comp: NetlistComponent): void {
-    const dockLeft = 810;
-    const dockTop = 80 + this.offBoardIndex * 115;
+    const dockLeft = 815;
+    const dockTop = 76 + this.offBoardIndex * 132;
     this.offBoardIndex++;
 
+    // Breadboard orijinine (448, 108) göre pin soket koordinat hesabı
+    const getSocketCoord = (pinIndex: number, totalPins: number) => {
+      const pitch = 28;
+      const cardWidth = 140;
+      const totalSpan = (totalPins - 1) * pitch;
+      const startOffsetX = Math.round((cardWidth - totalSpan) / 2);
+      const canvasX = dockLeft + startOffsetX + pinIndex * pitch;
+      const canvasY = dockTop + 88; // Kartın altındaki etiketli pin soket barı
+      return {
+        x: canvasX - 448,
+        y: canvasY - 108
+      };
+    };
+
     if (comp.type === 'wokwi-photoresistor-sensor') {
-      const pinX = dockLeft + 120 - 448; // breadboard orijinine (448, 108) göre
+      const pVcc = getSocketCoord(0, 4);
+      const pGnd = getSocketCoord(1, 4);
+      const pDo = getSocketCoord(2, 4);
+      const pAo = getSocketCoord(3, 4);
+
       const pins: Record<string, AllocatedPin> = {
         VCC: {
           componentId: comp.id,
@@ -658,8 +695,7 @@ export class BreadboardAllocator {
           col: 0,
           row: 'offboard',
           holeName: `${comp.id}.VCC`,
-          x: pinX,
-          y: dockTop + 16 * 0.75 - 108
+          ...pVcc
         },
         GND: {
           componentId: comp.id,
@@ -667,8 +703,7 @@ export class BreadboardAllocator {
           col: 0,
           row: 'offboard',
           holeName: `${comp.id}.GND`,
-          x: pinX,
-          y: dockTop + 26 * 0.75 - 108
+          ...pGnd
         },
         DO: {
           componentId: comp.id,
@@ -676,8 +711,7 @@ export class BreadboardAllocator {
           col: 0,
           row: 'offboard',
           holeName: `${comp.id}.DO`,
-          x: pinX,
-          y: dockTop + 36 * 0.75 - 108
+          ...pDo
         },
         AO: {
           componentId: comp.id,
@@ -685,8 +719,7 @@ export class BreadboardAllocator {
           col: 0,
           row: 'offboard',
           holeName: `${comp.id}.AO`,
-          x: pinX,
-          y: dockTop + 46 * 0.75 - 108
+          ...pAo
         }
       };
 
@@ -694,11 +727,11 @@ export class BreadboardAllocator {
         id: comp.id,
         type: comp.type,
         props: comp.props || {},
-        label: comp.label || '4 Pin LDR Modülü (KY-018)',
+        label: comp.label || 'LDR Işık Sensörü',
         isBreadboardMounted: false,
         left: dockLeft,
         top: dockTop,
-        labelX: dockLeft + 50,
+        labelX: dockLeft + 70,
         labelY: -20,
         startCol: 0,
         endCol: 0,
@@ -709,16 +742,18 @@ export class BreadboardAllocator {
         this.allocatedPins[`${comp.id}.${k}`] = v;
       }
     } else if (comp.type === 'wokwi-servo') {
-      const pinX = dockLeft + 16 - 448;
+      const pPWM = getSocketCoord(0, 3);
+      const pVPlus = getSocketCoord(1, 3);
+      const pGnd = getSocketCoord(2, 3);
+
       const pins: Record<string, AllocatedPin> = {
-        GND: {
+        PWM: {
           componentId: comp.id,
-          pinName: 'GND',
+          pinName: 'PWM',
           col: 0,
           row: 'offboard',
-          holeName: `${comp.id}.GND`,
-          x: pinX,
-          y: dockTop + 38 - 108
+          holeName: `${comp.id}.PWM`,
+          ...pPWM
         },
         'V+': {
           componentId: comp.id,
@@ -726,17 +761,15 @@ export class BreadboardAllocator {
           col: 0,
           row: 'offboard',
           holeName: `${comp.id}.V+`,
-          x: pinX,
-          y: dockTop + 46 - 108
+          ...pVPlus
         },
-        PWM: {
+        GND: {
           componentId: comp.id,
-          pinName: 'PWM',
+          pinName: 'GND',
           col: 0,
           row: 'offboard',
-          holeName: `${comp.id}.PWM`,
-          x: pinX,
-          y: dockTop + 54 - 108
+          holeName: `${comp.id}.GND`,
+          ...pGnd
         }
       };
 
@@ -744,11 +777,11 @@ export class BreadboardAllocator {
         id: comp.id,
         type: comp.type,
         props: comp.props || {},
-        label: comp.label || 'SG90 Servo',
+        label: comp.label || 'SG90 Servo Motor',
         isBreadboardMounted: false,
         left: dockLeft,
         top: dockTop,
-        labelX: dockLeft + 40,
+        labelX: dockLeft + 70,
         labelY: -20,
         startCol: 0,
         endCol: 0,
@@ -759,8 +792,11 @@ export class BreadboardAllocator {
         this.allocatedPins[`${comp.id}.${k}`] = v;
       }
     } else if (comp.type === 'wokwi-hc-sr04') {
-      const basePinX = dockLeft + 54 - 448;
-      const pinY = dockTop + 72 - 108;
+      const pVcc = getSocketCoord(0, 4);
+      const pTrig = getSocketCoord(1, 4);
+      const pEcho = getSocketCoord(2, 4);
+      const pGnd = getSocketCoord(3, 4);
+
       const pins: Record<string, AllocatedPin> = {
         VCC: {
           componentId: comp.id,
@@ -768,8 +804,7 @@ export class BreadboardAllocator {
           col: 0,
           row: 'offboard',
           holeName: `${comp.id}.VCC`,
-          x: basePinX,
-          y: pinY
+          ...pVcc
         },
         TRIG: {
           componentId: comp.id,
@@ -777,8 +812,7 @@ export class BreadboardAllocator {
           col: 0,
           row: 'offboard',
           holeName: `${comp.id}.TRIG`,
-          x: basePinX + 8,
-          y: pinY
+          ...pTrig
         },
         ECHO: {
           componentId: comp.id,
@@ -786,8 +820,7 @@ export class BreadboardAllocator {
           col: 0,
           row: 'offboard',
           holeName: `${comp.id}.ECHO`,
-          x: basePinX + 16,
-          y: pinY
+          ...pEcho
         },
         GND: {
           componentId: comp.id,
@@ -795,8 +828,7 @@ export class BreadboardAllocator {
           col: 0,
           row: 'offboard',
           holeName: `${comp.id}.GND`,
-          x: basePinX + 24,
-          y: pinY
+          ...pGnd
         }
       };
 
@@ -808,7 +840,7 @@ export class BreadboardAllocator {
         isBreadboardMounted: false,
         left: dockLeft,
         top: dockTop,
-        labelX: dockLeft + 40,
+        labelX: dockLeft + 70,
         labelY: -20,
         startCol: 0,
         endCol: 0,

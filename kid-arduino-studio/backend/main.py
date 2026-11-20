@@ -6,17 +6,30 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
-from schemas import ProjeTasarimi
+from schemas import (
+    ProjeTasarimi,
+    CircuitNetlist,
+    WiringDesignResponse,
+    LogicDesignResponse,
+    SavedProjectEntry,
+    AILogEntry,
+)
 from ai_service import (
-    MOCK_PROJECTS,
-    generate_project_with_ai,
+    generate_full_project_one_shot,
+    generate_wiring_only,
+    generate_logic_and_code_for_wiring,
     fix_arduino_code,
     get_all_available_models,
+    get_saved_projects,
+    save_project_entry,
+    delete_saved_project,
+    get_ai_logs,
+    clear_ai_logs,
 )
 from arduino_service import (
     get_connected_ports,
     compile_and_upload,
-    generate_simulated_serial_events,
+    stream_serial_port_events,
 )
 
 load_dotenv()
@@ -48,6 +61,20 @@ class GenerateRequest(BaseModel):
     api_key: Optional[str] = None
     ollama_url: Optional[str] = "http://127.0.0.1:11434"
 
+class GenerateLogicRequest(BaseModel):
+    prompt: str
+    proje_adi: Optional[str] = "Akıllı Arduino Projem"
+    netlist: CircuitNetlist
+    model: Optional[str] = None
+    api_key: Optional[str] = None
+    ollama_url: Optional[str] = "http://127.0.0.1:11434"
+
+class SaveProjectRequest(BaseModel):
+    id: Optional[str] = None
+    prompt: Optional[str] = ""
+    badge: Optional[str] = "AI Tasarımım ✨"
+    project: ProjeTasarimi
+
 class UploadRequest(BaseModel):
     code: str
     port: Optional[str] = None
@@ -73,9 +100,9 @@ def health_check():
 
 
 @app.get("/api/models")
-def list_available_models():
-    """Sistemde algılanan yerel Ollama modellerini ve desteklenen bulut modellerini döner."""
-    return get_all_available_models()
+def list_available_models(gemini_api_key: Optional[str] = None):
+    """Sistemde algılanan yerel Ollama modellerini ve desteklenen bulut (Gemini, OpenAI, Claude) modellerini döner."""
+    return get_all_available_models(gemini_api_key=gemini_api_key)
 
 
 @app.get("/api/ports")
@@ -85,57 +112,122 @@ def list_ports():
     return {"ports": ports}
 
 
+@app.get("/api/ai-logs", response_model=List[AILogEntry])
+def list_ai_logs_endpoint():
+    """Admin modu için yapay zekaya gönderilen istekleri ve alınan ham cevapları listeler."""
+    return get_ai_logs()
+
+
+@app.delete("/api/ai-logs")
+def clear_ai_logs_endpoint():
+    """Admin modundaki yapay zeka istek/cevap geçmişini temizler."""
+    clear_ai_logs()
+    return {"cleared": True}
+
+
 @app.get("/api/mock-projects")
 def list_mock_projects():
-    """Hazır demo projelerin özet listesini döner."""
-    return [
-        {
-            "id": "gece_lambasi",
-            "title": "Akıllı Gece Bekçisi Lambası",
-            "badge": "En Popüler 🌙",
-            "description": "Oda kararınca kendiliğinden yanan sevimli gece lambası.",
-            "parts": ["ARDUINO_UNO", "BREADBOARD", "LDR_SENSOR", "LED_RED", "RESISTOR_220"],
-            "difficulty": "Başlangıç Seviyesi"
-        },
-        {
-            "id": "park_sensoru",
-            "title": "Yarasa Kulaklı Park Sensörü",
-            "badge": "Eğlenceli Korna 🦇",
-            "description": "Ses dalgalarıyla mesafeyi ölçüp yaklaşınca öten akıllı alarm.",
-            "parts": ["ARDUINO_UNO", "BREADBOARD", "HCSR04", "BUZZER", "LED_RED"],
-            "difficulty": "Kolay Seviye"
-        }
-    ]
+    """Örnek projeler kaldırıldı."""
+    return []
 
 
-@app.get("/api/mock-projects/{project_id}", response_model=ProjeTasarimi)
-def get_mock_project(project_id: str):
-    """Belirtilen demo projenin tüm detaylı JSON sözleşmesini döner."""
-    if project_id not in MOCK_PROJECTS:
-        raise HTTPException(status_code=404, detail="Proje bulunamadı")
-    return MOCK_PROJECTS[project_id]
-
-
-@app.post("/api/generate-project", response_model=ProjeTasarimi)
-def generate_project(req: GenerateRequest):
-    """Çocuğun Türkçe fikrini, envanterini ve seçilen modeli kullanarak projeyi üretir."""
+@app.post("/api/generate-wiring", response_model=WiringDesignResponse)
+def generate_wiring_endpoint(req: GenerateRequest):
+    """
+    1. Aşama AI Çağrısı: Yalnızca kablolama (netlist: hangi komponentler ve hangi pin nereye bağlanacak) üretir.
+    Hatasızlığı doğrulanmış kablolama bilgisini döner; devre bu bilgiyle anında render edilir.
+    """
     if not req.prompt.strip():
         raise HTTPException(status_code=400, detail="Lütfen bir proje fikri yazın!")
-    
-    inventory = req.inventory if req.inventory else ["ARDUINO_UNO", "BREADBOARD", "LED_RED", "RESISTOR_220"]
+
+    inventory = list(req.inventory) if req.inventory else ["ARDUINO_UNO", "BREADBOARD", "LED_RED", "RESISTOR_220"]
     if "ARDUINO_UNO" not in inventory:
         inventory.append("ARDUINO_UNO")
     if "BREADBOARD" not in inventory:
         inventory.append("BREADBOARD")
 
-    project = generate_project_with_ai(
-        prompt=req.prompt,
-        inventory=inventory,
-        model=req.model,
-        api_key=req.api_key,
-        ollama_url=req.ollama_url or "http://127.0.0.1:11434"
+    try:
+        return generate_wiring_only(
+            prompt=req.prompt,
+            inventory=inventory,
+            model=req.model or "default",
+            ollama_url=req.ollama_url or "http://127.0.0.1:11434",
+            api_key=req.api_key
+        )
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@app.post("/api/generate-logic", response_model=LogicDesignResponse)
+def generate_logic_endpoint(req: GenerateLogicRequest):
+    """
+    2. Aşama AI Çağrısı: Devre render edildiği anda, kesinleşmiş kablolamaya (netlist) uygun
+    Akış Diyagramı ve Arduino C++ Kodu üretir ve kablolamayla %100 uyumlu olduğunu teyit eder.
+    """
+    try:
+        return generate_logic_and_code_for_wiring(
+            prompt=req.prompt,
+            proje_adi=req.proje_adi or "Akıllı Arduino Projem",
+            netlist=req.netlist,
+            model=req.model or "default",
+            ollama_url=req.ollama_url or "http://127.0.0.1:11434",
+            api_key=req.api_key
+        )
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@app.get("/api/projects", response_model=List[SavedProjectEntry])
+def list_saved_projects_endpoint():
+    """Projelerim menüsü için daha önce kurgulanmış ve hazır projeleri listeler."""
+    return get_saved_projects()
+
+
+@app.post("/api/projects", response_model=SavedProjectEntry)
+def save_project_endpoint(req: SaveProjectRequest):
+    """Yeni kurgulanan bir projeyi Projelerim menüsüne kaydeder."""
+    return save_project_entry(
+        project=req.project,
+        prompt=req.prompt or "",
+        project_id=req.id,
+        badge=req.badge or "AI Tasarımım ✨"
     )
-    return project
+
+
+@app.delete("/api/projects/{project_id}")
+def delete_project_endpoint(project_id: str):
+    """Kayıtlı bir kullanıcı projesini siler."""
+    deleted = delete_saved_project(project_id)
+    return {"deleted": deleted, "id": project_id}
+
+
+@app.post("/api/generate-project", response_model=ProjeTasarimi)
+def generate_project(req: GenerateRequest):
+    """
+    Tek Sorgu (One-Shot) AI Çağrısı:
+    Hem devre kablolamasını (netlist), hem akış diyagramını (akis_adimlari), hem de Arduino C++ kodunu (arduino_kodu)
+    tek bir LLM çağrısında alır, birbiriyle doğrular ve döner.
+    Hata durumunda hiçbir şey sentezlemez, HTTP 502 döner.
+    """
+    if not req.prompt.strip():
+        raise HTTPException(status_code=400, detail="Lütfen bir proje fikri yazın!")
+    
+    inventory = list(req.inventory) if req.inventory else ["ARDUINO_UNO", "BREADBOARD", "LED_RED", "RESISTOR_220"]
+    if "ARDUINO_UNO" not in inventory:
+        inventory.append("ARDUINO_UNO")
+    if "BREADBOARD" not in inventory:
+        inventory.append("BREADBOARD")
+
+    try:
+        return generate_full_project_one_shot(
+            prompt=req.prompt,
+            inventory=inventory,
+            model=req.model or "default",
+            ollama_url=req.ollama_url or "http://127.0.0.1:11434",
+            api_key=req.api_key
+        )
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
 
 # Alias endpoint
 @app.post("/api/generate", response_model=ProjeTasarimi)
@@ -166,9 +258,9 @@ def fix_code(req: FixCodeRequest):
 
 
 @app.get("/api/serial-events")
-def stream_serial_events(port: Optional[str] = "simulated"):
-    """Canlı sensör ibresi için SSE veri akışı sağlar."""
+def stream_serial_events(port: Optional[str] = "auto", baudrate: int = 9600):
+    """Canlı Serial Monitor ve görselleştirici için SSE veri akışı sağlar."""
     return StreamingResponse(
-        generate_simulated_serial_events(),
+        stream_serial_port_events(port=port, baudrate=baudrate),
         media_type="text/event-stream"
     )

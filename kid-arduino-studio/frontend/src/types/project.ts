@@ -31,6 +31,44 @@ export interface AkisAdimi {
   hayir_sonucu: string;
 }
 
+export interface PinBindingInfo {
+  uno_pin: string;
+  component_id: string;
+  component_label: string;
+  component_type: string;
+  pin_name: string;
+  via_component?: string | null;
+  role: 'INPUT' | 'OUTPUT' | string;
+}
+
+export interface LogicVerificationReport {
+  is_valid: boolean;
+  syntax_ok: boolean;
+  pins_matched: boolean;
+  flow_complete: boolean;
+  auto_repaired?: boolean;
+  pin_bindings: PinBindingInfo[];
+  checks: string[];
+  warnings?: string[];
+}
+
+export interface WiringDesignResponse {
+  proje_adi: string;
+  karsilama_mesaji: string;
+  gerekli_parcalar: string[];
+  netlist: CircuitNetlist;
+  baglanti_adimlari?: BaglantiAdimi[];
+  guvenlik_notu?: string;
+  pin_bindings?: PinBindingInfo[];
+  uyarilar?: string[];
+}
+
+export interface LogicDesignResponse {
+  akis_adimlari: AkisAdimi;
+  arduino_kodu: string;
+  verification: LogicVerificationReport;
+}
+
 export interface ProjeTasarimi {
   proje_adi: string;
   karsilama_mesaji: string;
@@ -41,6 +79,33 @@ export interface ProjeTasarimi {
   arduino_kodu: string;
   guvenlik_notu?: string;
   uyarilar?: string[];
+  verification?: LogicVerificationReport;
+}
+
+export interface SavedProjectEntry {
+  id: string;
+  created_at: string;
+  prompt: string;
+  is_preset: boolean;
+  badge?: string;
+  difficulty?: string;
+  project: ProjeTasarimi;
+}
+
+export interface AILogEntry {
+  id: string;
+  timestamp: string;
+  stage: string;
+  model: string;
+  provider: string;
+  duration_ms: number;
+  status: 'SUCCESS' | 'REPAIRED' | 'FALLBACK' | 'ERROR' | string;
+  user_goal: string;
+  system_prompt: string;
+  user_prompt: string;
+  raw_response: string;
+  processed_output?: Record<string, any> | null;
+  notes: string[];
 }
 
 // Geriye dönük uyumluluk takma adı (alias)

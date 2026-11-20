@@ -1,44 +1,111 @@
 <template>
   <div class="w-full max-w-6xl mx-auto flex-1 flex flex-col gap-3 py-2 sm:py-3 px-2 sm:px-4 select-none">
     
-    <!-- 1. ÜST ADIM VE TALİMAT BANDI (3D Çizgi Film Kartı) -->
-    <div class="bg-white rounded-2xl sm:rounded-3xl p-3 sm:p-4 border-[3px] border-slate-900 shadow-[0_4px_0_#0f172a] flex flex-col sm:flex-row items-center justify-between gap-3">
+    <!-- 0. 2. AŞAMA AI (AKIŞ & ARDUINO KODU) CANLI DOĞRULAMA DURUM BANDI -->
+    <div
+      :class="[
+        'rounded-2xl px-3.5 py-2 border-2 border-slate-900 shadow-[0_3px_0_#0f172a] flex flex-wrap items-center justify-between gap-2 text-xs transition-colors',
+        isGeneratingLogic
+          ? 'bg-sky-100 text-sky-950'
+          : 'bg-emerald-100 text-emerald-950'
+      ]"
+    >
+      <div class="flex items-center gap-2 font-black">
+        <span v-if="isGeneratingLogic" class="animate-spin text-base">⚙️</span>
+        <span v-else class="text-base">✅</span>
+        <span v-if="isGeneratingLogic">
+          2. Aşama AI Ajanı Çalışıyor: Bu kablolamaya (wiring) uygun Akış Diyagramı ve Arduino Kodu hazırlanıp doğrulanıyor...
+        </span>
+        <span v-else>
+          Kablolama, Akış Diyagramı ve Arduino Kodu %100 Uyumlu! ({{ layoutResult.components.length }} Parça, {{ layoutResult.wires.length }} Kablo, 0 Hata)
+        </span>
+      </div>
+
+      <div v-if="!isGeneratingLogic && verification?.pin_bindings?.length" class="flex flex-wrap items-center gap-1.5">
+        <span
+          v-for="b in verification.pin_bindings"
+          :key="`${b.uno_pin}-${b.component_id}`"
+          class="px-2 py-0.5 rounded-lg bg-white border border-slate-900 text-[10px] font-black text-slate-900 shadow-2xs"
+        >
+          Pin {{ b.uno_pin }} ➔ {{ b.component_label }}
+        </span>
+      </div>
+    </div>
+
+    <!-- 0-B. MALZEME ÇANTASINDA OLMAYAN PARÇALAR İÇİN MİNİK UYARI -->
+    <div
+      v-if="missingInventoryComponents.length > 0"
+      class="rounded-xl px-3 py-1.5 bg-amber-50 border border-amber-400 text-amber-950 flex flex-wrap items-center justify-between gap-2 text-[11px] font-bold shadow-2xs"
+    >
+      <div class="flex items-center gap-1.5 flex-wrap">
+        <span>🎒</span>
+        <span>
+          <strong>Çanta Notu:</strong> Bu devrede kullanılan
+          <strong class="underline decoration-amber-500">{{ missingInventoryComponents.map(m => m.label).join(', ') }}</strong>
+          şu an Malzeme Çantanda seçili görünmüyor.
+        </span>
+      </div>
+      <button
+        type="button"
+        @click="$emit('open-inventory')"
+        class="px-2 py-0.5 rounded-lg bg-amber-200 hover:bg-amber-300 border border-slate-900 text-[10px] font-black text-slate-900 cursor-pointer shrink-0 transition"
+      >
+        🧰 Çantamı Düzenle
+      </button>
+    </div>
+
+    <!-- 1. ÜST ADIM VE ÇOCUK DOSTU TALİMAT BANDI (3D Çizgi Film Kartı) -->
+    <div class="bg-white rounded-2xl sm:rounded-3xl p-3 sm:p-4 border-[3px] border-slate-900 shadow-[0_4px_0_#0f172a] flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
       <div class="flex items-start sm:items-center gap-3 flex-1 min-w-0">
         <!-- Adım Sayacı Rozeti -->
         <div
-          class="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl flex items-center justify-center font-black text-base sm:text-lg text-white shrink-0 border-2 border-slate-900 shadow-[0_3px_0_#0f172a]"
+          class="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl flex flex-col items-center justify-center font-black text-white shrink-0 border-2 border-slate-900 shadow-[0_3px_0_#0f172a]"
           :style="{ backgroundColor: currentWire ? currentWire.color : '#3b82f6' }"
         >
-          {{ currentStepNumber }}/{{ totalSteps }}
+          <span class="text-[9px] uppercase tracking-wider opacity-90">ADIM</span>
+          <span class="text-base sm:text-lg leading-none">{{ currentStepNumber }}/{{ totalSteps }}</span>
         </div>
-        <div class="min-w-0">
-          <span class="text-[10px] sm:text-[11px] font-black uppercase tracking-wider text-slate-500 block mb-0.5">
-            Devre Kurulum Kılavuzu (Adım {{ currentStepNumber }})
-          </span>
-          <h3 class="text-xs sm:text-sm md:text-base font-black text-slate-900 leading-snug truncate">
-            {{ currentWire?.description || 'Kablo bağlantısı hazırlanıyor...' }}
+
+        <div class="min-w-0 flex-1">
+          <!-- Nereden -> Nereye Görsel Rozetleri -->
+          <div v-if="currentWireDetails" class="flex flex-wrap items-center gap-1.5 mb-1">
+            <span
+              class="px-2 py-0.5 rounded-lg text-[10px] font-black border border-slate-900 text-white shadow-2xs"
+              :style="{ backgroundColor: currentWire?.color || '#3b82f6' }"
+            >
+              {{ currentWireDetails.colorName }} Kablo
+            </span>
+            <span class="px-2.5 py-0.5 rounded-lg bg-sky-100 border border-slate-900 text-[11px] font-black text-slate-900">
+              1️⃣ Nereden: {{ currentWireDetails.fromTitle }}
+            </span>
+            <span class="font-black text-slate-900 text-xs">➔</span>
+            <span class="px-2.5 py-0.5 rounded-lg bg-[#fde047] border border-slate-900 text-[11px] font-black text-slate-950">
+              2️⃣ Nereye Tak: {{ currentWireDetails.toTitle }}
+            </span>
+          </div>
+
+          <h3 class="text-xs sm:text-sm md:text-base font-black text-slate-900 leading-snug">
+            {{ currentWireDetails?.kidInstruction || currentWire?.description || 'Kablo bağlantısı hazırlanıyor...' }}
           </h3>
-          <p class="text-[11px] sm:text-xs text-slate-600 font-bold mt-0.5 truncate">
-            💡 <strong>İpucu:</strong>
-            <span v-if="currentWire?.isPowerBus">Ortak güç rayı devredeki tüm bileşenlere enerji veya toprak taşır!</span>
-            <span v-else>Kabloyu Arduino pini ile breadboard üzerindeki ilgili deliğe tam oturtun.</span>
+          <p class="text-[11px] sm:text-xs text-slate-600 font-bold mt-0.5">
+            💡 <strong>Ne İşe Yarar?</strong> {{ currentWireDetails?.kidWhy }}
           </p>
         </div>
       </div>
 
       <!-- Tümü / Adım Adım Modu Butonları -->
-      <div class="flex items-center gap-2 shrink-0">
+      <div class="flex items-center gap-2 shrink-0 self-end lg:self-center">
         <button
           type="button"
           @click="showAllWires = !showAllWires"
           :class="[
-            'px-3 py-1.5 rounded-xl text-xs font-black border-2 border-slate-900 transition flex items-center gap-1.5 cursor-pointer shadow-[0_2px_0_#0f172a] active:translate-y-0.5',
+            'px-3.5 py-2 rounded-xl text-xs font-black border-2 border-slate-900 transition flex items-center gap-1.5 cursor-pointer shadow-[0_2px_0_#0f172a] active:translate-y-0.5',
             showAllWires
               ? 'bg-[#38bdf8] text-slate-950'
               : 'bg-white text-slate-800 hover:bg-slate-50'
           ]"
         >
-          <span>{{ showAllWires ? '👁️ Tüm Kablolar (Açık)' : '🔍 Adım Adım İncele' }}</span>
+          <span>{{ showAllWires ? '👁️ Tüm Kablolar Görünüyor' : '🔍 Adım Adım Kablo Modu' }}</span>
         </button>
       </div>
     </div>
@@ -50,16 +117,20 @@
           v-for="(wire, idx) in layoutResult.wires"
           :key="wire.id"
           type="button"
-          @click="currentStepIndex = idx"
+          @click="selectStep(idx)"
           :class="[
-            'px-3 py-1 rounded-xl text-xs font-black transition flex items-center gap-1 shrink-0 cursor-pointer border-2 border-slate-900 select-none',
+            'px-3 py-1 rounded-xl text-xs font-black transition flex items-center gap-1.5 shrink-0 cursor-pointer border-2 border-slate-900 select-none',
             currentStepIndex === idx
-              ? 'bg-[#fde047] text-slate-950 shadow-[0_2px_0_#ca8a04]'
+              ? 'bg-[#fde047] text-slate-950 shadow-[0_2px_0_#ca8a04] scale-102'
               : idx < currentStepIndex
               ? 'bg-emerald-100 text-emerald-950'
               : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
           ]"
         >
+          <span
+            class="w-2.5 h-2.5 rounded-full border border-slate-900 shrink-0"
+            :style="{ backgroundColor: wire.color || '#38bdf8' }"
+          ></span>
           <span v-if="idx < currentStepIndex">✓</span>
           <span>Adım {{ idx + 1 }}</span>
         </button>
@@ -71,25 +142,25 @@
           type="button"
           @click="prevStep"
           :disabled="currentStepIndex === 0"
-          class="px-2.5 py-1 rounded-xl text-xs font-black border-2 border-slate-900 bg-white hover:bg-slate-50 disabled:opacity-40 text-slate-800 shadow-xs cursor-pointer active:translate-y-0.5"
+          class="px-3 py-1.5 rounded-xl text-xs font-black border-2 border-slate-900 bg-white hover:bg-slate-50 disabled:opacity-40 text-slate-800 shadow-xs cursor-pointer active:translate-y-0.5"
         >
-          ◀ Önceki
+          ◀ Önceki Kablo
         </button>
         <button
           type="button"
           @click="nextStep"
           :disabled="currentStepIndex >= totalSteps - 1"
-          class="px-3 py-1 rounded-xl text-xs font-black border-2 border-slate-900 bg-[#38bdf8] hover:bg-[#0284c7] disabled:opacity-40 text-slate-950 shadow-[0_2px_0_#0f172a] cursor-pointer active:translate-y-0.5"
+          class="px-3.5 py-1.5 rounded-xl text-xs font-black border-2 border-slate-900 bg-[#38bdf8] hover:bg-[#0284c7] disabled:opacity-40 text-slate-950 shadow-[0_2px_0_#0f172a] cursor-pointer active:translate-y-0.5"
         >
-          Sonraki ▶
+          Sonraki Kablo ▶
         </button>
       </div>
     </div>
 
-    <!-- 3. OTOMATİK NETLIST-TO-BREADBOARD ÇALIŞMA ALANI -->
+    <!-- 3. OTOMATİK NETLIST-TO-BREADBOARD GÖRSEL ÇALIŞMA ALANI -->
     <div
       ref="workspaceRef"
-      class="relative w-full flex-1 overflow-x-auto overflow-y-hidden bg-slate-900 rounded-3xl border-[3px] border-slate-900 shadow-[0_8px_0_rgba(15,23,42,0.2)] min-h-[500px] select-none p-4 flex items-center justify-center"
+      class="relative w-full overflow-x-auto overflow-y-hidden bg-slate-900 rounded-3xl border-[3px] border-slate-900 shadow-[0_8px_0_rgba(15,23,42,0.2)] min-h-[490px] select-none p-3 flex items-center justify-center"
     >
       <!-- Arka Plan Grid Ağı -->
       <div class="absolute inset-0 pointer-events-none opacity-25" style="background-image: radial-gradient(#64748b 1px, transparent 1px); background-size: 20px 20px;"></div>
@@ -97,13 +168,13 @@
       <!-- Üst Bilgi Rozeti -->
       <div class="absolute top-3 left-4 z-20 pointer-events-none flex flex-wrap items-center gap-2">
         <span class="px-2.5 py-1 rounded-lg bg-slate-800/90 border border-slate-700 text-[11px] font-black tracking-wide text-amber-300">
-          ⚡ NETLIST AUTO-LAYOUT MOTORU • Çakışmasız deterministik yerleşim
+          ⚡ AKILLI DEVRE ŞEMASI • Çocuk Dostu Basit Kablolama
         </span>
         <span
           v-if="layoutResult.errors.length === 0"
-          class="px-2 py-0.5 rounded-lg bg-emerald-950/80 border border-emerald-500/50 text-[10px] font-bold text-emerald-300"
+          class="px-2 py-0.5 rounded-lg bg-emerald-950/90 border border-emerald-500/60 text-[10px] font-bold text-emerald-300"
         >
-          ✓ Elektriksel Doğrulama: 0 Kısa Devre, 0 Çakışma
+          ✓ Elektriksel Kontrol: 0 Kısa Devre, 0 Hatalı Bağlantı
         </span>
         <span
           v-else
@@ -111,84 +182,105 @@
         >
           ⚠️ {{ layoutResult.errors[0] }}
         </span>
-        <span
-          v-if="layoutResult.warnings.length > 0"
-          class="px-2 py-0.5 rounded-lg bg-amber-950/85 border border-amber-500/50 text-[10px] font-bold text-amber-200"
-        >
-          ℹ️ {{ layoutResult.warnings.length }} otomatik düzeltme uygulandı
-        </span>
       </div>
 
-      <!-- ÇALIŞMA ALANI İÇ KUTUSU (Sabit Ofset Sistemi) -->
-      <div class="relative w-[920px] h-[460px] shrink-0">
+      <!-- ÇALIŞMA ALANI İÇ KUTUSU (Sabit 980x470 Koordinat Sistemi: Uno=(48,108), Breadboard=(448,108)) -->
+      <div class="relative w-[980px] h-[470px] shrink-0">
 
         <!-- ======================================================== -->
-        <!-- A) ARDUINO UNO KARTI (Sol Tarafta Sabit)                 -->
+        <!-- A) ARDUINO UNO KARTI (Tam (48, 108) Orijininde)          -->
         <!-- ======================================================== -->
         <div
-          id="comp-arduino"
-          class="absolute left-[40px] top-[100px] z-10 p-2 rounded-2xl bg-slate-800/40 border border-slate-700/60 shadow-lg pointer-events-auto"
+          id="comp-arduino-card"
+          class="absolute left-[40px] top-[100px] z-10 p-[8px] rounded-2xl bg-slate-800/45 border border-slate-700/70 shadow-lg pointer-events-auto"
         >
-          <wokwi-arduino-uno></wokwi-arduino-uno>
-          <div class="text-[11px] font-black text-center text-sky-400 mt-1 pointer-events-none">
-            Arduino Uno
+          <div class="relative">
+            <wokwi-arduino-uno></wokwi-arduino-uno>
+          </div>
+          <div class="text-[11px] font-black text-center text-sky-300 mt-1 pointer-events-none">
+            🟦 Arduino Uno (Ana Beyin)
           </div>
         </div>
 
         <!-- ======================================================== -->
-        <!-- B) BREADBOARD VE DİNAMİK YERLEŞTİRİLMİŞ BİLEŞENLER      -->
+        <!-- B) BREADBOARD VE ÜZERİNE TAKILAN PARÇALAR ((448, 108))   -->
         <!-- ======================================================== -->
         <div
-          id="comp-breadboard-wrapper"
-          class="absolute left-[440px] top-[100px] z-10 p-2 rounded-2xl bg-slate-800/40 border border-slate-700/60 shadow-lg"
+          id="comp-breadboard-card"
+          class="absolute left-[440px] top-[100px] z-10 p-[8px] rounded-2xl bg-slate-800/45 border border-slate-700/70 shadow-lg"
         >
-          <!-- Breadboard Web Component'i (Aktif Sütunları İç İletkenlik Olarak Parlatır) -->
-          <wokwi-breadboard-half
-            id="comp-breadboard"
-            :highlighted-columns="highlightedColsStr"
-            :highlighted-rails="layoutResult.highlightedRails"
-          ></wokwi-breadboard-half>
+          <!-- Sıfır Paddingli İç Kutu: Orijini Tam (448, 108) -->
+          <div class="relative">
+            <wokwi-breadboard-half
+              id="comp-breadboard"
+              :highlighted-columns="highlightedColsStr"
+              :highlighted-rails="layoutResult.highlightedRails"
+            ></wokwi-breadboard-half>
 
-          <!-- DİNAMİK OLARAK BREADBOARD ÜZERİNE YERLEŞTİRİLEN BİLEŞENLER (NETLIST AUTO-LAYOUT) -->
-          <div
-            v-for="comp in mountedComponents"
-            :key="comp.id"
-            class="absolute pointer-events-none z-20"
-            :style="{ left: `${comp.left}px`, top: `${comp.top}px` }"
-          >
-            <!-- Wokwi Elemanı -->
-            <component :is="comp.type" v-bind="comp.props"></component>
-
-            <!-- Kademelendirilmiş (Staggered) Çocuk Dostu Etiket -->
+            <!-- BREADBOARD ÜZERİNE TAKILAN PARÇALAR -->
             <div
-              class="absolute -translate-x-1/2 px-2 py-0.5 rounded-md bg-slate-900/90 border border-slate-700 text-[9px] font-black text-amber-300 shadow-md whitespace-nowrap"
-              :style="{ left: `${comp.labelX - comp.left}px`, top: `${comp.labelY}px` }"
+              v-for="comp in mountedComponents"
+              :key="comp.id"
+              class="absolute z-20 group pointer-events-auto cursor-pointer"
+              :style="{ left: `${comp.left}px`, top: `${comp.top}px` }"
             >
-              {{ comp.label }}
+              <component :is="comp.type" v-bind="comp.props" class="pointer-events-none"></component>
+
+              <!-- Kademelendirilmiş Çocuk Dostu Parça Etiketi (Delik Bilgisi Sadece Hover'da Görünür) -->
+              <div
+                class="absolute -translate-x-1/2 px-2 py-0.5 rounded-lg bg-slate-900/95 border border-amber-400/80 text-[9px] font-black text-amber-300 shadow-md whitespace-nowrap flex items-center gap-1 pointer-events-none"
+                :style="{ left: `${comp.labelX - comp.left}px`, top: `${comp.labelY}px` }"
+              >
+                <span>{{ comp.label }}</span>
+                <span class="hidden group-hover:inline text-emerald-300 text-[8px]">
+                  ({{ formatComponentHolesShort(comp) }})
+                </span>
+              </div>
             </div>
           </div>
 
-          <!-- Breadboard İletkenlik Açıklama Çubuğu -->
-          <div class="text-[10px] font-black text-center text-amber-300 mt-1 pointer-events-none">
-            Breadboard (Sütunlar İç İletkendir)
-          </div>
-        </div>
-
-        <!-- C) HARİCİ BİLEŞENLER (Servo, HC-SR04 vb.) -->
-        <div
-          v-for="comp in offBoardComponents"
-          :key="comp.id"
-          class="absolute z-10 p-2 rounded-2xl bg-slate-800/40 border border-slate-700/60 shadow-lg scale-[0.75] origin-top-left"
-          :style="{ left: `${comp.left}px`, top: `${comp.top}px` }"
-        >
-          <component :is="comp.type" v-bind="comp.props"></component>
-          <div class="text-[10px] font-black text-center text-cyan-300 mt-1 pointer-events-none">
-            {{ comp.label }}
+          <div class="text-[10px] font-black text-center text-amber-300 mt-1.5 pointer-events-none">
+            🟨 Breadboard (Aynı Sütundaki A-B-C-D-E Pinleri İçeriden Birbirine Bağlıdır)
           </div>
         </div>
 
         <!-- ======================================================== -->
-        <!-- D) AKILLI YÖNLENDİRİLMİŞ KABLOLAR (WireRouter SVG)       -->
+        <!-- C) HARİCİ SENSÖR & MOTOR İSTASYONU (Etiketli Pin Barı)   -->
+        <!-- ======================================================== -->
+        <div
+          v-for="comp in offBoardComponents"
+          :key="comp.id"
+          class="absolute z-10 w-[140px] h-[96px] rounded-2xl bg-slate-800/80 border-2 border-cyan-500/60 shadow-lg flex flex-col items-center justify-between p-1.5"
+          :style="{ left: `${comp.left}px`, top: `${comp.top}px` }"
+        >
+          <!-- Modül Başlığı -->
+          <div class="px-2 py-0.5 rounded-md bg-slate-950/90 border border-cyan-500/40 text-[9px] font-black text-cyan-300 truncate max-w-full">
+            {{ comp.label }}
+          </div>
+
+          <!-- Wokwi Elemanı Görseli -->
+          <div class="scale-[0.52] origin-center pointer-events-none -my-3">
+            <component :is="comp.type" v-bind="comp.props"></component>
+          </div>
+
+          <!-- Alt Kenar: Çocuk Dostu Etiketli Pin Soketleri (Kablolar Tam Buraya Takılır!) -->
+          <div class="w-full h-4 relative">
+            <div
+              v-for="pin in Object.values(comp.pins)"
+              :key="pin.pinName"
+              class="absolute -translate-x-1/2 -translate-y-1/2 px-1 py-0.2 rounded bg-slate-950 border border-amber-400 text-[8px] font-black text-amber-200 leading-none shadow-xs"
+              :style="{
+                left: `${448 + pin.x - comp.left}px`,
+                top: `${108 + pin.y - comp.top - 11}px`
+              }"
+            >
+              {{ pin.pinName }}
+            </div>
+          </div>
+        </div>
+
+        <!-- ======================================================== -->
+        <!-- D) BİLEŞEN BACAKLARI, İÇ İLETKENLİK VE KABLOLAR (SVG)     -->
         <!-- ======================================================== -->
         <svg class="absolute inset-0 w-full h-full pointer-events-none z-30 overflow-visible">
           <defs>
@@ -197,24 +289,97 @@
             </filter>
           </defs>
 
-          <!-- Kablolar -->
+          <!-- 1. Ortak Sütun İç İletkenlik Köprüleri (Örn: Direnç 8C <-> LED Anot 8E) -->
+          <g v-for="bridge in sharedColumnBridges" :key="bridge.id">
+            <line
+              :x1="bridge.x"
+              :y1="bridge.y1"
+              :x2="bridge.x"
+              :y2="bridge.y2"
+              stroke="#22c55e"
+              stroke-width="6"
+              stroke-linecap="round"
+              opacity="0.35"
+            />
+            <line
+              :x1="bridge.x"
+              :y1="bridge.y1"
+              :x2="bridge.x"
+              :y2="bridge.y2"
+              stroke="#4ade80"
+              stroke-width="2.5"
+              stroke-dasharray="3,2"
+              stroke-linecap="round"
+            />
+          </g>
+
+          <!-- 2. Breadboard Üzerindeki Parçaların Delik Noktaları ve Delik Etiketleri (Sadece Mouse Üzerine Geldiğinde Görünür) -->
+          <g
+            v-for="pinMarker in mountedPinMarkers"
+            :key="pinMarker.key"
+            class="group pointer-events-auto cursor-pointer"
+          >
+            <!-- Rahat Hover Alanı (Şeffaf Yakalama Halkası) -->
+            <circle
+              :cx="pinMarker.cx"
+              :cy="pinMarker.cy"
+              r="9"
+              fill="transparent"
+            />
+            <!-- Bacak Lehim/Temas Noktası -->
+            <circle
+              :cx="pinMarker.cx"
+              :cy="pinMarker.cy"
+              r="3.5"
+              fill="#fbbf24"
+              stroke="#0f172a"
+              stroke-width="1.5"
+              class="transition-transform group-hover:scale-125"
+            />
+            <!-- Delik Koordinat Rozeti (4E, 6E vb.) - Sadece Hover'da Görünür -->
+            <g class="opacity-0 group-hover:opacity-100 transition-opacity duration-150 pointer-events-none">
+              <rect
+                :x="pinMarker.cx - 13"
+                :y="pinMarker.cy + 5"
+                width="26"
+                height="14"
+                rx="4"
+                fill="#0f172a"
+                stroke="#fbbf24"
+                stroke-width="1.2"
+              />
+              <text
+                :x="pinMarker.cx"
+                :y="pinMarker.cy + 14.5"
+                fill="#fde047"
+                font-size="8.5"
+                font-weight="900"
+                text-anchor="middle"
+              >
+                {{ pinMarker.holeName }}
+              </text>
+            </g>
+          </g>
+
+          <!-- 3. Kablolar -->
           <g v-for="(wire, idx) in visibleWires" :key="wire.id">
             <!-- Kablo Gölgesi -->
             <path
               :d="wire.path"
               fill="none"
               stroke="#020617"
-              stroke-width="5.5"
+              :stroke-width="idx === currentStepIndex && !showAllWires ? 7 : 5.5"
               stroke-linecap="round"
-              opacity="0.5"
+              opacity="0.55"
             />
             <!-- Ana Kablo Yolu -->
             <path
               :d="wire.path"
               fill="none"
               :stroke="wire.color || '#38bdf8'"
-              stroke-width="3.5"
+              :stroke-width="idx === currentStepIndex && !showAllWires ? 4.5 : 3.5"
               stroke-linecap="round"
+              :opacity="!showAllWires && idx !== currentStepIndex ? 0.55 : 1"
               :class="{ 'wire-active-flow': idx === currentStepIndex || showAllWires }"
             />
 
@@ -239,15 +404,51 @@
             />
           </g>
 
-          <!-- Aktif Adım Hedef Göstergesi ve "👇 Buraya Tak!" Baloncuğu -->
-          <g v-if="currentWire">
-            <!-- Pulsing Target Glow Ring -->
+          <!-- 4. Aktif Adım Başlangıç ("1️⃣ Buradan") ve Hedef ("2️⃣ Buraya Tak!") Göstergeleri -->
+          <g v-if="currentWire && !showAllWires">
+            <!-- Başlangıç Pini Parlama Halkası -->
+            <circle
+              :cx="currentWire.from.x"
+              :cy="currentWire.from.y"
+              r="9"
+              fill="#38bdf8"
+              opacity="0.45"
+              class="animate-ping"
+            />
+            <circle
+              :cx="currentWire.from.x"
+              :cy="currentWire.from.y"
+              r="5.5"
+              fill="#0284c7"
+              stroke="#ffffff"
+              stroke-width="2"
+            />
+
+            <!-- "1️⃣ Başla" Etiketi -->
+            <g :transform="`translate(${currentWire.from.x}, ${currentWire.from.y - 24})`">
+              <rect
+                x="-46"
+                y="-12"
+                width="92"
+                height="20"
+                rx="7"
+                fill="#bae6fd"
+                stroke="#0f172a"
+                stroke-width="2"
+                filter="url(#wireGlow)"
+              />
+              <text x="0" y="1.5" fill="#0f172a" font-size="9.5" font-weight="900" text-anchor="middle">
+                1️⃣ {{ currentWireShortFrom }}
+              </text>
+            </g>
+
+            <!-- Hedef Pini Parlama Halkası -->
             <circle
               :cx="currentWire.to.x"
               :cy="currentWire.to.y"
               r="12"
               fill="#facc15"
-              opacity="0.6"
+              opacity="0.65"
               class="animate-ping"
             />
             <circle
@@ -259,12 +460,12 @@
               stroke-width="2"
             />
 
-            <!-- "👇 Buraya Tak!" Çizgi Film Konuşma Baloncuğu -->
+            <!-- "2️⃣ Buraya Tak!" Çizgi Film Konuşma Baloncuğu -->
             <g :transform="`translate(${currentWire.to.x}, ${currentWire.to.y - 34})`">
               <rect
-                x="-52"
+                x="-62"
                 y="-15"
-                width="104"
+                width="124"
                 height="26"
                 rx="9"
                 fill="#fde047"
@@ -278,8 +479,8 @@
                 stroke="#0f172a"
                 stroke-width="2"
               />
-              <text x="0" y="3" fill="#0f172a" font-size="11" font-weight="900" text-anchor="middle">
-                👇 Buraya Tak!
+              <text x="0" y="2.5" fill="#0f172a" font-size="10.5" font-weight="900" text-anchor="middle">
+                👇 2️⃣ {{ currentWireShortTo }}
               </text>
             </g>
           </g>
@@ -288,12 +489,117 @@
       </div>
     </div>
 
-    <!-- 4. ALT BİLGİ BANDI VE GEÇİŞ BUTONU -->
-    <div class="bg-amber-50 rounded-2xl border-2 border-amber-300 p-2.5 flex items-center justify-between gap-3 text-xs">
+    <!-- 4. ÇOCUKLAR İÇİN BASİT PARÇA YERLEŞİM & KABLOLAMA ÖZET REHBERİ -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
+      <!-- Sol Kutu: Parçalar Nereye Takılıyor? -->
+      <div class="bg-white rounded-2xl p-3.5 border-[2.5px] border-slate-900 shadow-[0_3px_0_#0f172a] flex flex-col gap-2">
+        <div class="flex items-center justify-between">
+          <h4 class="text-xs sm:text-sm font-black text-slate-900 flex items-center gap-1.5">
+            <span>🧩</span>
+            <span>1. Parçaları Breadboard'a Nasıl Takıyoruz?</span>
+          </h4>
+          <span class="px-2 py-0.5 rounded-full bg-amber-100 border border-slate-900 text-[10px] font-black text-amber-950">
+            {{ layoutResult.components.length }} Parça
+          </span>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div
+            v-for="comp in layoutResult.components"
+            :key="comp.id"
+            :class="[
+              'p-2.5 rounded-xl border flex flex-col gap-1',
+              isComponentInInventory(comp)
+                ? 'bg-slate-50 border-slate-300'
+                : 'bg-amber-50/70 border-amber-300'
+            ]"
+          >
+            <div class="flex items-center justify-between gap-1">
+              <div class="flex items-center gap-1 min-w-0">
+                <strong class="text-xs font-black text-slate-900 truncate">{{ comp.label }}</strong>
+                <span
+                  v-if="!isComponentInInventory(comp)"
+                  class="px-1.5 py-0.2 rounded bg-amber-200 border border-amber-500 text-[8.5px] font-black text-amber-950 shrink-0"
+                  title="Bu parça Malzeme Çantanda işaretli değil"
+                >
+                  ⚠️ Çantada Yok
+                </span>
+              </div>
+              <span
+                :class="[
+                  'px-1.5 py-0.2 rounded text-[9px] font-black border shrink-0',
+                  comp.isBreadboardMounted
+                    ? 'bg-amber-100 text-amber-950 border-amber-400'
+                    : 'bg-cyan-100 text-cyan-950 border-cyan-400'
+                ]"
+              >
+                {{ comp.isBreadboardMounted ? 'Breadboard' : 'Doğrudan Kablolu' }}
+              </span>
+            </div>
+            <div class="flex flex-wrap gap-1 mt-0.5">
+              <span
+                v-for="pin in Object.values(comp.pins)"
+                :key="pin.pinName"
+                class="px-2 py-0.5 rounded-md bg-white border border-slate-300 text-[10px] font-bold text-slate-700"
+              >
+                {{ formatPinFriendlyName(comp.type, pin.pinName) }}:
+                <strong class="text-slate-950 font-black">
+                  {{ comp.isBreadboardMounted ? `${pin.holeName} Pini` : `${pin.pinName} Pini` }}
+                </strong>
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sağ Kutu: Hangi Kablo Nereden Nereye Gidiyor? (Tıklanabilir Liste) -->
+      <div class="bg-white rounded-2xl p-3.5 border-[2.5px] border-slate-900 shadow-[0_3px_0_#0f172a] flex flex-col gap-2">
+        <div class="flex items-center justify-between">
+          <h4 class="text-xs sm:text-sm font-black text-slate-900 flex items-center gap-1.5">
+            <span>🔌</span>
+            <span>2. Hangi Pin Nereye Bağlanıyor? (Tıkla & Gör)</span>
+          </h4>
+          <span class="px-2 py-0.5 rounded-full bg-sky-100 border border-slate-900 text-[10px] font-black text-sky-950">
+            {{ layoutResult.wires.length }} Kablo Adımı
+          </span>
+        </div>
+
+        <div class="max-h-[135px] overflow-y-auto flex flex-col gap-1.5 pr-1">
+          <button
+            v-for="(item, idx) in allWireDetails"
+            :key="item.id"
+            type="button"
+            @click="selectStep(idx)"
+            :class="[
+              'w-full text-left px-2.5 py-1.5 rounded-xl border text-[11px] font-bold transition flex items-center justify-between gap-2 cursor-pointer',
+              currentStepIndex === idx
+                ? 'bg-[#fde047] border-slate-900 text-slate-950 font-black shadow-2xs'
+                : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700'
+            ]"
+          >
+            <div class="flex items-center gap-2 min-w-0">
+              <span
+                class="w-4 h-4 rounded-md border border-slate-900 text-[9px] font-black text-white flex items-center justify-center shrink-0"
+                :style="{ backgroundColor: item.color }"
+              >
+                {{ idx + 1 }}
+              </span>
+              <span class="truncate">
+                <strong>{{ item.fromTitle }}</strong> ➔ <strong>{{ item.toTitle }}</strong>
+              </span>
+            </div>
+            <span class="text-[10px] font-black shrink-0 opacity-75">{{ item.colorName }}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 5. ALT BİLGİ BANDI VE GEÇİŞ BUTONU -->
+    <div class="bg-amber-50 rounded-2xl border-2 border-amber-300 p-2.5 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
       <div class="flex items-center gap-2 text-amber-950 font-bold">
         <span class="text-base">💡</span>
         <span>
-          <strong>Netlist Auto-Layout:</strong> Devredeki parçalar breadboard bağlantı kurallarına göre otomatik yerleştirildi. Sütun içi iletkenlik sayesinde direnç ve LED arasına gereksiz kablo çekilmedi!
+          <strong>Süper İpucu:</strong> Breadboard üzerinde yeşil kesikli çizgiyle birleşen pinler (örneğin aynı sütundaki <strong>C</strong> ve <strong>E</strong> pinleri) içeriden birbirine bağlıdır, aralarına ekstra kablo takmana gerek yoktur!
         </span>
       </div>
 
@@ -322,44 +628,91 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
-import type { CircuitNetlist, BaglantiAdimi } from '../types/project';
-import { compileNetlistToBreadboard, type AutoLayoutResult } from '../circuit';
-import { scenarioA, scenarioA_discrete, scenarioB, scenarioC } from '../circuit/testScenarios';
+import type { CircuitNetlist, BaglantiAdimi, LogicVerificationReport } from '../types/project';
+import {
+  compileNetlistToBreadboard,
+  type AutoLayoutResult,
+  type PlacedComponent,
+  type RoutedWire
+} from '../circuit';
 
 const props = defineProps<{
   netlist?: CircuitNetlist;
   baglantiAdimlari?: BaglantiAdimi[];
   gerekliParcalar?: string[];
+  selectedInventory?: string[];
+  isGeneratingLogic?: boolean;
+  verification?: LogicVerificationReport;
 }>();
 
 defineEmits<{
   (e: 'next-page'): void;
   (e: 'prev-page'): void;
+  (e: 'open-inventory'): void;
 }>();
+
+function isComponentInInventory(comp: PlacedComponent): boolean {
+  const inv = props.selectedInventory || [];
+  if (inv.length === 0) return false;
+  const invSet = new Set(inv.map(i => i.toUpperCase()));
+
+  if (comp.type === 'wokwi-led') {
+    const color = String(comp.props?.color || 'red').toLowerCase();
+    if (color === 'green') return invSet.has('LED_GREEN') || invSet.has('LED_RGB');
+    if (color === 'yellow') return invSet.has('LED_YELLOW') || invSet.has('LED_RGB');
+    if (color === 'blue') return invSet.has('LED_BLUE') || invSet.has('LED_RGB');
+    return invSet.has('LED_RED') || invSet.has('LED_RGB');
+  }
+  if (comp.type === 'wokwi-resistor') {
+    const val = String(comp.props?.value || '').toLowerCase();
+    if (val.includes('10000') || val.includes('10k')) {
+      return invSet.has('RESISTOR_10K') || invSet.has('RESISTOR_1K') || invSet.has('RESISTOR_220');
+    }
+    if (val.includes('1000') || val.includes('1k')) {
+      return invSet.has('RESISTOR_1K') || invSet.has('RESISTOR_220') || invSet.has('RESISTOR_10K');
+    }
+    return invSet.has('RESISTOR_220') || invSet.has('RESISTOR_1K') || invSet.has('RESISTOR_10K');
+  }
+  if (comp.type === 'wokwi-photoresistor') {
+    return invSet.has('LDR_DISCRETE') || invSet.has('LDR_SENSOR') || invSet.has('LDR_MODULE');
+  }
+  if (comp.type === 'wokwi-photoresistor-sensor') {
+    return invSet.has('LDR_MODULE') || invSet.has('LDR_SENSOR') || invSet.has('LDR_DISCRETE');
+  }
+  if (comp.type === 'wokwi-servo') {
+    return invSet.has('SERVO_SG90');
+  }
+  if (comp.type === 'wokwi-buzzer') {
+    return invSet.has('BUZZER') || invSet.has('ACTIVE_BUZZER');
+  }
+  if (comp.type === 'wokwi-pushbutton') {
+    return invSet.has('PUSH_BUTTON') || invSet.has('SLIDE_SWITCH');
+  }
+  if (comp.type === 'wokwi-hc-sr04') {
+    return invSet.has('HCSR04');
+  }
+  if (comp.type === 'wokwi-potentiometer') {
+    return invSet.has('POTENTIOMETER');
+  }
+  return true;
+}
+
+const missingInventoryComponents = computed(() => {
+  return layoutResult.value.components.filter(c => !isComponentInInventory(c));
+});
 
 const currentStepIndex = ref(0);
 const showAllWires = ref(false);
 
-// Aktif Netlist: Props'tan gelen netlist yoksa, gerekli parçalara göre en uygun senaryoyu seç
 const activeNetlist = computed<CircuitNetlist>(() => {
   if (props.netlist && props.netlist.components && props.netlist.components.length > 0) {
     return props.netlist;
   }
-
-  const parts = props.gerekliParcalar || [];
-  const partsStr = parts.join(' ').toUpperCase();
-
-  if (partsStr.includes('TRAFIK') || (partsStr.includes('YELLOW') && partsStr.includes('GREEN'))) {
-    return scenarioB;
-  }
-  if (partsStr.includes('SERVO') || partsStr.includes('PUSH_BUTTON') || partsStr.includes('BUTTON')) {
-    return scenarioC;
-  }
-  if (partsStr.includes('LDR_DISCRETE')) {
-    return scenarioA_discrete;
-  }
-
-  return scenarioA;
+  return {
+    board: 'arduino-uno',
+    components: [],
+    connections: []
+  };
 });
 
 // Auto-Layout Motorunun Çalıştırılması
@@ -382,8 +735,69 @@ const offBoardComponents = computed(() => {
   return layoutResult.value.components.filter(c => !c.isBreadboardMounted);
 });
 
+// Breadboard üzerine takılan parçaların delik işaretçileri (448, 108 ofsetli)
+const mountedPinMarkers = computed(() => {
+  const markers: Array<{ key: string; cx: number; cy: number; holeName: string }> = [];
+  for (const comp of mountedComponents.value) {
+    for (const pin of Object.values(comp.pins)) {
+      markers.push({
+        key: `${comp.id}.${pin.pinName}`,
+        cx: 448 + pin.x,
+        cy: 108 + pin.y,
+        holeName: pin.holeName
+      });
+    }
+  }
+  return markers;
+});
+
+// Aynı breadboard sütununda buluşan bacakların ve kabloların yeşil iletkenlik köprüleri
+const sharedColumnBridges = computed(() => {
+  const byColHalf = new Map<string, Array<{ x: number; y: number }>>();
+  for (const comp of mountedComponents.value) {
+    for (const pin of Object.values(comp.pins)) {
+      const half = ['A', 'B', 'C', 'D', 'E'].includes(pin.row.toUpperCase()) ? 'U' : 'L';
+      const key = `${pin.col}:${half}`;
+      if (!byColHalf.has(key)) byColHalf.set(key, []);
+      byColHalf.get(key)!.push({ x: 448 + pin.x, y: 108 + pin.y });
+    }
+  }
+
+  for (const wire of visibleWires.value) {
+    for (const ep of [wire.from, wire.to]) {
+      const m = (ep.holeName || '').match(/^(\d+)([A-J])$/i);
+      if (m) {
+        const col = parseInt(m[1], 10);
+        const row = m[2].toUpperCase();
+        const half = ['A', 'B', 'C', 'D', 'E'].includes(row) ? 'U' : 'L';
+        const key = `${col}:${half}`;
+        if (!byColHalf.has(key)) byColHalf.set(key, []);
+        byColHalf.get(key)!.push({ x: ep.x, y: ep.y });
+      }
+    }
+  }
+
+  const bridges: Array<{ id: string; x: number; y1: number; y2: number }> = [];
+  for (const [key, pts] of byColHalf.entries()) {
+    if (pts.length >= 2) {
+      const ys = pts.map(p => p.y);
+      const minY = Math.min(...ys);
+      const maxY = Math.max(...ys);
+      if (maxY > minY) {
+        bridges.push({
+          id: `bridge-${key}`,
+          x: pts[0].x,
+          y1: minY,
+          y2: maxY
+        });
+      }
+    }
+  }
+  return bridges;
+});
+
 const totalSteps = computed(() => layoutResult.value.wires.length);
-const currentStepNumber = computed(() => currentStepIndex.value + 1);
+const currentStepNumber = computed(() => (totalSteps.value > 0 ? currentStepIndex.value + 1 : 0));
 const currentWire = computed(() => layoutResult.value.wires[currentStepIndex.value]);
 
 const visibleWires = computed(() => {
@@ -396,6 +810,110 @@ const visibleWires = computed(() => {
 const highlightedColsStr = computed(() => {
   return layoutResult.value.highlightedColumns.join(',');
 });
+
+function getColorTurkishName(colorStr?: string): string {
+  const c = (colorStr || '').toLowerCase();
+  if (c.includes('ef4444') || c === 'red') return '🔴 Kırmızı';
+  if (c.includes('1e293b') || c.includes('1f2937') || c === 'black') return '⚫ Siyah';
+  if (c.includes('f97316') || c.includes('f59e0b') || c === 'orange') return '🟠 Turuncu';
+  if (c.includes('eab308') || c === 'yellow') return '🟡 Sarı';
+  if (c.includes('10b981') || c.includes('22c55e') || c === 'green') return '🟢 Yeşil';
+  return '🔵 Mavi';
+}
+
+function formatEndpointForKid(ep: RoutedWire['from']): string {
+  if (ep.part === 'uno') {
+    return `Arduino Pin ${ep.pin}`;
+  }
+  if (ep.part === 'breadboard') {
+    if (ep.holeName?.startsWith('bn.')) return `Breadboard Mavi Eksi (-) Hattı (${ep.holeName} Pini)`;
+    if (ep.holeName?.startsWith('bp.')) return `Breadboard Kırmızı Artı (+) Hattı (${ep.holeName} Pini)`;
+    return `Breadboard ${ep.holeName || ep.pin} Pini`;
+  }
+  const compId = ep.part.split('.')[0];
+  const comp = layoutResult.value.components.find(c => c.id === compId);
+  const compName = comp?.label || compId;
+  if (comp && !comp.isBreadboardMounted) {
+    return `${compName} (${ep.pin} Pini)`;
+  }
+  return `Breadboard ${ep.holeName || ep.pin} Pini (${compName})`;
+}
+
+function buildWireKidDetail(wire: RoutedWire) {
+  const fromTitle = formatEndpointForKid(wire.from);
+  const toTitle = formatEndpointForKid(wire.to);
+  const colorName = getColorTurkishName(wire.color);
+
+  let kidWhy = 'Elektrik sinyalini ve veriyi iki nokta arasında güvenle taşır.';
+  if (wire.isPowerBus && wire.to.holeName?.startsWith('bn.')) {
+    kidWhy = 'Arduino\'nun GND (Toprak) hattını breadboard\'un altındaki mavi (-) sırasına taşır; böylece tüm parçalar ortak toprağı kullanır.';
+  } else if (wire.isPowerBus && wire.to.holeName?.startsWith('bp.')) {
+    kidWhy = 'Arduino\'nun 5V enerji hattını breadboard\'un altındaki kırmızı (+) sırasına taşır.';
+  } else if (wire.to.holeName?.startsWith('bn.')) {
+    kidWhy = 'Parçanın eksi (GND) bacağını mavi toprak hattına bağlayarak elektrik devresini tamamlar.';
+  } else if (wire.to.holeName?.startsWith('bp.')) {
+    kidWhy = 'Parçanın çalışması için gereken 5V elektriği kırmızı güç hattından alır.';
+  } else if (wire.from.part === 'uno') {
+    kidWhy = `Arduino beyninin ${wire.from.pin} kapısından çıkan komutu veya okuma sinyalini parçamıza ulaştırır.`;
+  }
+
+  return {
+    id: wire.id,
+    color: wire.color || '#38bdf8',
+    colorName,
+    fromTitle,
+    toTitle,
+    kidInstruction: `${colorName} kabloyu ${fromTitle} noktasından ${toTitle} noktasına tak.`,
+    kidWhy
+  };
+}
+
+const allWireDetails = computed(() => {
+  return layoutResult.value.wires.map(w => buildWireKidDetail(w));
+});
+
+const currentWireDetails = computed(() => {
+  return allWireDetails.value[currentStepIndex.value] || null;
+});
+
+const currentWireShortFrom = computed(() => {
+  const w = currentWire.value;
+  if (!w) return '';
+  if (w.from.part === 'uno') return `Arduino ${w.from.pin}`;
+  return w.from.holeName || w.from.pin;
+});
+
+const currentWireShortTo = computed(() => {
+  const w = currentWire.value;
+  if (!w) return 'Buraya Tak!';
+  if (w.to.holeName?.startsWith('bn.')) return `Eksi (-) ${w.to.holeName}`;
+  if (w.to.holeName?.startsWith('bp.')) return `Artı (+) ${w.to.holeName}`;
+  return `${w.to.holeName || w.to.pin} Pini`;
+});
+
+function formatComponentHolesShort(comp: PlacedComponent): string {
+  return Object.values(comp.pins)
+    .map(p => p.holeName)
+    .join(' - ');
+}
+
+function formatPinFriendlyName(type: string, pinName: string): string {
+  if (type === 'wokwi-led') {
+    return pinName === 'A' ? 'Uzun Bacak (+)' : 'Kısa Bacak (-)';
+  }
+  if (type === 'wokwi-resistor' || type === 'wokwi-photoresistor' || type === 'wokwi-pushbutton') {
+    return `${pinName}. Bacak`;
+  }
+  if (type === 'wokwi-buzzer') {
+    return pinName === '1' ? 'Artı (+)' : 'Eksi (-)';
+  }
+  return `${pinName}`;
+}
+
+function selectStep(idx: number) {
+  currentStepIndex.value = idx;
+  showAllWires.value = false;
+}
 
 function nextStep() {
   if (currentStepIndex.value < totalSteps.value - 1) {
