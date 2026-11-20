@@ -277,24 +277,30 @@ export class WokwiWaterSensorElement extends WokwiProbeSensorElement {
   }
 }
 
-// Web Component Kayıtları
-const CUSTOM_ELEMENTS: Array<[string, CustomElementConstructor]> = [
-  ['wokwi-hc-05', WokwiHC05Element],
-  ['wokwi-hc05', WokwiHC05Element],
-  ['wokwi-hc-06', WokwiHC06Element],
-  ['wokwi-hc06', WokwiHC06Element],
-  ['wokwi-l293d', WokwiL293DElement],
-  ['wokwi-l298n', WokwiL298NElement],
-  ['wokwi-dc-motor', WokwiDCMotorElement],
-  ['wokwi-dcmotor', WokwiDCMotorElement],
-  ['wokwi-relay-module', WokwiRelayModuleElement],
-  ['wokwi-soil-moisture-sensor', WokwiSoilMoistureElement],
-  ['wokwi-rain-sensor', WokwiRainSensorElement],
-  ['wokwi-water-sensor', WokwiWaterSensorElement]
+// Web Component Kayıtları (Her etiket için ayrı sınıf türetilir - DOM kuralı)
+const CUSTOM_ELEMENTS: Array<[string, () => CustomElementConstructor]> = [
+  ['wokwi-hc-05', () => class extends WokwiHC05Element {}],
+  ['wokwi-hc05', () => class extends WokwiHC05Element {}],
+  ['wokwi-hc-06', () => class extends WokwiHC06Element {}],
+  ['wokwi-hc06', () => class extends WokwiHC06Element {}],
+  ['wokwi-l293d', () => class extends WokwiL293DElement {}],
+  ['wokwi-l298n', () => class extends WokwiL298NElement {}],
+  ['wokwi-dc-motor', () => class extends WokwiDCMotorElement {}],
+  ['wokwi-dcmotor', () => class extends WokwiDCMotorElement {}],
+  ['wokwi-relay-module', () => class extends WokwiRelayModuleElement {}],
+  ['wokwi-soil-moisture-sensor', () => class extends WokwiSoilMoistureElement {}],
+  ['wokwi-rain-sensor', () => class extends WokwiRainSensorElement {}],
+  ['wokwi-water-sensor', () => class extends WokwiWaterSensorElement {}]
 ];
 
-for (const [tag, ctor] of CUSTOM_ELEMENTS) {
-  if (!customElements.get(tag)) {
-    customElements.define(tag, ctor);
+for (const [tag, getCtor] of CUSTOM_ELEMENTS) {
+  if (typeof window !== 'undefined' && 'customElements' in window) {
+    if (!customElements.get(tag)) {
+      try {
+        customElements.define(tag, getCtor());
+      } catch (e) {
+        // HMR esnasında tekrar register edilmesini engelle
+      }
+    }
   }
 }
