@@ -37,6 +37,7 @@ export interface AllocatedPin {
   holeName: string; // e.g. "5E", "6C", "bn.5"
   x: number;        // Relative to breadboard (px)
   y: number;        // Relative to breadboard (px)
+  side?: 'top' | 'bottom' | 'left' | 'right'; // Off-board pin çıkışı yönü
 }
 
 export interface PlacedComponent {
@@ -49,6 +50,11 @@ export interface PlacedComponent {
   top: number;      // px
   width?: number;
   height?: number;
+  elementOffsetX?: number;
+  elementOffsetY?: number;
+  elementScale?: number;
+  elementNaturalWidth?: number;
+  elementNaturalHeight?: number;
   labelX: number;
   labelY: number;
   startCol: number;

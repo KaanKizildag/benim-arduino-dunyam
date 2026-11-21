@@ -13,6 +13,7 @@ import {
 } from './validateCircuit';
 
 export * from './types';
+export * from './moduleGeometry';
 export * from './normalizeNetlist';
 export * from './BreadboardAllocator';
 export * from './WireRouter';

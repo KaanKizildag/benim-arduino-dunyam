@@ -234,7 +234,7 @@ export class WireRouter {
             },
             color: net.color || '#10b981',
             laneIndex: lane,
-            path: this.buildHighwayPath(fromCoords, freeTarget, 'bottom', lane),
+            path: this.buildHighwayPath(fromCoords, freeTarget, 'bottom', lane, offPin.side),
             isPowerBus: false,
             description: `${offLabel} (${offPin.pinName}) → ${freeTarget.holeName} pini (${targetGroup.label})`
           });
@@ -248,6 +248,7 @@ export class WireRouter {
           const toCoords = this.getPinCanvasPos(pinB);
           const labelA = compLabelMap.get(pinA.componentId) || pinA.componentId;
           const labelB = compLabelMap.get(pinB.componentId) || pinB.componentId;
+          const lane = bottomLaneIndex++;
 
           wires.push({
             id: `wire-${wireCounter++}`,
@@ -264,8 +265,8 @@ export class WireRouter {
               ...toCoords
             },
             color: net.color || '#10b981',
-            laneIndex: topLaneIndex++,
-            path: this.buildLocalJumperPath(fromCoords, toCoords, 'up'),
+            laneIndex: lane,
+            path: this.buildHighwayPath(fromCoords, toCoords, 'bottom', lane, pinA.side, pinB.side),
             isPowerBus: false,
             description: `${labelA} (${pinA.pinName}) → ${labelB} (${pinB.pinName})`
           });
@@ -306,7 +307,7 @@ export class WireRouter {
           const targetPin = offBoardPins[0].pin;
           const offPos = this.getPinCanvasPos(targetPin);
           const offLabel = compLabelMap.get(targetPin.componentId) || targetPin.componentId;
-          const path = this.buildHighwayPath(unoPos, offPos, side, lane);
+          const path = this.buildHighwayPath(unoPos, offPos, side, lane, undefined, targetPin.side);
 
           wires.push({
             id: `wire-${wireCounter++}`,
@@ -389,7 +390,7 @@ export class WireRouter {
             },
             color: net.color || defaultColor,
             laneIndex: lane,
-            path: this.buildHighwayPath(fromCoords, toCoords, 'bottom', lane),
+            path: this.buildHighwayPath(fromCoords, toCoords, 'bottom', lane, pin.side),
             isPowerBus: false,
             description: `${offLabel} (${pin.pinName} pini) → ${railTitle} (${railHole} pini)`
           });
@@ -512,38 +513,64 @@ export class WireRouter {
 
   /**
    * Kademeli Şerit (Highway Lane) Yolu: Kablolar üst üste binmez.
+   * Off-board pinlerin kenar yönü (left/right/top/bottom) varsa kısa bir stub ile o kenardan çıkar.
    */
   private buildHighwayPath(
     from: { x: number; y: number },
     to: { x: number; y: number },
     side: 'top' | 'bottom',
-    laneIndex: number
+    laneIndex: number,
+    fromSide?: 'top' | 'bottom' | 'left' | 'right',
+    toSide?: 'top' | 'bottom' | 'left' | 'right'
   ): string {
     const laneOffset = 18 + laneIndex * 12;
+    const stub = 14;
+
+    const fromExit = {
+      x: from.x + (fromSide === 'left' ? -stub : fromSide === 'right' ? stub : 0),
+      y: from.y + (fromSide === 'top' ? -stub : fromSide === 'bottom' ? stub : 0)
+    };
+    const toEntry = {
+      x: to.x + (toSide === 'left' ? -stub : toSide === 'right' ? stub : 0),
+      y: to.y + (toSide === 'top' ? -stub : toSide === 'bottom' ? stub : 0)
+    };
+
+    const hasFromStub = fromExit.x !== from.x || fromExit.y !== from.y;
+    const hasToStub = toEntry.x !== to.x || toEntry.y !== to.y;
 
     if (side === 'top') {
-      const channelY = Math.min(from.y, to.y) - laneOffset;
+      const channelY = Math.min(from.y, to.y, fromExit.y, toEntry.y) - laneOffset;
       const r = 8;
-      const dirX = to.x >= from.x ? 1 : -1;
+      const dirX = toEntry.x >= fromExit.x ? 1 : -1;
+      const dx = Math.abs(toEntry.x - fromExit.x);
+      const effR = Math.min(r, dx / 2);
+      const prefix = hasFromStub ? `M ${from.x} ${from.y} L ${fromExit.x} ${fromExit.y} ` : `M ${from.x} ${from.y} `;
+      const suffix = hasToStub ? ` L ${to.x} ${to.y}` : '';
       return (
-        `M ${from.x} ${from.y} ` +
-        `L ${from.x} ${channelY + r} ` +
-        `Q ${from.x} ${channelY} ${from.x + dirX * r} ${channelY} ` +
-        `L ${to.x - dirX * r} ${channelY} ` +
-        `Q ${to.x} ${channelY} ${to.x} ${channelY + r} ` +
-        `L ${to.x} ${to.y}`
+        prefix +
+        `L ${fromExit.x} ${channelY + effR} ` +
+        `Q ${fromExit.x} ${channelY} ${fromExit.x + dirX * effR} ${channelY} ` +
+        `L ${toEntry.x - dirX * effR} ${channelY} ` +
+        `Q ${toEntry.x} ${channelY} ${toEntry.x} ${channelY + effR} ` +
+        `L ${toEntry.x} ${toEntry.y}` +
+        suffix
       );
     } else {
-      const channelY = Math.max(from.y, to.y) + laneOffset;
+      const channelY = Math.max(from.y, to.y, fromExit.y, toEntry.y) + laneOffset;
       const r = 8;
-      const dirX = to.x >= from.x ? 1 : -1;
+      const dirX = toEntry.x >= fromExit.x ? 1 : -1;
+      const dx = Math.abs(toEntry.x - fromExit.x);
+      const effR = Math.min(r, dx / 2);
+      const prefix = hasFromStub ? `M ${from.x} ${from.y} L ${fromExit.x} ${fromExit.y} ` : `M ${from.x} ${from.y} `;
+      const suffix = hasToStub ? ` L ${to.x} ${to.y}` : '';
       return (
-        `M ${from.x} ${from.y} ` +
-        `L ${from.x} ${channelY - r} ` +
-        `Q ${from.x} ${channelY} ${from.x + dirX * r} ${channelY} ` +
-        `L ${to.x - dirX * r} ${channelY} ` +
-        `Q ${to.x} ${channelY} ${to.x} ${channelY - r} ` +
-        `L ${to.x} ${to.y}`
+        prefix +
+        `L ${fromExit.x} ${channelY - effR} ` +
+        `Q ${fromExit.x} ${channelY} ${fromExit.x + dirX * effR} ${channelY} ` +
+        `L ${toEntry.x - dirX * effR} ${channelY} ` +
+        `Q ${toEntry.x} ${channelY} ${toEntry.x} ${channelY - effR} ` +
+        `L ${toEntry.x} ${toEntry.y}` +
+        suffix
       );
     }
   }

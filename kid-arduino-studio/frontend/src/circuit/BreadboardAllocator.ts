@@ -16,6 +16,10 @@ import type {
   AllocatedPin,
   ElectricalNet
 } from './types';
+import {
+  computeOffBoardCardMetrics,
+  resolveModulePinInfo
+} from './moduleGeometry';
 
 export const BREADBOARD_GEOMETRY = {
   startX: 38,
@@ -118,7 +122,7 @@ export const OFF_BOARD_PIN_DEFS: Record<string, { label: string; pins: string[] 
   'wokwi-flame-sensor': { label: 'Alev Sensörü', pins: ['VCC', 'GND', 'DO', 'AO'] },
   'wokwi-small-sound-sensor': { label: 'Ses Sensörü', pins: ['VCC', 'GND', 'DO', 'AO'] },
   'wokwi-ir-receiver': { label: 'IR Kızılötesi Alıcı', pins: ['OUT', 'GND', 'VCC'] },
-  'wokwi-ntc-temperature-sensor': { label: 'NTC Sıcaklık Sensörü', pins: ['1', '2'] }
+  'wokwi-ntc-temperature-sensor': { label: 'NTC Sıcaklık Sensörü', pins: ['VCC', 'GND', 'OUT'] }
 };
 
 export class BreadboardAllocator {
@@ -688,13 +692,13 @@ export class BreadboardAllocator {
   /**
    * Modül / Harici Bileşenler (Bluetooth, Motor Sürücü, DC Motor, Servo, Sensörler vs.)
    * Sağdaki modül dock'unda düzenli olarak sıralanır.
-   * Her modülün alt kenarında pin soketleri (VCC, GND, IN, OUT vs.) yer alır.
+   * Pin soket koordinatları modülün gerçek element pinInfo verisinden deterministik hesaplanır.
    */
   private allocateOffBoardComponent(comp: NetlistComponent): void {
     const colIndex = Math.floor(this.offBoardIndex / 4);
     const rowIndex = this.offBoardIndex % 4;
-    const dockLeft = 815 + colIndex * 165;
-    const dockTop = 76 + rowIndex * 128;
+    const dockLeft = 815 + colIndex * 185;
+    const dockTop = 76 + rowIndex * 140;
     this.offBoardIndex++;
 
     const def = OFF_BOARD_PIN_DEFS[comp.type] || {
@@ -702,47 +706,76 @@ export class BreadboardAllocator {
       pins: ['1', '2']
     };
 
+    const metrics = computeOffBoardCardMetrics(comp.type);
     const pinNames = [...def.pins];
     const totalPins = pinNames.length;
-    const pitch = totalPins > 8 ? 14 : totalPins > 5 ? 18 : totalPins > 3 ? 22 : 28;
-    const totalSpan = (totalPins - 1) * pitch;
-    const cardWidth = Math.max(140, totalSpan + 24);
-    const cardHeight = 96;
-    const startOffsetX = Math.round((cardWidth - totalSpan) / 2);
 
-    const getSocketCoord = (pinIndex: number) => {
-      const canvasX = dockLeft + startOffsetX + pinIndex * pitch;
-      const canvasY = dockTop + 88;
-      return {
-        x: canvasX - 448,
-        y: canvasY - 108
-      };
-    };
+    const cardWidth = metrics ? metrics.cardWidth : Math.max(140, (totalPins - 1) * 22 + 24);
+    const cardHeight = metrics ? metrics.cardHeight : 96;
+    const elementOffsetX = metrics ? metrics.elementOffsetX : 14;
+    const elementOffsetY = metrics ? metrics.elementOffsetY : 28;
+    const elementScale = metrics ? metrics.elementScale : 0.7;
+    const elementNaturalWidth = metrics ? metrics.elementNaturalWidth : 80;
+    const elementNaturalHeight = metrics ? metrics.elementNaturalHeight : 78;
+
+    const fallbackPitch = totalPins > 8 ? 14 : totalPins > 5 ? 18 : totalPins > 3 ? 22 : 28;
+    const fallbackSpan = (totalPins - 1) * fallbackPitch;
+    const fallbackStartX = Math.round((cardWidth - fallbackSpan) / 2);
 
     const pins: Record<string, AllocatedPin> = {};
     for (let i = 0; i < pinNames.length; i++) {
       const pName = pinNames[i];
-      const coord = getSocketCoord(i);
+      const pinGeo = resolveModulePinInfo(comp.type, pName);
+
+      let canvasX: number;
+      let canvasY: number;
+      let side: 'top' | 'bottom' | 'left' | 'right' = 'bottom';
+
+      if (pinGeo && metrics) {
+        canvasX = dockLeft + elementOffsetX + pinGeo.x * elementScale;
+        canvasY = dockTop + elementOffsetY + pinGeo.y * elementScale;
+        side = pinGeo.side;
+      } else {
+        console.warn(
+          `[BreadboardAllocator] '${comp.type}' için '${pName}' pin geometrisi bulunamadı, kart altına fallback uygulanıyor.`
+        );
+        canvasX = dockLeft + fallbackStartX + i * fallbackPitch;
+        canvasY = dockTop + cardHeight - 8;
+        side = 'bottom';
+      }
+
       pins[pName] = {
         componentId: comp.id,
         pinName: pName,
         col: 0,
         row: 'offboard',
         holeName: `${comp.id}.${pName}`,
-        ...coord
+        x: canvasX - 448,
+        y: canvasY - 108,
+        side
       };
     }
+
+    const mergedProps = {
+      ...(metrics?.spec.defaultProps || {}),
+      ...(comp.props || {})
+    };
 
     this.placedComponents.push({
       id: comp.id,
       type: comp.type,
-      props: comp.props || {},
+      props: mergedProps,
       label: comp.label || def.label,
       isBreadboardMounted: false,
       left: dockLeft,
       top: dockTop,
       width: cardWidth,
       height: cardHeight,
+      elementOffsetX,
+      elementOffsetY,
+      elementScale,
+      elementNaturalWidth,
+      elementNaturalHeight,
       labelX: dockLeft + Math.round(cardWidth / 2),
       labelY: -20,
       startCol: 0,
@@ -774,6 +807,9 @@ export class BreadboardAllocator {
     } else if (comp.type === 'wokwi-hc-05' || comp.type === 'wokwi-hc-06') {
       if (pins['TXD']) this.allocatedPins[`${comp.id}.TX`] = pins['TXD'];
       if (pins['RXD']) this.allocatedPins[`${comp.id}.RX`] = pins['RXD'];
+    } else if (comp.type === 'wokwi-ntc-temperature-sensor') {
+      if (pins['OUT']) this.allocatedPins[`${comp.id}.1`] = pins['OUT'];
+      if (pins['GND']) this.allocatedPins[`${comp.id}.2`] = pins['GND'];
     }
   }
 }

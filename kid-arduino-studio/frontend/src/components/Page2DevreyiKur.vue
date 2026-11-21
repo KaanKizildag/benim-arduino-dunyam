@@ -245,37 +245,52 @@
         </div>
 
         <!-- ======================================================== -->
-        <!-- C) HARİCİ SENSÖR & MOTOR İSTASYONU (Etiketli Pin Barı)   -->
+        <!-- C) HARİCİ SENSÖR & MOTOR İSTASYONU (Gerçek pinInfo)      -->
         <!-- ======================================================== -->
         <div
           v-for="comp in offBoardComponents"
           :key="comp.id"
-          class="absolute z-10 h-[96px] rounded-2xl bg-slate-800/80 border-2 border-cyan-500/60 shadow-lg flex flex-col items-center justify-between p-1.5"
-          :style="{ left: `${comp.left}px`, top: `${comp.top}px`, width: `${comp.width || 140}px` }"
+          class="absolute z-10 rounded-2xl bg-slate-800/80 border-2 border-cyan-500/60 shadow-lg"
+          :style="{
+            left: `${comp.left}px`,
+            top: `${comp.top}px`,
+            width: `${comp.width || 140}px`,
+            height: `${comp.height || 96}px`
+          }"
         >
           <!-- Modül Başlığı -->
-          <div class="px-2 py-0.5 rounded-md bg-slate-950/90 border border-cyan-500/40 text-[9px] font-black text-cyan-300 truncate max-w-full">
-            {{ comp.label }}
+          <div class="absolute top-1 left-1.5 right-1.5 flex justify-center pointer-events-none">
+            <span class="px-2 py-0.5 rounded-md bg-slate-950/90 border border-cyan-500/40 text-[9px] font-black text-cyan-300 truncate max-w-full">
+              {{ comp.label }}
+            </span>
           </div>
 
-          <!-- Wokwi Elemanı Görseli -->
-          <div class="scale-[0.52] origin-center pointer-events-none -my-3">
+          <!-- Wokwi Elemanı Görseli (Deterministik top-left origin + scale) -->
+          <div
+            class="absolute pointer-events-none"
+            :style="{
+              left: `${comp.elementOffsetX ?? 14}px`,
+              top: `${comp.elementOffsetY ?? 28}px`,
+              width: `${comp.elementNaturalWidth ?? 80}px`,
+              height: `${comp.elementNaturalHeight ?? 78}px`,
+              transform: `scale(${comp.elementScale ?? 0.7})`,
+              transformOrigin: 'top left'
+            }"
+          >
             <component :is="comp.type" v-bind="comp.props"></component>
           </div>
+        </div>
 
-          <!-- Alt Kenar: Çocuk Dostu Etiketli Pin Soketleri (Kablolar Tam Buraya Takılır!) -->
-          <div class="w-full h-4 relative">
-            <div
-              v-for="pin in Object.values(comp.pins)"
-              :key="pin.pinName"
-              class="absolute -translate-x-1/2 -translate-y-1/2 px-1 py-0.2 rounded bg-slate-950 border border-amber-400 text-[8px] font-black text-amber-200 leading-none shadow-xs"
-              :style="{
-                left: `${448 + pin.x - comp.left}px`,
-                top: `${108 + pin.y - comp.top - 11}px`
-              }"
-            >
-              {{ pin.pinName }}
-            </div>
+        <!-- Off-Board Pin Etiketleri Overlay (Doğrudan gerçek soket koordinatlarına hizalı) -->
+        <div class="absolute inset-0 pointer-events-none z-25">
+          <div
+            v-for="lbl in offBoardPinLabels"
+            :key="lbl.key"
+            class="absolute px-1 py-0.2 rounded bg-slate-950/95 border border-amber-400/90 text-[7.5px] font-black text-amber-200 leading-none shadow-xs whitespace-nowrap"
+            :class="lbl.posClass"
+            :style="{ left: `${lbl.x}px`, top: `${lbl.y}px` }"
+          >
+            {{ lbl.pinName }}
           </div>
         </div>
 
@@ -730,6 +745,51 @@ const mountedComponents = computed(() => {
 
 const offBoardComponents = computed(() => {
   return layoutResult.value.components.filter(c => !c.isBreadboardMounted);
+});
+
+const offBoardPinLabels = computed(() => {
+  const labels: Array<{ key: string; pinName: string; x: number; y: number; posClass: string }> = [];
+  for (const comp of offBoardComponents.value) {
+    for (const pin of Object.values(comp.pins)) {
+      const cx = 448 + pin.x;
+      const cy = 108 + pin.y;
+      const side = pin.side || 'bottom';
+      if (side === 'left') {
+        labels.push({
+          key: `${comp.id}.${pin.pinName}`,
+          pinName: pin.pinName,
+          x: cx - 5,
+          y: cy,
+          posClass: '-translate-x-full -translate-y-1/2'
+        });
+      } else if (side === 'right') {
+        labels.push({
+          key: `${comp.id}.${pin.pinName}`,
+          pinName: pin.pinName,
+          x: cx + 5,
+          y: cy,
+          posClass: '-translate-y-1/2'
+        });
+      } else if (side === 'top') {
+        labels.push({
+          key: `${comp.id}.${pin.pinName}`,
+          pinName: pin.pinName,
+          x: cx,
+          y: cy - 6,
+          posClass: '-translate-x-1/2 -translate-y-full'
+        });
+      } else {
+        labels.push({
+          key: `${comp.id}.${pin.pinName}`,
+          pinName: pin.pinName,
+          x: cx,
+          y: cy + 5,
+          posClass: '-translate-x-1/2'
+        });
+      }
+    }
+  }
+  return labels;
 });
 
 // Breadboard üzerine takılan parçaların delik işaretçileri (448, 108 ofsetli)

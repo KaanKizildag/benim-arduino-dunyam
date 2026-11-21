@@ -150,6 +150,8 @@ export interface ModelOption {
   badge: string;
 }
 
+export type ModelInfo = ModelOption;
+
 export interface ModelsResponse {
   ollama_active: boolean;
   default_model: string;

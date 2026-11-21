@@ -11,6 +11,7 @@
 import { compileNetlistToBreadboard } from './index';
 import { ALL_TEST_SCENARIOS } from './testScenarios';
 import { getStripKey } from './BreadboardAllocator';
+import { resolveModulePinInfo } from './moduleGeometry';
 
 function assertCondition(cond: boolean, msg: string): void {
   if (!cond) {
@@ -91,6 +92,40 @@ export function verifyAllScenarios(): void {
           `${name}: Off-board modül '${comp.id}' başka bir modülle aynı koordinata (${posKey}) binmiş!`
         );
         offBoardPositions.add(posKey);
+
+        // Bug 2 doğrulaması: Her soket koordinatı elementOrigin + pinInfo * scale ile ±1px eşleşmeli ve kart içinde olmalı
+        const cardW = comp.width || 0;
+        const cardH = comp.height || 0;
+        const offX = comp.elementOffsetX ?? 0;
+        const offY = comp.elementOffsetY ?? 0;
+        const scale = comp.elementScale ?? 1;
+
+        for (const [pinName, pin] of Object.entries(comp.pins)) {
+          const canvasX = 448 + pin.x;
+          const canvasY = 108 + pin.y;
+
+          assertCondition(
+            canvasX >= comp.left - 1 &&
+              canvasX <= comp.left + cardW + 1 &&
+              canvasY >= comp.top - 1 &&
+              canvasY <= comp.top + cardH + 1,
+            `${name}: '${comp.id}.${pinName}' soketi (${canvasX.toFixed(1)},${canvasY.toFixed(1)}) kart sınırları [${comp.left}..${comp.left + cardW}, ${comp.top}..${comp.top + cardH}] dışında!`
+          );
+
+          const pinGeo = resolveModulePinInfo(comp.type, pinName);
+          assertCondition(
+            Boolean(pinGeo),
+            `${name}: '${comp.type}' için '${pinName}' pinInfo bulunamadı!`
+          );
+          if (pinGeo) {
+            const expectedX = comp.left + offX + pinGeo.x * scale;
+            const expectedY = comp.top + offY + pinGeo.y * scale;
+            assertCondition(
+              Math.abs(canvasX - expectedX) <= 1 && Math.abs(canvasY - expectedY) <= 1,
+              `${name}: '${comp.id}.${pinName}' soketi (${canvasX.toFixed(1)},${canvasY.toFixed(1)}) beklenen pinInfo (${expectedX.toFixed(1)},${expectedY.toFixed(1)}) ile ±1px içinde değil!`
+            );
+          }
+        }
       }
     }
 
