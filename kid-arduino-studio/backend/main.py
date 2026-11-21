@@ -49,6 +49,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+DEFAULT_OLLAMA_URL = os.getenv("OLLAMA_API_BASE") or os.getenv("OLLAMA_URL") or "http://127.0.0.1:11434"
+
 
 # ---------------------------------------------------------
 # İstek Modelleri
@@ -59,7 +61,7 @@ class GenerateRequest(BaseModel):
     inventory: List[str]
     model: Optional[str] = None
     api_key: Optional[str] = None
-    ollama_url: Optional[str] = "http://127.0.0.1:11434"
+    ollama_url: Optional[str] = None
 
 class GenerateLogicRequest(BaseModel):
     prompt: str
@@ -67,7 +69,7 @@ class GenerateLogicRequest(BaseModel):
     netlist: CircuitNetlist
     model: Optional[str] = None
     api_key: Optional[str] = None
-    ollama_url: Optional[str] = "http://127.0.0.1:11434"
+    ollama_url: Optional[str] = None
 
 class SaveProjectRequest(BaseModel):
     id: Optional[str] = None
@@ -100,9 +102,12 @@ def health_check():
 
 
 @app.get("/api/models")
-def list_available_models(gemini_api_key: Optional[str] = None):
+def list_available_models(gemini_api_key: Optional[str] = None, ollama_url: Optional[str] = None):
     """Sistemde algılanan yerel Ollama modellerini ve desteklenen bulut (Gemini, OpenAI, Claude) modellerini döner."""
-    return get_all_available_models(gemini_api_key=gemini_api_key)
+    return get_all_available_models(
+        ollama_url=ollama_url or DEFAULT_OLLAMA_URL,
+        gemini_api_key=gemini_api_key
+    )
 
 
 @app.get("/api/ports")
@@ -151,7 +156,7 @@ def generate_wiring_endpoint(req: GenerateRequest):
             prompt=req.prompt,
             inventory=inventory,
             model=req.model or "default",
-            ollama_url=req.ollama_url or "http://127.0.0.1:11434",
+            ollama_url=req.ollama_url or DEFAULT_OLLAMA_URL,
             api_key=req.api_key
         )
     except RuntimeError as e:
@@ -170,7 +175,7 @@ def generate_logic_endpoint(req: GenerateLogicRequest):
             proje_adi=req.proje_adi or "Akıllı Arduino Projem",
             netlist=req.netlist,
             model=req.model or "default",
-            ollama_url=req.ollama_url or "http://127.0.0.1:11434",
+            ollama_url=req.ollama_url or DEFAULT_OLLAMA_URL,
             api_key=req.api_key
         )
     except RuntimeError as e:
@@ -223,7 +228,7 @@ def generate_project(req: GenerateRequest):
             prompt=req.prompt,
             inventory=inventory,
             model=req.model or "default",
-            ollama_url=req.ollama_url or "http://127.0.0.1:11434",
+            ollama_url=req.ollama_url or DEFAULT_OLLAMA_URL,
             api_key=req.api_key
         )
     except RuntimeError as e:
