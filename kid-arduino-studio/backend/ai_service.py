@@ -6,6 +6,10 @@ import uuid
 from typing import List, Optional, Dict, Any, Set, Tuple, Callable
 import httpx
 from dotenv import load_dotenv
+import litellm
+
+# Yeni nesil modeller (Gemini 3.8 vb.) temperature/top_p parametresi gönderildiğinde hata vermesin
+litellm.drop_params = True
 
 from schemas import (
     ProjeTasarimi,
