@@ -1198,10 +1198,12 @@ def get_gemini_available_models(api_key: Optional[str] = None) -> List[Dict[str,
     verilmemişse varsayılan güncel Gemini modellerini kullanarak) seçilebilir Gemini modellerini döner.
     """
     default_gemini_models = [
-        {"id": "gemini/gemini-2.5-flash", "name": "Gemini 2.5 Flash (En Yeni & Hızlı)", "raw_name": "gemini-2.5-flash", "provider": "gemini", "category": "Google Gemini", "badge": "☁️ Bulut"},
-        {"id": "gemini/gemini-2.5-pro", "name": "Gemini 2.5 Pro (Gelişmiş Muhakeme)", "raw_name": "gemini-2.5-pro", "provider": "gemini", "category": "Google Gemini", "badge": "☁️ Bulut"},
+        {"id": "gemini/gemini-3.8-flash", "name": "Gemini 3.8 Flash (En Yeni & Önerilen)", "raw_name": "gemini-3.8-flash", "provider": "gemini", "category": "Google Gemini", "badge": "☁️ Bulut"},
+        {"id": "gemini/gemini-3.5-flash-lite", "name": "Gemini 3.5 Flash Lite (Hızlı & Ekonomik)", "raw_name": "gemini-3.5-flash-lite", "provider": "gemini", "category": "Google Gemini", "badge": "☁️ Bulut"},
+        {"id": "gemini/gemini-2.5-flash", "name": "Gemini 2.5 Flash (Legacy)", "raw_name": "gemini-2.5-flash", "provider": "gemini", "category": "Google Gemini", "badge": "☁️ Bulut"},
+        {"id": "gemini/gemini-2.5-pro", "name": "Gemini 2.5 Pro (Legacy)", "raw_name": "gemini-2.5-pro", "provider": "gemini", "category": "Google Gemini", "badge": "☁️ Bulut"},
         {"id": "gemini/gemini-2.0-flash", "name": "Gemini 2.0 Flash (Hızlı & Dengeli)", "raw_name": "gemini-2.0-flash", "provider": "gemini", "category": "Google Gemini", "badge": "☁️ Bulut"},
-        {"id": "gemini/gemini-2.0-flash-lite", "name": "Gemini 2.0 Flash Lite (Hafif & Ekonomik)", "raw_name": "gemini-2.0-flash-lite", "provider": "gemini", "category": "Google Gemini", "badge": "☁️ Bulut"},
+        {"id": "gemini/gemini-2.0-flash-lite", "name": "Gemini 2.0 Flash Lite (Hafif)", "raw_name": "gemini-2.0-flash-lite", "provider": "gemini", "category": "Google Gemini", "badge": "☁️ Bulut"},
         {"id": "gemini/gemini-1.5-flash", "name": "Gemini 1.5 Flash (Kararlı)", "raw_name": "gemini-1.5-flash", "provider": "gemini", "category": "Google Gemini", "badge": "☁️ Bulut"},
         {"id": "gemini/gemini-1.5-pro", "name": "Gemini 1.5 Pro (Derin Analiz)", "raw_name": "gemini-1.5-pro", "provider": "gemini", "category": "Google Gemini", "badge": "☁️ Bulut"},
     ]
@@ -1243,8 +1245,13 @@ def get_gemini_available_models(api_key: Optional[str] = None) -> List[Dict[str,
                     "badge": "☁️ Bulut"
                 })
             if fetched:
-                # Önemli modelleri (2.5-flash, 2.5-pro, 2.0-flash, 1.5-flash, 1.5-pro) üstte sırala
-                priority = ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-1.5-flash", "gemini-1.5-pro"]
+                # Önemli modelleri (3.8-flash, 3.5-flash-lite, 2.5-flash, 2.0-flash, 1.5-flash, vb.) üstte sırala
+                priority = [
+                    "gemini-3.8-flash", "gemini-3.5-flash-lite",
+                    "gemini-2.5-flash", "gemini-2.5-pro",
+                    "gemini-2.0-flash", "gemini-2.0-flash-lite",
+                    "gemini-1.5-flash", "gemini-1.5-pro"
+                ]
                 fetched.sort(key=lambda x: (
                     priority.index(x["raw_name"]) if x["raw_name"] in priority else 99,
                     x["raw_name"]
