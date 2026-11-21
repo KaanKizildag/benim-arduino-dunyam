@@ -43,6 +43,33 @@ class AkisAdimi(BaseModel):
     evet_sonucu: str = Field(..., description="3. EVET: Karar 'Evet' ise ne olacağını belirtir.")
     hayir_sonucu: str = Field(..., description="4. HAYIR: Karar 'Hayır' ise ne olacağını belirtir.")
 
+
+class AkisDugumu(BaseModel):
+    id: str = Field(..., description="Düğüm tekil kimliği, örn: n1, n2")
+    tip: str = Field(
+        ...,
+        description="Düğüm tipi: baslangic | kurulum | oku | karar | eylem | bekle | dongu | bitis"
+    )
+    metin: str = Field(..., description="Çocuk dostu Türkçe adım açıklaması")
+    parcalar: List[str] = Field(
+        default_factory=list,
+        description="Bu adımda kullanılan gerçek netlist bileşen id'leri, örn: ['led1', 'ldr1']"
+    )
+
+
+class AkisBaglantisi(BaseModel):
+    kaynak: str = Field(..., description="Kaynak düğüm id'si")
+    hedef: str = Field(..., description="Hedef düğüm id'si")
+    etiket: Optional[str] = Field(
+        default=None,
+        description="Dal etiketi: 'Evet', 'Hayır', 'F (İleri)', 'Sol > Sağ' veya null"
+    )
+
+
+class AkisDiyagrami(BaseModel):
+    dugumler: List[AkisDugumu] = Field(..., description="Akış diyagramı düğümleri (3-12 adet)")
+    baglantilar: List[AkisBaglantisi] = Field(..., description="Düğümler arası yönlü bağlantılar")
+
 class PinBindingInfo(BaseModel):
     uno_pin: str = Field(..., description="Arduino pini, örn: D13, A0, D9")
     component_id: str = Field(..., description="Bağlı olduğu bileşen kimliği, örn: led1, ldr1, servo1")
@@ -73,7 +100,8 @@ class WiringDesignResponse(BaseModel):
     uyarilar: Optional[List[str]] = Field(default_factory=list, description="Normalizasyon ve kablolama doğrulama notları")
 
 class LogicDesignResponse(BaseModel):
-    akis_adimlari: AkisAdimi = Field(..., description="Kablolamaya uygun mantıksal akış diyagramı")
+    akis_adimlari: Optional[AkisAdimi] = Field(default=None, description="Geriye dönük uyumluluk için 4 alanlı özet")
+    akis_diyagrami: Optional[AkisDiyagrami] = Field(default=None, description="Esnek düğüm/kenar akış diyagramı")
     arduino_kodu: str = Field(..., description="Kablolamadaki pinlerle %100 uyumlu Arduino C++ kodu")
     verification: LogicVerificationReport = Field(..., description="Kod ve akış diyagramının kablolama ile uyumluluk teyit raporu")
 
@@ -89,7 +117,8 @@ class ProjeTasarimi(BaseModel):
         default_factory=list,
         description="Adım adım devre bağlantı kılavuzu"
     )
-    akis_adimlari: AkisAdimi = Field(..., description="Sistemin mantıksal akış hikayesi")
+    akis_adimlari: Optional[AkisAdimi] = Field(default=None, description="Eski 4 alanlı akış özeti (geriye dönük uyumluluk)")
+    akis_diyagrami: Optional[AkisDiyagrami] = Field(default=None, description="Esnek düğüm/kenar akış diyagramı")
     arduino_kodu: str = Field(..., description="Arka planda derlenecek Arduino C++ kodu")
     guvenlik_notu: Optional[str] = Field(
         default="Elektronik parçaları bağlarken nazik ol!",

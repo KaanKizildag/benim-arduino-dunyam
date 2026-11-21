@@ -31,6 +31,35 @@ export interface AkisAdimi {
   hayir_sonucu: string;
 }
 
+export type AkisDugumTipi =
+  | 'baslangic'
+  | 'kurulum'
+  | 'oku'
+  | 'karar'
+  | 'eylem'
+  | 'bekle'
+  | 'dongu'
+  | 'bitis'
+  | string;
+
+export interface AkisDugumu {
+  id: string;
+  tip: AkisDugumTipi;
+  metin: string;
+  parcalar: string[];
+}
+
+export interface AkisBaglantisi {
+  kaynak: string;
+  hedef: string;
+  etiket?: string | null;
+}
+
+export interface AkisDiyagrami {
+  dugumler: AkisDugumu[];
+  baglantilar: AkisBaglantisi[];
+}
+
 export interface PinBindingInfo {
   uno_pin: string;
   component_id: string;
@@ -64,7 +93,8 @@ export interface WiringDesignResponse {
 }
 
 export interface LogicDesignResponse {
-  akis_adimlari: AkisAdimi;
+  akis_adimlari?: AkisAdimi | null;
+  akis_diyagrami?: AkisDiyagrami | null;
   arduino_kodu: string;
   verification: LogicVerificationReport;
 }
@@ -75,7 +105,8 @@ export interface ProjeTasarimi {
   gerekli_parcalar: string[];
   netlist?: CircuitNetlist;
   baglanti_adimlari?: BaglantiAdimi[];
-  akis_adimlari: AkisAdimi;
+  akis_adimlari?: AkisAdimi | null;
+  akis_diyagrami?: AkisDiyagrami | null;
   arduino_kodu: string;
   guvenlik_notu?: string;
   uyarilar?: string[];

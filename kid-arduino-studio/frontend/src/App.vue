@@ -45,11 +45,12 @@
         @open-inventory="isInventoryOpen = true"
       />
 
-      <!-- SAYFA 3: NASIL ÇALIŞACAK? (Projeye Özgü Dinamik Sebep-Sonuç Akış Şeması) -->
+      <!-- SAYFA 3: NASIL ÇALIŞACAK? (Projeye Özgü Dinamik Akış Diyagramı) -->
       <Page3NasilCalisacak
         v-else-if="currentStep === 3"
         :projectName="currentProject.proje_adi"
         :netlist="currentProject.netlist"
+        :akisDiyagrami="currentProject.akis_diyagrami"
         :akisAdimi="currentProject.akis_adimlari"
         :arduinoKodu="currentProject.arduino_kodu"
         :isGeneratingLogic="isGeneratingLogic"
@@ -229,11 +230,17 @@ function createEmptyProject(): ProjeTasarimi {
       connections: []
     },
     baglanti_adimlari: [],
-    akis_adimlari: {
-      gozlemle: 'Henüz bir devre kurgulanmadı. 1. Hayal Et adımından projeni oluştur.',
-      karar_ver: 'Proje oluşturulduğunda karar koşulu burada görünecek.',
-      evet_sonucu: 'Koşul sağlandığında yapılacak işlem.',
-      hayir_sonucu: 'Koşul sağlanmadığında yapılacak işlem.'
+    akis_adimlari: null,
+    akis_diyagrami: {
+      dugumler: [
+        { id: 'n1', tip: 'baslangic', metin: '1. Hayal Et ekranından projeni yaz', parcalar: [] },
+        { id: 'n2', tip: 'kurulum', metin: 'Devre şeması ve kodun otomatik hazırlanır', parcalar: [] },
+        { id: 'n3', tip: 'eylem', metin: 'Projenin gerçek çalışma akışı burada görünür', parcalar: [] }
+      ],
+      baglantilar: [
+        { kaynak: 'n1', hedef: 'n2', etiket: null },
+        { kaynak: 'n2', hedef: 'n3', etiket: null }
+      ]
     },
     arduino_kodu: '// Henüz bir proje oluşturulmadı.\nvoid setup() {}\nvoid loop() {}\n',
     verification: undefined

@@ -11,6 +11,7 @@ from schemas import (
     ProjeTasarimi,
     BaglantiAdimi,
     AkisAdimi,
+    AkisDiyagrami,
     CircuitNetlist,
     NetlistComponent,
     NetlistConnection,
@@ -20,6 +21,12 @@ from schemas import (
     LogicDesignResponse,
     SavedProjectEntry,
     AILogEntry,
+)
+from flow_service import (
+    legacy_akis_to_diyagram,
+    validate_flow_diagram,
+    build_deterministic_flow_from_code,
+    generate_flow_from_code,
 )
 
 load_dotenv()
@@ -1011,20 +1018,19 @@ def normalize_project_dict(data: Dict[str, Any]) -> Tuple[Dict[str, Any], List[s
         new_data["karsilama_mesaji"] = "Harika bir devre tasarladık! Adım adım kuralım."
     if not isinstance(new_data.get("gerekli_parcalar"), list) or not new_data.get("gerekli_parcalar"):
         new_data["gerekli_parcalar"] = ["ARDUINO_UNO", "BREADBOARD"]
-    if not isinstance(new_data.get("akis_adimlari"), dict):
-        new_data["akis_adimlari"] = {
-            "gozlemle": "Devredeki sensör ve girişleri sürekli izle.",
-            "karar_ver": "Koşul gerçekleşti mi kontrol et.",
-            "evet_sonucu": "Çıkış elemanlarını (LED/Buzzer/Servo) çalıştır!",
-            "hayir_sonucu": "Bekleme durumunda kal."
-        }
+
+    # Geriye dönük uyumluluk: Eski 4 alanlı akis_adimlari gelmişse ve yeni akis_diyagrami yoksa adaptörden geçir.
+    # Generic sabit metin doldurma kaldırıldı; yeni projelerde akış doğrudan son Arduino kodundan üretilir.
+    if isinstance(new_data.get("akis_diyagrami"), dict):
+        pass
+    elif isinstance(new_data.get("akis_adimlari"), dict):
+        raw_akis = new_data["akis_adimlari"]
+        if any(str(raw_akis.get(k) or "").strip() for k in ("gozlemle", "karar_ver", "evet_sonucu", "hayir_sonucu")):
+            adapted = legacy_akis_to_diyagram(raw_akis, norm_comps)
+            new_data["akis_diyagrami"] = adapted.model_dump()
     else:
-        akis = dict(new_data["akis_adimlari"])
-        akis.setdefault("gozlemle", "Devreyi gözlemle.")
-        akis.setdefault("karar_ver", "Koşulu kontrol et.")
-        akis.setdefault("evet_sonucu", "Aktif et!")
-        akis.setdefault("hayir_sonucu", "Bekle.")
-        new_data["akis_adimlari"] = akis
+        new_data["akis_adimlari"] = None
+
     if not new_data.get("arduino_kodu"):
         new_data["arduino_kodu"] = "void setup() {}\nvoid loop() {}\n"
 
@@ -1529,12 +1535,11 @@ def clear_ai_logs() -> bool:
 # (Devre Şeması + Akış Diyagramı + Arduino C++ Kodu Tek Seferde)
 # =========================================================
 
-ONE_SHOT_SYSTEM_PROMPT = """Sen çocuklar için Arduino Uno devre, akış diyagramı ve C++ kodlama uzmanısın.
+ONE_SHOT_SYSTEM_PROMPT = """Sen çocuklar için Arduino Uno devre ve C++ kodlama uzmanısın.
 Kullanıcının proje isteğine göre TEK BİR JSON nesnesi içinde:
 1. "netlist": Sadece kullanıcının istediği parçaları (components) ve eksiksiz pin bağlantılarını (connections)
-2. "akis_adimlari": Devredeki gerçek parçalara özel 4 adımlı sebep-sonuç akışını ("gozlemle", "karar_ver", "evet_sonucu", "hayir_sonucu")
-3. "arduino_kodu": Netlist'teki pinlerle %100 aynı pin numaralarını kullanan, derlenebilir Arduino Uno C++ kodunu
-üret.
+2. "arduino_kodu": Netlist'teki pinlerle %100 aynı pin numaralarını kullanan, derlenebilir Arduino Uno C++ kodunu
+üret. (Akış diyagramı ayrı aşamada koddan otomatik çıkarılacaktır; JSON'a akis_adimlari ekleme.)
 
 KESİN KURALLAR:
 1. SADECE İSTENEN PARÇALARI EKLE! Kullanıcının istemediği buton, buzzer, servo veya sensörü ASLA ekleme.
@@ -1577,10 +1582,10 @@ KESİN KURALLAR:
 5. "arduino_kodu" içindeki pinler ile "connections" içindeki "uno.*" pinleri BİREBİR AYNI olmalı.
 
 ÖRNEK 1 (2 Adet 2 Bacaklı LDR + 2 Adet 10k Direnç + Servo ile Günebakan):
-{"proje_adi":"Çift LDR ile Günebakan Servo Projesi","karsilama_mesaji":"İki LDR sensöründen hangisine daha çok ışık geliyorsa servo motoru o yöne çeviren günebakan devresi!","gerekli_parcalar":["ARDUINO_UNO","BREADBOARD","LDR_DISCRETE","RESISTOR_10K","SERVO_SG90"],"netlist":{"board":"arduino-uno","components":[{"id":"ldr1","type":"wokwi-photoresistor","props":{},"label":"Sol LDR (2 Bacaklı)"},{"id":"r1","type":"wokwi-resistor","props":{"value":"10000"},"label":"Sol 10kΩ Direnç"},{"id":"ldr2","type":"wokwi-photoresistor","props":{},"label":"Sağ LDR (2 Bacaklı)"},{"id":"r2","type":"wokwi-resistor","props":{"value":"10000"},"label":"Sağ 10kΩ Direnç"},{"id":"servo1","type":"wokwi-servo","props":{},"label":"SG90 Servo Motor"}],"connections":[{"from":"ldr1.1","to":"5V","color":"red"},{"from":"ldr1.2","to":"uno.A0","color":"green"},{"from":"ldr1.2","to":"r1.1","color":"green"},{"from":"r1.2","to":"GND","color":"black"},{"from":"ldr2.1","to":"5V","color":"red"},{"from":"ldr2.2","to":"uno.A1","color":"blue"},{"from":"ldr2.2","to":"r2.1","color":"blue"},{"from":"r2.2","to":"GND","color":"black"},{"from":"servo1.V+","to":"5V","color":"red"},{"from":"servo1.GND","to":"GND","color":"black"},{"from":"uno.D9","to":"servo1.PWM","color":"orange"}]},"akis_adimlari":{"gozlemle":"Sol LDR (A0) ve Sağ LDR (A1) sensörleri iki yöndeki ışık şiddetini (0-1023) ölçer.","karar_ver":"Sol LDR (A0) ışık değeri Sağ LDR (A1) değerinden daha büyük mü?","evet_sonucu":"Sol tarafta ışık daha güçlü! SG90 Servo Motoru (D9) sola (135 derece) döndür.","hayir_sonucu":"Sağ tarafta ışık daha güçlü! SG90 Servo Motoru (D9) sağa (45 derece) döndür."},"arduino_kodu":"#include <Servo.h>\\n\\nconst int LDR_SOL = A0;\\nconst int LDR_SAG = A1;\\nconst int SERVO_PIN = 9;\\nServo gunebakanServo;\\n\\nvoid setup() {\\n  Serial.begin(9600);\\n  gunebakanServo.attach(SERVO_PIN);\\n  gunebakanServo.write(90);\\n}\\n\\nvoid loop() {\\n  int isikSol = analogRead(LDR_SOL);\\n  int isikSag = analogRead(LDR_SAG);\\n  if (isikSol > isikSag + 30) {\\n    gunebakanServo.write(135);\\n  } else if (isikSag > isikSol + 30) {\\n    gunebakanServo.write(45);\\n  } else {\\n    gunebakanServo.write(90);\\n  }\\n  delay(100);\\n}","guvenlik_notu":"Her iki 2 bacaklı LDR için ayrı 10kΩ dirençlerle iki adet gerilim bölücü kurduk."}
+{"proje_adi":"Çift LDR ile Günebakan Servo Projesi","karsilama_mesaji":"İki LDR sensöründen hangisine daha çok ışık geliyorsa servo motoru o yöne çeviren günebakan devresi!","gerekli_parcalar":["ARDUINO_UNO","BREADBOARD","LDR_DISCRETE","RESISTOR_10K","SERVO_SG90"],"netlist":{"board":"arduino-uno","components":[{"id":"ldr1","type":"wokwi-photoresistor","props":{},"label":"Sol LDR (2 Bacaklı)"},{"id":"r1","type":"wokwi-resistor","props":{"value":"10000"},"label":"Sol 10kΩ Direnç"},{"id":"ldr2","type":"wokwi-photoresistor","props":{},"label":"Sağ LDR (2 Bacaklı)"},{"id":"r2","type":"wokwi-resistor","props":{"value":"10000"},"label":"Sağ 10kΩ Direnç"},{"id":"servo1","type":"wokwi-servo","props":{},"label":"SG90 Servo Motor"}],"connections":[{"from":"ldr1.1","to":"5V","color":"red"},{"from":"ldr1.2","to":"uno.A0","color":"green"},{"from":"ldr1.2","to":"r1.1","color":"green"},{"from":"r1.2","to":"GND","color":"black"},{"from":"ldr2.1","to":"5V","color":"red"},{"from":"ldr2.2","to":"uno.A1","color":"blue"},{"from":"ldr2.2","to":"r2.1","color":"blue"},{"from":"r2.2","to":"GND","color":"black"},{"from":"servo1.V+","to":"5V","color":"red"},{"from":"servo1.GND","to":"GND","color":"black"},{"from":"uno.D9","to":"servo1.PWM","color":"orange"}]},"arduino_kodu":"#include <Servo.h>\\n\\nconst int LDR_SOL = A0;\\nconst int LDR_SAG = A1;\\nconst int SERVO_PIN = 9;\\nServo gunebakanServo;\\n\\nvoid setup() {\\n  Serial.begin(9600);\\n  gunebakanServo.attach(SERVO_PIN);\\n  gunebakanServo.write(90);\\n}\\n\\nvoid loop() {\\n  int isikSol = analogRead(LDR_SOL);\\n  int isikSag = analogRead(LDR_SAG);\\n  if (isikSol > isikSag + 30) {\\n    gunebakanServo.write(135);\\n  } else if (isikSag > isikSol + 30) {\\n    gunebakanServo.write(45);\\n  } else {\\n    gunebakanServo.write(90);\\n  }\\n  delay(100);\\n}","guvenlik_notu":"Her iki 2 bacaklı LDR için ayrı 10kΩ dirençlerle iki adet gerilim bölücü kurduk."}
 
 ÖRNEK 2 (Bluetooth HC-05 + L293D Motor Sürücü + 2x DC Motor ile Akıllı Araba):
-{"proje_adi":"Bluetooth Kontrollü Akıllı Araba","karsilama_mesaji":"HC-05 Bluetooth modülü ve L293D motor sürücü ile telefondan kontrol edilen 2 motorlu araba devresi!","gerekli_parcalar":["ARDUINO_UNO","BREADBOARD","BLUETOOTH_HC05","MOTOR_DRIVER_L293D","DC_MOTOR_5V"],"netlist":{"board":"arduino-uno","components":[{"id":"hc05","type":"wokwi-hc-05","props":{},"label":"HC-05 Bluetooth Modülü"},{"id":"l293d","type":"wokwi-l293d","props":{},"label":"L293D Motor Sürücü"},{"id":"motor1","type":"wokwi-dc-motor","props":{},"label":"Sol DC Motor"},{"id":"motor2","type":"wokwi-dc-motor","props":{},"label":"Sağ DC Motor"}],"connections":[{"from":"hc05.VCC","to":"5V","color":"red"},{"from":"hc05.GND","to":"GND","color":"black"},{"from":"hc05.TXD","to":"uno.D10","color":"green"},{"from":"hc05.RXD","to":"uno.D11","color":"blue"},{"from":"l293d.VCC1","to":"5V","color":"red"},{"from":"l293d.VCC2","to":"5V","color":"red"},{"from":"l293d.GND","to":"GND","color":"black"},{"from":"l293d.EN1","to":"5V","color":"red"},{"from":"l293d.EN2","to":"5V","color":"red"},{"from":"l293d.IN1","to":"uno.D2","color":"orange"},{"from":"l293d.IN2","to":"uno.D3","color":"yellow"},{"from":"l293d.IN3","to":"uno.D4","color":"green"},{"from":"l293d.IN4","to":"uno.D5","color":"blue"},{"from":"l293d.OUT1","to":"motor1.1","color":"orange"},{"from":"l293d.OUT2","to":"motor1.2","color":"black"},{"from":"l293d.OUT3","to":"motor2.1","color":"green"},{"from":"l293d.OUT4","to":"motor2.2","color":"black"}]},"akis_adimlari":{"gozlemle":"HC-05 Bluetooth modülü (D10/D11) telefondan gelen yön komutlarını ('F', 'B', 'L', 'R', 'S') dinler.","karar_ver":"Telefondan ileri ('F') veya dönüş komutu geldi mi?","evet_sonucu":"L293D Motor Sürücü (D2-D5) üzerinden Sol ve Sağ DC Motorlara enerji vererek arabayı hareket ettir!","hayir_sonucu":"Dur ('S') komutu geldiğinde her iki DC motoru da durdur."},"arduino_kodu":"#include <SoftwareSerial.h>\\n\\nconst int BT_RX = 10;\\nconst int BT_TX = 11;\\nSoftwareSerial bt(BT_RX, BT_TX);\\n\\nconst int IN1 = 2;\\nconst int IN2 = 3;\\nconst int IN3 = 4;\\nconst int IN4 = 5;\\n\\nvoid setup() {\\n  Serial.begin(9600);\\n  bt.begin(9600);\\n  pinMode(IN1, OUTPUT);\\n  pinMode(IN2, OUTPUT);\\n  pinMode(IN3, OUTPUT);\\n  pinMode(IN4, OUTPUT);\\n}\\n\\nvoid loop() {\\n  if (bt.available()) {\\n    char c = bt.read();\\n    if (c == 'F') {\\n      digitalWrite(IN1, HIGH); digitalWrite(IN2, LOW);\\n      digitalWrite(IN3, HIGH); digitalWrite(IN4, LOW);\\n    } else if (c == 'B') {\\n      digitalWrite(IN1, LOW); digitalWrite(IN2, HIGH);\\n      digitalWrite(IN3, LOW); digitalWrite(IN4, HIGH);\\n    } else {\\n      digitalWrite(IN1, LOW); digitalWrite(IN2, LOW);\\n      digitalWrite(IN3, LOW); digitalWrite(IN4, LOW);\\n    }\\n  }\\n}","guvenlik_notu":"DC motorlar yüksek akım çektiği için Arduino pinlerine doğrudan değil, L293D motor sürücü üzerinden bağlanır."}
+{"proje_adi":"Bluetooth Kontrollü Akıllı Araba","karsilama_mesaji":"HC-05 Bluetooth modülü ve L293D motor sürücü ile telefondan kontrol edilen 2 motorlu araba devresi!","gerekli_parcalar":["ARDUINO_UNO","BREADBOARD","BLUETOOTH_HC05","MOTOR_DRIVER_L293D","DC_MOTOR_5V"],"netlist":{"board":"arduino-uno","components":[{"id":"hc05","type":"wokwi-hc-05","props":{},"label":"HC-05 Bluetooth Modülü"},{"id":"l293d","type":"wokwi-l293d","props":{},"label":"L293D Motor Sürücü"},{"id":"motor1","type":"wokwi-dc-motor","props":{},"label":"Sol DC Motor"},{"id":"motor2","type":"wokwi-dc-motor","props":{},"label":"Sağ DC Motor"}],"connections":[{"from":"hc05.VCC","to":"5V","color":"red"},{"from":"hc05.GND","to":"GND","color":"black"},{"from":"hc05.TXD","to":"uno.D10","color":"green"},{"from":"hc05.RXD","to":"uno.D11","color":"blue"},{"from":"l293d.VCC1","to":"5V","color":"red"},{"from":"l293d.VCC2","to":"5V","color":"red"},{"from":"l293d.GND","to":"GND","color":"black"},{"from":"l293d.EN1","to":"5V","color":"red"},{"from":"l293d.EN2","to":"5V","color":"red"},{"from":"l293d.IN1","to":"uno.D2","color":"orange"},{"from":"l293d.IN2","to":"uno.D3","color":"yellow"},{"from":"l293d.IN3","to":"uno.D4","color":"green"},{"from":"l293d.IN4","to":"uno.D5","color":"blue"},{"from":"l293d.OUT1","to":"motor1.1","color":"orange"},{"from":"l293d.OUT2","to":"motor1.2","color":"black"},{"from":"l293d.OUT3","to":"motor2.1","color":"green"},{"from":"l293d.OUT4","to":"motor2.2","color":"black"}]},"arduino_kodu":"#include <SoftwareSerial.h>\\n\\nconst int BT_RX = 10;\\nconst int BT_TX = 11;\\nSoftwareSerial bt(BT_RX, BT_TX);\\n\\nconst int IN1 = 2;\\nconst int IN2 = 3;\\nconst int IN3 = 4;\\nconst int IN4 = 5;\\n\\nvoid setup() {\\n  Serial.begin(9600);\\n  bt.begin(9600);\\n  pinMode(IN1, OUTPUT);\\n  pinMode(IN2, OUTPUT);\\n  pinMode(IN3, OUTPUT);\\n  pinMode(IN4, OUTPUT);\\n}\\n\\nvoid loop() {\\n  if (bt.available()) {\\n    char c = bt.read();\\n    if (c == 'F') {\\n      digitalWrite(IN1, HIGH); digitalWrite(IN2, LOW);\\n      digitalWrite(IN3, HIGH); digitalWrite(IN4, LOW);\\n    } else if (c == 'B') {\\n      digitalWrite(IN1, LOW); digitalWrite(IN2, HIGH);\\n      digitalWrite(IN3, LOW); digitalWrite(IN4, HIGH);\\n    } else if (c == 'L') {\\n      digitalWrite(IN1, LOW); digitalWrite(IN2, HIGH);\\n      digitalWrite(IN3, HIGH); digitalWrite(IN4, LOW);\\n    } else if (c == 'R') {\\n      digitalWrite(IN1, HIGH); digitalWrite(IN2, LOW);\\n      digitalWrite(IN3, LOW); digitalWrite(IN4, HIGH);\\n    } else {\\n      digitalWrite(IN1, LOW); digitalWrite(IN2, LOW);\\n      digitalWrite(IN3, LOW); digitalWrite(IN4, LOW);\\n    }\\n  }\\n}","guvenlik_notu":"DC motorlar yüksek akım çektiği için Arduino pinlerine doğrudan değil, L293D motor sürücü üzerinden bağlanır."}
 """
 
 
@@ -1761,7 +1766,7 @@ def ensure_code_actuators_in_netlist(
 
 def validate_one_shot_topology_and_code(
     netlist: CircuitNetlist,
-    akis: AkisAdimi,
+    akis: Optional[Any],
     code: str
 ) -> Tuple[List[str], LogicVerificationReport]:
     """
@@ -1835,16 +1840,28 @@ def validate_one_shot_topology_and_code(
             f"✓ Devredeki tüm parçalar ({', '.join(c.label for c in netlist.components)}) eksiksiz bağlandı."
         )
 
-    flow_complete = all([
-        bool(akis.gozlemle.strip()),
-        bool(akis.karar_ver.strip()),
-        bool(akis.evet_sonucu.strip()),
-        bool(akis.hayir_sonucu.strip()),
-    ])
-    if flow_complete:
-        checks.append("✓ Akış diyagramı (Gözlemle → Karar Ver → Evet/Hayır) eksiksiz üretildi.")
+    flow_complete = False
+    if isinstance(akis, AkisDiyagrami):
+        flow_complete = len(akis.dugumler) >= 3 and len(akis.baglantilar) >= 1
+        if flow_complete:
+            checks.append(
+                f"✓ Akış diyagramı ({len(akis.dugumler)} adım, {len(akis.baglantilar)} bağlantı) koddan türetilip doğrulandı."
+            )
+        else:
+            blocking_errors.append("Akış diyagramı ('akis_diyagrami') geçerli düğüm/bağlantı içermiyor.")
+    elif isinstance(akis, AkisAdimi):
+        flow_complete = all([
+            bool(akis.gozlemle.strip()),
+            bool(akis.karar_ver.strip()),
+            bool(akis.evet_sonucu.strip()),
+            bool(akis.hayir_sonucu.strip()),
+        ])
+        if flow_complete:
+            checks.append("✓ Akış diyagramı eksiksiz üretildi.")
+        else:
+            blocking_errors.append("Akış diyagramı ('akis_adimlari') adımlarından biri veya birkaçı boş döndü.")
     else:
-        blocking_errors.append("Akış diyagramı ('akis_adimlari') adımlarından biri veya birkaçı boş döndü.")
+        blocking_errors.append("Akış diyagramı eksik.")
 
     code_candidate = (code or "").strip()
     has_setup = "void setup" in code_candidate
@@ -1895,7 +1912,7 @@ def generate_full_project_one_shot(
     chosen_model = model if model != "default" and model is not None else models_info["default_model"]
 
     user_prompt = f"""KULLANICI PROJE İSTEĞİ: "{prompt}"
-Yukarıdaki isteğe göre SADECE istenen parçaları içeren `netlist` (components + connections), bu devreye özel `akis_adimlari` ve aynı pinleri kullanan `arduino_kodu` alanlarını içeren tek bir geçerli JSON nesnesi üret. Sadece JSON döndür."""
+Yukarıdaki isteğe göre SADECE istenen parçaları içeren `netlist` (components + connections) ve aynı pinleri kullanan `arduino_kodu` alanlarını içeren tek bir geçerli JSON nesnesi üret. Sadece JSON döndür."""
 
     raw_text: Optional[str] = None
     provider_used = "ollama" if (chosen_model.startswith("ollama/") or chosen_model == "local") else "litellm"
@@ -1994,8 +2011,6 @@ Yukarıdaki isteğe göre SADECE istenen parçaları içeren `netlist` (componen
 
         if not isinstance(parsed.get("netlist"), dict):
             raise ValueError("AI yanıtında 'netlist' alanı eksik.")
-        if not isinstance(parsed.get("akis_adimlari"), dict):
-            raise ValueError("AI yanıtında 'akis_adimlari' alanı eksik.")
         raw_code = str(parsed.get("arduino_kodu") or "").strip()
         if not raw_code:
             raise ValueError("AI yanıtında 'arduino_kodu' alanı eksik veya boş.")
@@ -2014,13 +2029,29 @@ Yukarıdaki isteğe göre SADECE istenen parçaları içeren `netlist` (componen
         norm_warnings.extend(actuator_notes + topo_notes)
 
         netlist_obj = CircuitNetlist(**norm_data["netlist"])
-        akis_obj = AkisAdimi(**norm_data["akis_adimlari"])
+
+        # 3) Kesinleşmiş netlist ve son Arduino kodundan ayrı, odaklanmış çağrıyla AkisDiyagrami üret
+        flow_obj, flow_warnings, flow_status = generate_flow_from_code(
+            prompt=prompt,
+            netlist=netlist_obj,
+            arduino_kodu=raw_code,
+            chosen_model=chosen_model,
+            provider_used=provider_used,
+            ollama_url=ollama_url,
+            api_key=api_key,
+            clean_json_fn=clean_llm_json_response
+        )
+        norm_warnings.extend(flow_warnings)
 
         blocking_errors, report = validate_one_shot_topology_and_code(
             netlist=netlist_obj,
-            akis=akis_obj,
+            akis=flow_obj,
             code=raw_code
         )
+        if flow_status == "REPAIRED":
+            report.auto_repaired = True
+        if flow_warnings:
+            report.warnings.extend(flow_warnings)
         if blocking_errors:
             raise ValueError(" | ".join(blocking_errors))
 
@@ -2031,7 +2062,8 @@ Yukarıdaki isteğe göre SADECE istenen parçaları içeren `netlist` (componen
             gerekli_parcalar=norm_data.get("gerekli_parcalar") or ["ARDUINO_UNO", "BREADBOARD"],
             netlist=netlist_obj,
             baglanti_adimlari=steps,
-            akis_adimlari=akis_obj,
+            akis_adimlari=None,
+            akis_diyagrami=flow_obj,
             arduino_kodu=raw_code,
             guvenlik_notu=str(parsed.get("guvenlik_notu") or "").strip() or "Parçaları breadboard deliklerine dikkatlice yerleştir.",
             uyarilar=norm_warnings + list(report.warnings),
@@ -2596,6 +2628,16 @@ def get_saved_projects() -> List[SavedProjectEntry]:
                 for item in raw_list:
                     try:
                         entry = SavedProjectEntry(**item)
+                        # Geriye uyumluluk: eski 4 alanlı akis_adimlari'yı AkisDiyagrami'na çevir
+                        if entry.project.akis_diyagrami is None and entry.project.akis_adimlari is not None:
+                            comps = (
+                                [c.model_dump() for c in entry.project.netlist.components]
+                                if entry.project.netlist
+                                else []
+                            )
+                            entry.project.akis_diyagrami = legacy_akis_to_diyagram(
+                                entry.project.akis_adimlari.model_dump(), comps
+                            )
                         if not entry.is_preset and entry.id not in PRESET_IDS_TO_EXCLUDE:
                             user_entries.append(entry)
                     except Exception:
@@ -2619,7 +2661,7 @@ def save_project_entry(
     if project.netlist and not project.verification:
         _, _, report = verify_logic_against_wiring(
             netlist=project.netlist,
-            raw_akis=project.akis_adimlari.model_dump(),
+            raw_akis=project.akis_adimlari.model_dump() if project.akis_adimlari else {},
             raw_code=project.arduino_kodu
         )
         project.verification = report
