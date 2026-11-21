@@ -9,12 +9,13 @@
  * 6. Modül bileşenleri (4 Pin LDR, Servo, HC-SR04) sağdaki modül dock'unda dikey olarak sıralanır.
  */
 
-import type {
-  CircuitNetlist,
-  NetlistComponent,
-  PlacedComponent,
-  AllocatedPin,
-  ElectricalNet
+import {
+  SCENE_LAYOUT,
+  type CircuitNetlist,
+  type NetlistComponent,
+  type PlacedComponent,
+  type AllocatedPin,
+  type ElectricalNet
 } from './types';
 import {
   computeOffBoardCardMetrics,
@@ -128,7 +129,9 @@ export const OFF_BOARD_PIN_DEFS: Record<string, { label: string; pins: string[] 
 export class BreadboardAllocator {
   private currentCol = 4;
   private currentHalf: 'upper' | 'lower' = 'upper';
-  private offBoardIndex = 0;
+  private dockColX = 0;
+  private dockCursorY = 0;
+  private dockColMaxWidth = 0;
   private placedComponents: PlacedComponent[] = [];
   private allocatedPins: Record<string, AllocatedPin> = {};
   private internalSharedNodes: Array<{ col: number; half: 'upper' | 'lower'; components: string[]; label: string }> = [];
@@ -147,7 +150,10 @@ export class BreadboardAllocator {
   } {
     this.currentCol = 4;
     this.currentHalf = 'upper';
-    this.offBoardIndex = 0;
+    this.dockColX =
+      SCENE_LAYOUT.bb.x + SCENE_LAYOUT.bb.width + SCENE_LAYOUT.bb.cardPad + SCENE_LAYOUT.dockGapX;
+    this.dockCursorY = SCENE_LAYOUT.dockStartY;
+    this.dockColMaxWidth = 0;
     this.placedComponents = [];
     this.allocatedPins = {};
     this.internalSharedNodes = [];
@@ -691,16 +697,10 @@ export class BreadboardAllocator {
 
   /**
    * Modül / Harici Bileşenler (Bluetooth, Motor Sürücü, DC Motor, Servo, Sensörler vs.)
-   * Sağdaki modül dock'unda düzenli olarak sıralanır.
+   * Breadboard'un sağındaki adaptif dock ızgarasına gerçek kart boyutlarıyla yerleştirilir.
    * Pin soket koordinatları modülün gerçek element pinInfo verisinden deterministik hesaplanır.
    */
   private allocateOffBoardComponent(comp: NetlistComponent): void {
-    const colIndex = Math.floor(this.offBoardIndex / 4);
-    const rowIndex = this.offBoardIndex % 4;
-    const dockLeft = 815 + colIndex * 185;
-    const dockTop = 76 + rowIndex * 140;
-    this.offBoardIndex++;
-
     const def = OFF_BOARD_PIN_DEFS[comp.type] || {
       label: comp.label || comp.id,
       pins: ['1', '2']
@@ -717,6 +717,21 @@ export class BreadboardAllocator {
     const elementScale = metrics ? metrics.elementScale : 0.7;
     const elementNaturalWidth = metrics ? metrics.elementNaturalWidth : 80;
     const elementNaturalHeight = metrics ? metrics.elementNaturalHeight : 78;
+
+    // Adaptif dikey ızgara: kolon yüksekliği aşılırsa yeni kolona geç (gerçek kart genişliğiyle)
+    if (
+      this.dockCursorY > SCENE_LAYOUT.dockStartY &&
+      this.dockCursorY + cardHeight > SCENE_LAYOUT.dockStartY + SCENE_LAYOUT.dockMaxColHeight
+    ) {
+      this.dockColX += this.dockColMaxWidth + SCENE_LAYOUT.dockGapX;
+      this.dockCursorY = SCENE_LAYOUT.dockStartY;
+      this.dockColMaxWidth = 0;
+    }
+
+    const dockLeft = this.dockColX;
+    const dockTop = this.dockCursorY;
+    this.dockCursorY += cardHeight + SCENE_LAYOUT.dockGapY;
+    this.dockColMaxWidth = Math.max(this.dockColMaxWidth, cardWidth);
 
     const fallbackPitch = totalPins > 8 ? 14 : totalPins > 5 ? 18 : totalPins > 3 ? 22 : 28;
     const fallbackSpan = (totalPins - 1) * fallbackPitch;
@@ -750,8 +765,8 @@ export class BreadboardAllocator {
         col: 0,
         row: 'offboard',
         holeName: `${comp.id}.${pName}`,
-        x: canvasX - 448,
-        y: canvasY - 108,
+        x: canvasX - SCENE_LAYOUT.bb.x,
+        y: canvasY - SCENE_LAYOUT.bb.y,
         side
       };
     }

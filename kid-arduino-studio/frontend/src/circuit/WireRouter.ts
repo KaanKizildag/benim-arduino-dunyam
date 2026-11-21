@@ -107,13 +107,15 @@ export class WireRouter {
       usedGndRailCols.add(1);
       const unoGnd = this.getUnoPinPos('GND.2');
       const bbGnd = this.getBreadboardPos(1, 'bp.-');
+      const gndRoute = this.buildPowerBusPath(unoGnd, bbGnd, 28);
       wires.push({
         id: 'main-gnd-bus',
         from: { part: 'uno', pin: 'GND', ...unoGnd },
         to: { part: 'breadboard', pin: 'bn.1', holeName: 'bn.1', ...bbGnd },
         color: '#1e293b',
         laneIndex: 0,
-        path: this.buildPowerBusPath(unoGnd, bbGnd, 28),
+        path: gndRoute.path,
+        points: gndRoute.points,
         isPowerBus: true,
         description: 'Arduino GND → Breadboard Mavi Eksi (-) Rayı (bn.1 pini)'
       });
@@ -123,21 +125,23 @@ export class WireRouter {
       used5vRailCols.add(2);
       const uno5v = this.getUnoPinPos('5V');
       const bb5v = this.getBreadboardPos(2, 'bp.+');
+      const v5Route = this.buildPowerBusPath(uno5v, bb5v, 14);
       wires.push({
         id: 'main-5v-bus',
         from: { part: 'uno', pin: '5V', ...uno5v },
         to: { part: 'breadboard', pin: 'bp.2', holeName: 'bp.2', ...bb5v },
         color: '#ef4444',
         laneIndex: 1,
-        path: this.buildPowerBusPath(uno5v, bb5v, 14),
+        path: v5Route.path,
+        points: v5Route.points,
         isPowerBus: true,
         description: 'Arduino 5V → Breadboard Kırmızı Artı (+) Rayı (bp.2 pini)'
       });
     }
 
-    // 2. NET BAZLI DEVRE BAĞLANTILARI
-    let topLaneIndex = 0;
-    let bottomLaneIndex = 2;
+    // 2. NET BAZLI DEVRE BAĞLANTILARI (Aralık tabanlı şerit paylaşımı ile kompakt yükseklik)
+    const topLanes: Array<Array<[number, number]>> = [];
+    const bottomLanes: Array<Array<[number, number]>> = [[], []]; // 0 ve 1 güç rayları için
     let wireCounter = 1;
 
     for (const net of nets) {
@@ -181,6 +185,7 @@ export class WireRouter {
         const freeA = this.pickFreeStripHole(pinA, 'top', usedBreadboardHoles);
         const freeB = this.pickFreeStripHole(pinB, 'top', usedBreadboardHoles);
 
+        const jumperRoute = this.buildLocalJumperPath(freeA, freeB, 'up');
         wires.push({
           id: `wire-${wireCounter++}`,
           from: {
@@ -198,8 +203,9 @@ export class WireRouter {
             y: freeB.y
           },
           color: net.color || '#f59e0b',
-          laneIndex: topLaneIndex++,
-          path: this.buildLocalJumperPath(freeA, freeB, 'up'),
+          laneIndex: 0,
+          path: jumperRoute.path,
+          points: jumperRoute.points,
           isPowerBus: false,
           description: `${freeA.holeName} pini (${groupA.label}) → ${freeB.holeName} pini (${groupB.label})`
         });
@@ -215,7 +221,8 @@ export class WireRouter {
           const offPin = offItem.pin;
           const fromCoords = this.getPinCanvasPos(offPin);
           const offLabel = compLabelMap.get(offPin.componentId) || offPin.componentId;
-          const lane = bottomLaneIndex++;
+          const lane = this.allocateLane(bottomLanes, fromCoords.x, freeTarget.x, 2);
+          const route = this.buildHighwayPath(fromCoords, freeTarget, 'bottom', lane, offPin.side);
 
           wires.push({
             id: `wire-${wireCounter++}`,
@@ -234,7 +241,8 @@ export class WireRouter {
             },
             color: net.color || '#10b981',
             laneIndex: lane,
-            path: this.buildHighwayPath(fromCoords, freeTarget, 'bottom', lane, offPin.side),
+            path: route.path,
+            points: route.points,
             isPowerBus: false,
             description: `${offLabel} (${offPin.pinName}) → ${freeTarget.holeName} pini (${targetGroup.label})`
           });
@@ -248,7 +256,8 @@ export class WireRouter {
           const toCoords = this.getPinCanvasPos(pinB);
           const labelA = compLabelMap.get(pinA.componentId) || pinA.componentId;
           const labelB = compLabelMap.get(pinB.componentId) || pinB.componentId;
-          const lane = bottomLaneIndex++;
+          const lane = this.allocateLane(bottomLanes, fromCoords.x, toCoords.x, 2);
+          const route = this.buildHighwayPath(fromCoords, toCoords, 'bottom', lane, pinA.side, pinB.side);
 
           wires.push({
             id: `wire-${wireCounter++}`,
@@ -266,7 +275,8 @@ export class WireRouter {
             },
             color: net.color || '#10b981',
             laneIndex: lane,
-            path: this.buildHighwayPath(fromCoords, toCoords, 'bottom', lane, pinA.side, pinB.side),
+            path: route.path,
+            points: route.points,
             isPowerBus: false,
             description: `${labelA} (${pinA.pinName}) → ${labelB} (${pinB.pinName})`
           });
@@ -278,14 +288,16 @@ export class WireRouter {
         const unoPinName = unoPinFull.replace(/^uno\./i, '');
         const unoPos = this.getUnoPinPos(unoPinName);
         const isTopHeader = unoPos.y < this.offsets.uno.y + 100;
-        const lane = isTopHeader ? topLaneIndex++ : bottomLaneIndex++;
         const side = isTopHeader ? 'top' : 'bottom';
 
         if (stripGroups.length > 0) {
           const targetGroup = stripGroups[0];
           const targetPin = targetGroup.repPin;
           const freeHole = this.pickFreeStripHole(targetPin, side, usedBreadboardHoles);
-          const path = this.buildHighwayPath(unoPos, freeHole, side, lane);
+          const lane = isTopHeader
+            ? this.allocateLane(topLanes, unoPos.x, freeHole.x, 0)
+            : this.allocateLane(bottomLanes, unoPos.x, freeHole.x, 2);
+          const route = this.buildHighwayPath(unoPos, freeHole, side, lane);
 
           wires.push({
             id: `wire-${wireCounter++}`,
@@ -299,7 +311,8 @@ export class WireRouter {
             },
             color: net.color || '#3b82f6',
             laneIndex: lane,
-            path,
+            path: route.path,
+            points: route.points,
             isPowerBus: false,
             description: `Arduino ${unoPinName} → Breadboard ${freeHole.holeName} pini (${targetGroup.label} ile aynı sütun)`
           });
@@ -307,7 +320,10 @@ export class WireRouter {
           const targetPin = offBoardPins[0].pin;
           const offPos = this.getPinCanvasPos(targetPin);
           const offLabel = compLabelMap.get(targetPin.componentId) || targetPin.componentId;
-          const path = this.buildHighwayPath(unoPos, offPos, side, lane, undefined, targetPin.side);
+          const lane = isTopHeader
+            ? this.allocateLane(topLanes, unoPos.x, offPos.x, 0)
+            : this.allocateLane(bottomLanes, unoPos.x, offPos.x, 2);
+          const route = this.buildHighwayPath(unoPos, offPos, side, lane, undefined, targetPin.side);
 
           wires.push({
             id: `wire-${wireCounter++}`,
@@ -320,7 +336,8 @@ export class WireRouter {
             },
             color: net.color || '#3b82f6',
             laneIndex: lane,
-            path,
+            path: route.path,
+            points: route.points,
             isPowerBus: false,
             description: `Arduino ${unoPinName} → ${offLabel} (${targetPin.pinName} pini)`
           });
@@ -343,6 +360,7 @@ export class WireRouter {
           const railCol = this.pickFreeRailCol(pin.col, usedSet);
           const railHole = `${railPrefix}.${railCol}`;
           const toCoords = this.getBreadboardPos(railCol, railRow);
+          const jumperRoute = this.buildLocalJumperPath(freeFrom, toCoords, 'down');
 
           wires.push({
             id: `wire-${wireCounter++}`,
@@ -361,7 +379,8 @@ export class WireRouter {
             },
             color: net.color || defaultColor,
             laneIndex: 0,
-            path: this.buildLocalJumperPath(freeFrom, toCoords, 'down'),
+            path: jumperRoute.path,
+            points: jumperRoute.points,
             isPowerBus: false,
             description: `Breadboard ${freeFrom.holeName} pini (${targetGroup.label} ile aynı sütun) → ${railTitle} (${railHole} pini)`
           });
@@ -372,7 +391,8 @@ export class WireRouter {
           const railHole = `${railPrefix}.${railCol}`;
           const fromCoords = this.getPinCanvasPos(pin);
           const toCoords = this.getBreadboardPos(railCol, railRow);
-          const lane = bottomLaneIndex++;
+          const lane = this.allocateLane(bottomLanes, fromCoords.x, toCoords.x, 2);
+          const route = this.buildHighwayPath(fromCoords, toCoords, 'bottom', lane, pin.side);
 
           wires.push({
             id: `wire-${wireCounter++}`,
@@ -390,7 +410,8 @@ export class WireRouter {
             },
             color: net.color || defaultColor,
             laneIndex: lane,
-            path: this.buildHighwayPath(fromCoords, toCoords, 'bottom', lane, pin.side),
+            path: route.path,
+            points: route.points,
             isPowerBus: false,
             description: `${offLabel} (${pin.pinName} pini) → ${railTitle} (${railHole} pini)`
           });
@@ -512,8 +533,38 @@ export class WireRouter {
   }
 
   /**
+   * Aralık tabanlı şerit paylaşımı (Interval-based lane reuse):
+   * X aralıkları çakışmayan kablolar aynı yatay şeridi paylaşır, böylece toplam şerit sayısı ve sahne yüksekliği azalır.
+   */
+  private allocateLane(
+    lanes: Array<Array<[number, number]>>,
+    x1: number,
+    x2: number,
+    startIdx = 0
+  ): number {
+    const lo = Math.min(x1, x2) - 10;
+    const hi = Math.max(x1, x2) + 10;
+
+    for (let idx = startIdx; idx < lanes.length; idx++) {
+      const intervals = lanes[idx];
+      const overlaps = intervals.some(([a, b]) => lo < b && hi > a);
+      if (!overlaps) {
+        intervals.push([lo, hi]);
+        return idx;
+      }
+    }
+
+    while (lanes.length < startIdx) {
+      lanes.push([]);
+    }
+    lanes.push([[lo, hi]]);
+    return lanes.length - 1;
+  }
+
+  /**
    * Kademeli Şerit (Highway Lane) Yolu: Kablolar üst üste binmez.
    * Off-board pinlerin kenar yönü (left/right/top/bottom) varsa kısa bir stub ile o kenardan çıkar.
+   * Hem SVG path hem de dinamik sahne sınırı (bounds) hesabı için ham noktaları döndürür.
    */
   private buildHighwayPath(
     from: { x: number; y: number },
@@ -522,7 +573,7 @@ export class WireRouter {
     laneIndex: number,
     fromSide?: 'top' | 'bottom' | 'left' | 'right',
     toSide?: 'top' | 'bottom' | 'left' | 'right'
-  ): string {
+  ): { path: string; points: Array<{ x: number; y: number }> } {
     const laneOffset = 18 + laneIndex * 12;
     const stub = 14;
 
@@ -546,15 +597,25 @@ export class WireRouter {
       const effR = Math.min(r, dx / 2);
       const prefix = hasFromStub ? `M ${from.x} ${from.y} L ${fromExit.x} ${fromExit.y} ` : `M ${from.x} ${from.y} `;
       const suffix = hasToStub ? ` L ${to.x} ${to.y}` : '';
-      return (
+      const path =
         prefix +
         `L ${fromExit.x} ${channelY + effR} ` +
         `Q ${fromExit.x} ${channelY} ${fromExit.x + dirX * effR} ${channelY} ` +
         `L ${toEntry.x - dirX * effR} ${channelY} ` +
         `Q ${toEntry.x} ${channelY} ${toEntry.x} ${channelY + effR} ` +
         `L ${toEntry.x} ${toEntry.y}` +
-        suffix
-      );
+        suffix;
+      return {
+        path,
+        points: [
+          from,
+          fromExit,
+          { x: fromExit.x, y: channelY },
+          { x: toEntry.x, y: channelY },
+          toEntry,
+          to
+        ]
+      };
     } else {
       const channelY = Math.max(from.y, to.y, fromExit.y, toEntry.y) + laneOffset;
       const r = 8;
@@ -563,15 +624,25 @@ export class WireRouter {
       const effR = Math.min(r, dx / 2);
       const prefix = hasFromStub ? `M ${from.x} ${from.y} L ${fromExit.x} ${fromExit.y} ` : `M ${from.x} ${from.y} `;
       const suffix = hasToStub ? ` L ${to.x} ${to.y}` : '';
-      return (
+      const path =
         prefix +
         `L ${fromExit.x} ${channelY - effR} ` +
         `Q ${fromExit.x} ${channelY} ${fromExit.x + dirX * effR} ${channelY} ` +
         `L ${toEntry.x - dirX * effR} ${channelY} ` +
         `Q ${toEntry.x} ${channelY} ${toEntry.x} ${channelY - effR} ` +
         `L ${toEntry.x} ${toEntry.y}` +
-        suffix
-      );
+        suffix;
+      return {
+        path,
+        points: [
+          from,
+          fromExit,
+          { x: fromExit.x, y: channelY },
+          { x: toEntry.x, y: channelY },
+          toEntry,
+          to
+        ]
+      };
     }
   }
 
@@ -582,12 +653,20 @@ export class WireRouter {
     from: { x: number; y: number },
     to: { x: number; y: number },
     dropOffset = 18
-  ): string {
+  ): { path: string; points: Array<{ x: number; y: number }> } {
     const channelY = Math.max(from.y, to.y) + dropOffset;
-    return (
+    const path =
       `M ${from.x} ${from.y} ` +
-      `C ${from.x} ${channelY}, ${to.x - 16} ${channelY}, ${to.x} ${to.y}`
-    );
+      `C ${from.x} ${channelY}, ${to.x - 16} ${channelY}, ${to.x} ${to.y}`;
+    return {
+      path,
+      points: [
+        from,
+        { x: from.x, y: channelY },
+        { x: to.x - 16, y: channelY },
+        to
+      ]
+    };
   }
 
   /**
@@ -597,12 +676,15 @@ export class WireRouter {
     from: { x: number; y: number },
     to: { x: number; y: number },
     arcDir: 'up' | 'down'
-  ): string {
+  ): { path: string; points: Array<{ x: number; y: number }> } {
     const dx = to.x - from.x;
     const dy = to.y - from.y;
     const offset = arcDir === 'down' ? 14 : -16;
     const cx = from.x + dx * 0.5 + 4;
     const cy = from.y + dy * 0.5 + offset;
-    return `M ${from.x} ${from.y} Q ${cx} ${cy} ${to.x} ${to.y}`;
+    return {
+      path: `M ${from.x} ${from.y} Q ${cx} ${cy} ${to.x} ${to.y}`,
+      points: [from, { x: cx, y: cy }, to]
+    };
   }
 }

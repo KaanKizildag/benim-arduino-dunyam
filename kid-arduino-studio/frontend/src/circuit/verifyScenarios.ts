@@ -129,7 +129,41 @@ export function verifyAllScenarios(): void {
       }
     }
 
-    // Kriter 5: Hiçbir kablo bn.0 veya bp.0 kullanmamalı ve açıklamalar Türkçe/delik isimli olmalı
+    // Kriter 5: Hiçbir kablo bn.0 veya bp.0 kullanmamalı, açıklamalar Türkçe olmalı ve tüm noktalar bounds içinde kalmalı
+    assertCondition(
+      Boolean(res.bounds && res.bounds.width > 0 && res.bounds.height > 0),
+      `${name}: Dinamik bounds hesaplanmamış!`
+    );
+
+    // Off-board kartlar birbirleriyle çakışmamalı ve bounds içinde olmalı
+    const offBoards = res.components.filter(c => !c.isBreadboardMounted);
+    for (let i = 0; i < offBoards.length; i++) {
+      const a = offBoards[i];
+      const aw = a.width || 140;
+      const ah = a.height || 96;
+      assertCondition(
+        a.left >= res.bounds.minX &&
+          a.top >= res.bounds.minY &&
+          a.left + aw <= res.bounds.maxX &&
+          a.top + ah <= res.bounds.maxY,
+        `${name}: Off-board kart '${a.id}' sahne bounds dışına taşıyor!`
+      );
+      for (let j = i + 1; j < offBoards.length; j++) {
+        const b = offBoards[j];
+        const bw = b.width || 140;
+        const bh = b.height || 96;
+        const overlaps =
+          a.left < b.left + bw &&
+          a.left + aw > b.left &&
+          a.top < b.top + bh &&
+          a.top + ah > b.top;
+        assertCondition(
+          !overlaps,
+          `${name}: Off-board kartlar '${a.id}' ve '${b.id}' birbirinin üzerine biniyor!`
+        );
+      }
+    }
+
     for (const w of res.wires) {
       assertCondition(
         w.to.holeName !== 'bn.0' && w.to.holeName !== 'bp.0' && w.from.holeName !== 'bn.0',
@@ -139,6 +173,16 @@ export function verifyAllScenarios(): void {
         Boolean(w.description && w.description.includes('→')),
         `${name}: Kablo '${w.id}' açıklaması eksik veya geçersiz: ${w.description}`
       );
+      const pts = [w.from, w.to, ...(w.points || [])];
+      for (const pt of pts) {
+        assertCondition(
+          pt.x >= res.bounds.minX &&
+            pt.x <= res.bounds.maxX &&
+            pt.y >= res.bounds.minY &&
+            pt.y <= res.bounds.maxY,
+          `${name}: Kablo '${w.id}' noktası (${pt.x.toFixed(1)},${pt.y.toFixed(1)}) sahne bounds dışında!`
+        );
+      }
     }
 
     console.log(`  ✅ ${name} BAŞARILI (0 Hata, Tüm Kriterler Doğrulandı)\n`);
