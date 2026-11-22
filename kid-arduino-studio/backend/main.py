@@ -5,6 +5,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
+import litellm
+
+# Yeni nesil modellerin (Gemini 3.x vb.) desteklemediği parametreleri (ör. temperature) sessizce düşür
+litellm.drop_params = True
 
 from schemas import (
     ProjeTasarimi,

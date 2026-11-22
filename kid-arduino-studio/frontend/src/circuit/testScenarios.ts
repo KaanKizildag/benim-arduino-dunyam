@@ -223,6 +223,73 @@ export const scenarioI_potentiometerAndLed: CircuitNetlist = {
   ]
 };
 
+/**
+ * Senaryo J: Çoklu Off-Board Modül ve Karışık Devre
+ * HC-05 + L298N + 2 DC Motor + HC-SR04 + Servo + LCD1602 + Röle + LED/Buton
+ * (Bug 1 fit-to-screen & dock + Bug 2 gerçek pinInfo hizalaması doğrulama senaryosu)
+ */
+export const scenarioJ_multiOffBoardModules: CircuitNetlist = {
+  board: 'arduino-uno',
+  components: [
+    { id: 'bt1', type: 'wokwi-hc-05', label: 'HC-05 Bluetooth' },
+    { id: 'drv1', type: 'wokwi-l298n', label: 'L298N Motor Sürücü' },
+    { id: 'm1', type: 'wokwi-dc-motor', label: 'Sol Motor' },
+    { id: 'm2', type: 'wokwi-dc-motor', label: 'Sağ Motor' },
+    { id: 'us1', type: 'wokwi-hc-sr04', label: 'Mesafe Sensörü' },
+    { id: 'srv1', type: 'wokwi-servo', label: 'Servo Motor' },
+    { id: 'lcd1', type: 'wokwi-lcd1602', label: 'LCD Ekran' },
+    { id: 'rel1', type: 'wokwi-relay-module', label: '5V Röle' },
+    { id: 'r1', type: 'wokwi-resistor', props: { value: '220' }, label: '220Ω Direnç' },
+    { id: 'led1', type: 'wokwi-led', props: { color: 'red' }, label: 'Durum LED' },
+    { id: 'btn1', type: 'wokwi-pushbutton', label: 'Başlat Butonu' },
+    { id: 'r2', type: 'wokwi-resistor', props: { value: '10k' }, label: '10kΩ Pull-Down' }
+  ],
+  connections: [
+    // HC-05
+    { from: 'bt1.VCC', to: '5V', color: 'red' },
+    { from: 'bt1.GND', to: 'GND', color: 'black' },
+    { from: 'bt1.TXD', to: 'uno.D2', color: 'cyan' },
+    { from: 'bt1.RXD', to: 'uno.D3', color: 'blue' },
+    // L298N + 2 DC Motor
+    { from: 'drv1.VCC', to: '5V', color: 'red' },
+    { from: 'drv1.GND', to: 'GND', color: 'black' },
+    { from: 'drv1.IN1', to: 'uno.D4', color: 'orange' },
+    { from: 'drv1.IN2', to: 'uno.D5', color: 'yellow' },
+    { from: 'drv1.IN3', to: 'uno.D6', color: 'purple' },
+    { from: 'drv1.IN4', to: 'uno.D7', color: 'green' },
+    { from: 'drv1.OUT1', to: 'm1.1', color: 'red' },
+    { from: 'drv1.OUT2', to: 'm1.2', color: 'black' },
+    { from: 'drv1.OUT3', to: 'm2.1', color: 'red' },
+    { from: 'drv1.OUT4', to: 'm2.2', color: 'black' },
+    // HC-SR04
+    { from: 'us1.VCC', to: '5V', color: 'red' },
+    { from: 'us1.GND', to: 'GND', color: 'black' },
+    { from: 'us1.TRIG', to: 'uno.D8', color: 'blue' },
+    { from: 'us1.ECHO', to: 'uno.D9', color: 'cyan' },
+    // Servo
+    { from: 'srv1.V+', to: '5V', color: 'red' },
+    { from: 'srv1.GND', to: 'GND', color: 'black' },
+    { from: 'srv1.PWM', to: 'uno.D10', color: 'orange' },
+    // LCD I2C
+    { from: 'lcd1.VCC', to: '5V', color: 'red' },
+    { from: 'lcd1.GND', to: 'GND', color: 'black' },
+    { from: 'lcd1.SDA', to: 'uno.A4', color: 'green' },
+    { from: 'lcd1.SCL', to: 'uno.A5', color: 'yellow' },
+    // Relay
+    { from: 'rel1.VCC', to: '5V', color: 'red' },
+    { from: 'rel1.GND', to: 'GND', color: 'black' },
+    { from: 'rel1.IN', to: 'uno.D11', color: 'purple' },
+    // LED + Button
+    { from: 'uno.D13', to: 'r1.1', color: 'orange' },
+    { from: 'r1.2', to: 'led1.A', color: 'orange' },
+    { from: 'led1.C', to: 'GND', color: 'black' },
+    { from: 'btn1.1.l', to: '5V', color: 'red' },
+    { from: 'btn1.2.l', to: 'r2.1', color: 'green' },
+    { from: 'btn1.2.l', to: 'uno.D12', color: 'green' },
+    { from: 'r2.2', to: 'GND', color: 'black' }
+  ]
+};
+
 export const ALL_TEST_SCENARIOS: Record<string, CircuitNetlist> = {
   scenarioA,
   scenarioA_discrete,
@@ -233,7 +300,8 @@ export const ALL_TEST_SCENARIOS: Record<string, CircuitNetlist> = {
   scenarioF_voltageDividerAliases,
   scenarioG_trafficLightWithButtonOverflow,
   scenarioH_servoAndUltrasonic,
-  scenarioI_potentiometerAndLed
+  scenarioI_potentiometerAndLed,
+  scenarioJ_multiOffBoardModules
 };
 
 export function runAllCircuitTests() {

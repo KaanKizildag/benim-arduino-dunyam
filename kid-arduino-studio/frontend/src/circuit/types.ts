@@ -37,6 +37,7 @@ export interface AllocatedPin {
   holeName: string; // e.g. "5E", "6C", "bn.5"
   x: number;        // Relative to breadboard (px)
   y: number;        // Relative to breadboard (px)
+  side?: 'top' | 'bottom' | 'left' | 'right'; // Off-board pin çıkışı yönü
 }
 
 export interface PlacedComponent {
@@ -49,12 +50,36 @@ export interface PlacedComponent {
   top: number;      // px
   width?: number;
   height?: number;
+  elementOffsetX?: number;
+  elementOffsetY?: number;
+  elementScale?: number;
+  elementNaturalWidth?: number;
+  elementNaturalHeight?: number;
   labelX: number;
   labelY: number;
   startCol: number;
   endCol: number;
   pins: Record<string, AllocatedPin>;
 }
+
+export interface SceneBounds {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+  width: number;
+  height: number;
+}
+
+export const SCENE_LAYOUT = {
+  uno: { x: 48, y: 108, width: 275, height: 202, cardPad: 8, captionHeight: 26 },
+  bb: { x: 448, y: 108, width: 344, height: 204, cardPad: 8, captionHeight: 26 },
+  dockGapX: 28,
+  dockStartY: 72,
+  dockMaxColHeight: 430,
+  dockGapY: 26,
+  scenePadding: 28
+} as const;
 
 export interface RoutedWire {
   id: string;
@@ -75,6 +100,7 @@ export interface RoutedWire {
   color: string;
   laneIndex: number;
   path: string;
+  points?: Array<{ x: number; y: number }>;
   isPowerBus: boolean;
   description: string;
 }
@@ -84,6 +110,7 @@ export interface AutoLayoutResult {
   nets?: ElectricalNet[];
   components: PlacedComponent[];
   wires: RoutedWire[];
+  bounds: SceneBounds;
   highlightedColumns: number[];
   highlightedRails: string;
   errors: string[];

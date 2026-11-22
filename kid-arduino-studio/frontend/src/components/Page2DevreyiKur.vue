@@ -157,16 +157,17 @@
       </div>
     </div>
 
-    <!-- 3. OTOMATİK NETLIST-TO-BREADBOARD GÖRSEL ÇALIŞMA ALANI -->
+    <!-- 3. OTOMATİK NETLIST-TO-BREADBOARD GÖRSEL ÇALIŞMA ALANI (Dinamik Fit-to-Screen) -->
     <div
       ref="workspaceRef"
-      class="relative w-full overflow-x-auto overflow-y-hidden bg-slate-900 rounded-3xl border-[3px] border-slate-900 shadow-[0_8px_0_rgba(15,23,42,0.2)] min-h-[490px] select-none p-3 flex items-center justify-center"
+      class="relative w-full overflow-auto bg-slate-900 rounded-3xl border-[3px] border-slate-900 shadow-[0_8px_0_rgba(15,23,42,0.2)] select-none pt-11 pb-3 px-3"
+      :style="{ minHeight: `${workspaceMinHeight}px` }"
     >
       <!-- Arka Plan Grid Ağı -->
       <div class="absolute inset-0 pointer-events-none opacity-25" style="background-image: radial-gradient(#64748b 1px, transparent 1px); background-size: 20px 20px;"></div>
 
       <!-- Üst Bilgi Rozeti -->
-      <div class="absolute top-3 left-4 z-20 pointer-events-none flex flex-wrap items-center gap-2">
+      <div class="absolute top-3 left-4 right-32 z-20 pointer-events-none flex flex-wrap items-center gap-2">
         <span class="px-2.5 py-1 rounded-lg bg-slate-800/90 border border-slate-700 text-[11px] font-black tracking-wide text-amber-300">
           ⚡ AKILLI DEVRE ŞEMASI • Çocuk Dostu Basit Kablolama
         </span>
@@ -184,15 +185,69 @@
         </span>
       </div>
 
-      <!-- ÇALIŞMA ALANI İÇ KUTUSU (Sabit 980x470 Koordinat Sistemi: Uno=(48,108), Breadboard=(448,108)) -->
-      <div class="relative w-[980px] h-[470px] shrink-0">
+      <!-- Sağ Üst Zoom / Sığdır Kontrolleri -->
+      <div class="absolute top-2.5 right-3 z-40 flex items-center gap-1 bg-slate-800/90 border border-slate-700 rounded-xl p-1 shadow-md">
+        <button
+          type="button"
+          @click="zoomOut"
+          title="Uzaklaştır"
+          class="w-6 h-6 rounded-lg bg-slate-900 hover:bg-slate-700 text-slate-200 font-black text-xs flex items-center justify-center cursor-pointer"
+        >
+          −
+        </button>
+        <button
+          type="button"
+          @click="resetZoom"
+          title="Ekrana Sığdır"
+          class="px-2 h-6 rounded-lg bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-[10px] flex items-center justify-center cursor-pointer"
+        >
+          Sığdır {{ Math.round(effectiveScale * 100) }}%
+        </button>
+        <button
+          type="button"
+          @click="zoomIn"
+          title="Yakınlaştır"
+          class="w-6 h-6 rounded-lg bg-slate-900 hover:bg-slate-700 text-slate-200 font-black text-xs flex items-center justify-center cursor-pointer"
+        >
+          +
+        </button>
+      </div>
 
+      <!-- ÖLÇEKLENMİŞ SAHNE SARMALAYICISI (Kırpma olmadan ekrana tam sığar) -->
+      <div
+        class="relative mx-auto shrink-0"
+        :style="{
+          width: `${scaledStageWidth}px`,
+          height: `${scaledStageHeight}px`
+        }"
+      >
+        <!-- SAHNE İÇ KUTUSU (Dinamik bounds boyutunda, top-left origin ile scale) -->
+        <div
+          class="relative"
+          :style="{
+            width: `${sceneBounds.width}px`,
+            height: `${sceneBounds.height}px`,
+            transform: `scale(${effectiveScale})`,
+            transformOrigin: 'top left'
+          }"
+        >
+          <!-- HTML BİLEŞEN KATMANI (Sahne minX/minY ofseti kadar kaydırılır) -->
+          <div
+            class="absolute top-0 left-0"
+            :style="{
+              transform: `translate(${-sceneBounds.minX}px, ${-sceneBounds.minY}px)`
+            }"
+          >
         <!-- ======================================================== -->
-        <!-- A) ARDUINO UNO KARTI (Tam (48, 108) Orijininde)          -->
+        <!-- A) ARDUINO UNO KARTI (Tek kaynak SCENE_LAYOUT)           -->
         <!-- ======================================================== -->
         <div
           id="comp-arduino-card"
-          class="absolute left-[40px] top-[100px] z-10 p-[8px] rounded-2xl bg-slate-800/45 border border-slate-700/70 shadow-lg pointer-events-auto"
+          class="absolute z-10 p-[8px] rounded-2xl bg-slate-800/45 border border-slate-700/70 shadow-lg pointer-events-auto"
+          :style="{
+            left: `${SCENE_LAYOUT.uno.x - SCENE_LAYOUT.uno.cardPad}px`,
+            top: `${SCENE_LAYOUT.uno.y - SCENE_LAYOUT.uno.cardPad}px`
+          }"
         >
           <div class="relative">
             <wokwi-arduino-uno></wokwi-arduino-uno>
@@ -203,11 +258,15 @@
         </div>
 
         <!-- ======================================================== -->
-        <!-- B) BREADBOARD VE ÜZERİNE TAKILAN PARÇALAR ((448, 108))   -->
+        <!-- B) BREADBOARD VE ÜZERİNE TAKILAN PARÇALAR (SCENE_LAYOUT) -->
         <!-- ======================================================== -->
         <div
           id="comp-breadboard-card"
-          class="absolute left-[440px] top-[100px] z-10 p-[8px] rounded-2xl bg-slate-800/45 border border-slate-700/70 shadow-lg"
+          class="absolute z-10 p-[8px] rounded-2xl bg-slate-800/45 border border-slate-700/70 shadow-lg"
+          :style="{
+            left: `${SCENE_LAYOUT.bb.x - SCENE_LAYOUT.bb.cardPad}px`,
+            top: `${SCENE_LAYOUT.bb.y - SCENE_LAYOUT.bb.cardPad}px`
+          }"
         >
           <!-- Sıfır Paddingli İç Kutu: Orijini Tam (448, 108) -->
           <div class="relative">
@@ -245,44 +304,65 @@
         </div>
 
         <!-- ======================================================== -->
-        <!-- C) HARİCİ SENSÖR & MOTOR İSTASYONU (Etiketli Pin Barı)   -->
+        <!-- C) HARİCİ SENSÖR & MOTOR İSTASYONU (Gerçek pinInfo)      -->
         <!-- ======================================================== -->
         <div
           v-for="comp in offBoardComponents"
           :key="comp.id"
-          class="absolute z-10 h-[96px] rounded-2xl bg-slate-800/80 border-2 border-cyan-500/60 shadow-lg flex flex-col items-center justify-between p-1.5"
-          :style="{ left: `${comp.left}px`, top: `${comp.top}px`, width: `${comp.width || 140}px` }"
+          class="absolute z-10 rounded-2xl bg-slate-800/80 border-2 border-cyan-500/60 shadow-lg"
+          :style="{
+            left: `${comp.left}px`,
+            top: `${comp.top}px`,
+            width: `${comp.width || 140}px`,
+            height: `${comp.height || 96}px`
+          }"
         >
           <!-- Modül Başlığı -->
-          <div class="px-2 py-0.5 rounded-md bg-slate-950/90 border border-cyan-500/40 text-[9px] font-black text-cyan-300 truncate max-w-full">
-            {{ comp.label }}
+          <div class="absolute top-1 left-1.5 right-1.5 flex justify-center pointer-events-none">
+            <span class="px-2 py-0.5 rounded-md bg-slate-950/90 border border-cyan-500/40 text-[9px] font-black text-cyan-300 truncate max-w-full">
+              {{ comp.label }}
+            </span>
           </div>
 
-          <!-- Wokwi Elemanı Görseli -->
-          <div class="scale-[0.52] origin-center pointer-events-none -my-3">
+          <!-- Wokwi Elemanı Görseli (Deterministik top-left origin + scale) -->
+          <div
+            class="absolute pointer-events-none"
+            :style="{
+              left: `${comp.elementOffsetX ?? 14}px`,
+              top: `${comp.elementOffsetY ?? 28}px`,
+              width: `${comp.elementNaturalWidth ?? 80}px`,
+              height: `${comp.elementNaturalHeight ?? 78}px`,
+              transform: `scale(${comp.elementScale ?? 0.7})`,
+              transformOrigin: 'top left'
+            }"
+          >
             <component :is="comp.type" v-bind="comp.props"></component>
-          </div>
-
-          <!-- Alt Kenar: Çocuk Dostu Etiketli Pin Soketleri (Kablolar Tam Buraya Takılır!) -->
-          <div class="w-full h-4 relative">
-            <div
-              v-for="pin in Object.values(comp.pins)"
-              :key="pin.pinName"
-              class="absolute -translate-x-1/2 -translate-y-1/2 px-1 py-0.2 rounded bg-slate-950 border border-amber-400 text-[8px] font-black text-amber-200 leading-none shadow-xs"
-              :style="{
-                left: `${448 + pin.x - comp.left}px`,
-                top: `${108 + pin.y - comp.top - 11}px`
-              }"
-            >
-              {{ pin.pinName }}
-            </div>
           </div>
         </div>
 
-        <!-- ======================================================== -->
-        <!-- D) BİLEŞEN BACAKLARI, İÇ İLETKENLİK VE KABLOLAR (SVG)     -->
-        <!-- ======================================================== -->
-        <svg class="absolute inset-0 w-full h-full pointer-events-none z-30 overflow-visible">
+        <!-- Off-Board Pin Etiketleri Overlay (Doğrudan gerçek soket koordinatlarına hizalı) -->
+        <div class="absolute inset-0 pointer-events-none z-25">
+          <div
+            v-for="lbl in offBoardPinLabels"
+            :key="lbl.key"
+            class="absolute px-1 py-0.2 rounded bg-slate-950/95 border border-amber-400/90 text-[7.5px] font-black text-amber-200 leading-none shadow-xs whitespace-nowrap"
+            :class="lbl.posClass"
+            :style="{ left: `${lbl.x}px`, top: `${lbl.y}px` }"
+          >
+            {{ lbl.pinName }}
+          </div>
+        </div>
+          </div>
+
+          <!-- ======================================================== -->
+          <!-- D) BİLEŞEN BACAKLARI, İÇ İLETKENLİK VE KABLOLAR (SVG)     -->
+          <!-- ======================================================== -->
+          <svg
+            class="absolute inset-0 pointer-events-none z-30"
+            :width="sceneBounds.width"
+            :height="sceneBounds.height"
+            :viewBox="sceneViewBox"
+          >
           <defs>
             <filter id="wireGlow" x="-20%" y="-20%" width="140%" height="140%">
               <feDropShadow dx="0" dy="3" stdDeviation="2.5" flood-color="#000000" flood-opacity="0.6" />
@@ -481,8 +561,8 @@
               </text>
             </g>
           </g>
-        </svg>
-
+          </svg>
+        </div>
       </div>
     </div>
 
@@ -624,10 +704,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 import type { CircuitNetlist, BaglantiAdimi, LogicVerificationReport } from '../types/project';
 import {
   compileNetlistToBreadboard,
+  SCENE_LAYOUT,
+  DEFAULT_ROUTER_OFFSETS,
   type AutoLayoutResult,
   type PlacedComponent,
   type RoutedWire
@@ -712,16 +794,83 @@ const activeNetlist = computed<CircuitNetlist>(() => {
   };
 });
 
-// Auto-Layout Motorunun Çalıştırılması
+// Auto-Layout Motorunun Çalıştırılması (Tek kaynak DEFAULT_ROUTER_OFFSETS)
 const layoutResult = computed<AutoLayoutResult>(() => {
-  return compileNetlistToBreadboard(activeNetlist.value, {
-    uno: { x: 48, y: 108 },
-    bb: { x: 448, y: 108 }
-  });
+  return compileNetlistToBreadboard(activeNetlist.value, DEFAULT_ROUTER_OFFSETS);
 });
+
+// Dinamik Fit-to-Screen + ResizeObserver + Zoom Kontrolleri
+const workspaceRef = ref<HTMLElement | null>(null);
+const containerWidth = ref(980);
+const containerHeight = ref(540);
+const userZoom = ref(1);
+let workspaceObserver: ResizeObserver | null = null;
+
+function updateWorkspaceSize() {
+  const el = workspaceRef.value;
+  if (!el) return;
+  containerWidth.value = Math.max(260, el.clientWidth - 24);
+  const vh = typeof window !== 'undefined' ? window.innerHeight : 800;
+  containerHeight.value = Math.max(360, Math.min(660, Math.round(vh * 0.62)));
+}
+
+onMounted(() => {
+  updateWorkspaceSize();
+  if (typeof ResizeObserver !== 'undefined' && workspaceRef.value) {
+    workspaceObserver = new ResizeObserver(() => {
+      updateWorkspaceSize();
+    });
+    workspaceObserver.observe(workspaceRef.value);
+  }
+  if (typeof window !== 'undefined') {
+    window.addEventListener('resize', updateWorkspaceSize);
+  }
+});
+
+onBeforeUnmount(() => {
+  if (workspaceObserver) {
+    workspaceObserver.disconnect();
+    workspaceObserver = null;
+  }
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('resize', updateWorkspaceSize);
+  }
+});
+
+const sceneBounds = computed(() => layoutResult.value.bounds);
+const sceneViewBox = computed(
+  () => `${sceneBounds.value.minX} ${sceneBounds.value.minY} ${sceneBounds.value.width} ${sceneBounds.value.height}`
+);
+
+const fitScale = computed(() => {
+  const w = Math.max(1, sceneBounds.value.width);
+  const h = Math.max(1, sceneBounds.value.height);
+  return Math.min(1, containerWidth.value / w, containerHeight.value / h);
+});
+
+const effectiveScale = computed(() => {
+  return Math.max(0.25, Math.min(2, fitScale.value * userZoom.value));
+});
+
+const scaledStageWidth = computed(() => Math.ceil(sceneBounds.value.width * effectiveScale.value));
+const scaledStageHeight = computed(() => Math.ceil(sceneBounds.value.height * effectiveScale.value));
+const workspaceMinHeight = computed(() => Math.max(320, scaledStageHeight.value + 58));
+
+function zoomIn() {
+  userZoom.value = Math.min(2.2, Number((userZoom.value + 0.15).toFixed(2)));
+}
+
+function zoomOut() {
+  userZoom.value = Math.max(0.5, Number((userZoom.value - 0.15).toFixed(2)));
+}
+
+function resetZoom() {
+  userZoom.value = 1;
+}
 
 watch(activeNetlist, () => {
   currentStepIndex.value = 0;
+  userZoom.value = 1;
 });
 
 const mountedComponents = computed(() => {
@@ -732,15 +881,60 @@ const offBoardComponents = computed(() => {
   return layoutResult.value.components.filter(c => !c.isBreadboardMounted);
 });
 
-// Breadboard üzerine takılan parçaların delik işaretçileri (448, 108 ofsetli)
+const offBoardPinLabels = computed(() => {
+  const labels: Array<{ key: string; pinName: string; x: number; y: number; posClass: string }> = [];
+  for (const comp of offBoardComponents.value) {
+    for (const pin of Object.values(comp.pins)) {
+      const cx = SCENE_LAYOUT.bb.x + pin.x;
+      const cy = SCENE_LAYOUT.bb.y + pin.y;
+      const side = pin.side || 'bottom';
+      if (side === 'left') {
+        labels.push({
+          key: `${comp.id}.${pin.pinName}`,
+          pinName: pin.pinName,
+          x: cx - 5,
+          y: cy,
+          posClass: '-translate-x-full -translate-y-1/2'
+        });
+      } else if (side === 'right') {
+        labels.push({
+          key: `${comp.id}.${pin.pinName}`,
+          pinName: pin.pinName,
+          x: cx + 5,
+          y: cy,
+          posClass: '-translate-y-1/2'
+        });
+      } else if (side === 'top') {
+        labels.push({
+          key: `${comp.id}.${pin.pinName}`,
+          pinName: pin.pinName,
+          x: cx,
+          y: cy - 6,
+          posClass: '-translate-x-1/2 -translate-y-full'
+        });
+      } else {
+        labels.push({
+          key: `${comp.id}.${pin.pinName}`,
+          pinName: pin.pinName,
+          x: cx,
+          y: cy + 5,
+          posClass: '-translate-x-1/2'
+        });
+      }
+    }
+  }
+  return labels;
+});
+
+// Breadboard üzerine takılan parçaların delik işaretçileri
 const mountedPinMarkers = computed(() => {
   const markers: Array<{ key: string; cx: number; cy: number; holeName: string }> = [];
   for (const comp of mountedComponents.value) {
     for (const pin of Object.values(comp.pins)) {
       markers.push({
         key: `${comp.id}.${pin.pinName}`,
-        cx: 448 + pin.x,
-        cy: 108 + pin.y,
+        cx: SCENE_LAYOUT.bb.x + pin.x,
+        cy: SCENE_LAYOUT.bb.y + pin.y,
         holeName: pin.holeName
       });
     }
@@ -756,7 +950,7 @@ const sharedColumnBridges = computed(() => {
       const half = ['A', 'B', 'C', 'D', 'E'].includes(pin.row.toUpperCase()) ? 'U' : 'L';
       const key = `${pin.col}:${half}`;
       if (!byColHalf.has(key)) byColHalf.set(key, []);
-      byColHalf.get(key)!.push({ x: 448 + pin.x, y: 108 + pin.y });
+      byColHalf.get(key)!.push({ x: SCENE_LAYOUT.bb.x + pin.x, y: SCENE_LAYOUT.bb.y + pin.y });
     }
   }
 
