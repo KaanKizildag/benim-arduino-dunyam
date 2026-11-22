@@ -419,10 +419,12 @@ const ollamaAvailable = ref(true);
 const isLoadingModels = ref(false);
 const localModels = ref<ModelInfo[]>([]);
 const cloudModels = ref<ModelInfo[]>([
-  { id: 'gemini/gemini-2.5-flash', name: 'Gemini 2.5 Flash (En Yeni & Hızlı)', provider: 'gemini', category: 'Google Gemini', badge: '☁️ Bulut' },
-  { id: 'gemini/gemini-2.5-pro', name: 'Gemini 2.5 Pro (Gelişmiş Muhakeme)', provider: 'gemini', category: 'Google Gemini', badge: '☁️ Bulut' },
+  { id: 'gemini/gemini-3.8-flash', name: 'Gemini 3.8 Flash (En Yeni & Önerilen)', provider: 'gemini', category: 'Google Gemini', badge: '☁️ Bulut' },
+  { id: 'gemini/gemini-3.5-flash-lite', name: 'Gemini 3.5 Flash Lite (Hızlı & Ekonomik)', provider: 'gemini', category: 'Google Gemini', badge: '☁️ Bulut' },
+  { id: 'gemini/gemini-2.5-flash', name: 'Gemini 2.5 Flash (Legacy)', provider: 'gemini', category: 'Google Gemini', badge: '☁️ Bulut' },
+  { id: 'gemini/gemini-2.5-pro', name: 'Gemini 2.5 Pro (Legacy)', provider: 'gemini', category: 'Google Gemini', badge: '☁️ Bulut' },
   { id: 'gemini/gemini-2.0-flash', name: 'Gemini 2.0 Flash (Hızlı & Dengeli)', provider: 'gemini', category: 'Google Gemini', badge: '☁️ Bulut' },
-  { id: 'gemini/gemini-2.0-flash-lite', name: 'Gemini 2.0 Flash Lite (Hafif & Ekonomik)', provider: 'gemini', category: 'Google Gemini', badge: '☁️ Bulut' },
+  { id: 'gemini/gemini-2.0-flash-lite', name: 'Gemini 2.0 Flash Lite (Hafif)', provider: 'gemini', category: 'Google Gemini', badge: '☁️ Bulut' },
   { id: 'gemini/gemini-1.5-flash', name: 'Gemini 1.5 Flash (Kararlı)', provider: 'gemini', category: 'Google Gemini', badge: '☁️ Bulut' },
   { id: 'gemini/gemini-1.5-pro', name: 'Gemini 1.5 Pro (Derin Analiz)', provider: 'gemini', category: 'Google Gemini', badge: '☁️ Bulut' },
   { id: 'gpt-4o-mini', name: 'GPT-4o Mini (Hızlı & Ekonomik)', provider: 'openai', category: 'OpenAI', badge: '☁️ Bulut' },
