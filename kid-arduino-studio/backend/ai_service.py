@@ -21,6 +21,7 @@ from schemas import (
     SavedProjectEntry,
     AILogEntry,
 )
+from arduino_code_utils import sanitize_arduino_identifiers
 
 load_dotenv()
 
@@ -1418,6 +1419,7 @@ def fix_arduino_code(code: str, error: str, project_context: str = "", model: Op
     chosen_model = model or "gemini/gemini-1.5-flash"
     prompt = f"""Aşağıdaki Arduino Uno kodunda derleme/yükleme hatası oluştu.
 LÜTFEN HATAYI DÜZELT VE SADECE DÜZELTİLMİŞ C++ ARDUINO KODUNU DÖNDÜR.
+Değişken, sabit ve fonksiyon adlarında Türkçe harf (ç, ğ, ı, İ, ö, ş, ü) KULLANMA; sadece İngilizce harf, rakam ve alt çizgi kullan.
 
 HATALI KOD:
 ```cpp
@@ -1440,7 +1442,7 @@ PROJE BAĞLAMI:
         out = res.choices[0].message.content.strip()
         out = re.sub(r"^```(?:cpp)?\s*", "", out).strip()
         out = re.sub(r"```$", "", out).strip()
-        return out
+        return sanitize_arduino_identifiers(out)
     except Exception as e:
         print(f"[Self-Healing Hatası] Kod düzeltilemedi ({e}). Orijinal kod korunuyor.")
         return code
@@ -1575,6 +1577,7 @@ KESİN KURALLAR:
 - wokwi-ir-receiver (IR Alıcı): ir1.VCC, ir1.GND, ir1.DAT
 4. Güç bağlantılarını her zaman "to":"5V" veya "to":"GND" yönünde yaz. Arduino pinlerini "uno.D2".."uno.D13", "uno.A0".."uno.A5" yaz.
 5. "arduino_kodu" içindeki pinler ile "connections" içindeki "uno.*" pinleri BİREBİR AYNI olmalı.
+6. "arduino_kodu" içindeki değişken, sabit ve fonksiyon adlarında SADECE İngilizce harf, rakam ve alt çizgi kullan (ç, ğ, ı, İ, ö, ş, ü YASAK; örn: ESIK_DEGER, isikDegeri). Arduino derleyicisi Türkçe harfli adları derleyemez. Türkçe karakter sadece yorumlarda ve tırnak içindeki metinlerde olabilir.
 
 ÖRNEK 1 (2 Adet 2 Bacaklı LDR + 2 Adet 10k Direnç + Servo ile Günebakan):
 {"proje_adi":"Çift LDR ile Günebakan Servo Projesi","karsilama_mesaji":"İki LDR sensöründen hangisine daha çok ışık geliyorsa servo motoru o yöne çeviren günebakan devresi!","gerekli_parcalar":["ARDUINO_UNO","BREADBOARD","LDR_DISCRETE","RESISTOR_10K","SERVO_SG90"],"netlist":{"board":"arduino-uno","components":[{"id":"ldr1","type":"wokwi-photoresistor","props":{},"label":"Sol LDR (2 Bacaklı)"},{"id":"r1","type":"wokwi-resistor","props":{"value":"10000"},"label":"Sol 10kΩ Direnç"},{"id":"ldr2","type":"wokwi-photoresistor","props":{},"label":"Sağ LDR (2 Bacaklı)"},{"id":"r2","type":"wokwi-resistor","props":{"value":"10000"},"label":"Sağ 10kΩ Direnç"},{"id":"servo1","type":"wokwi-servo","props":{},"label":"SG90 Servo Motor"}],"connections":[{"from":"ldr1.1","to":"5V","color":"red"},{"from":"ldr1.2","to":"uno.A0","color":"green"},{"from":"ldr1.2","to":"r1.1","color":"green"},{"from":"r1.2","to":"GND","color":"black"},{"from":"ldr2.1","to":"5V","color":"red"},{"from":"ldr2.2","to":"uno.A1","color":"blue"},{"from":"ldr2.2","to":"r2.1","color":"blue"},{"from":"r2.2","to":"GND","color":"black"},{"from":"servo1.V+","to":"5V","color":"red"},{"from":"servo1.GND","to":"GND","color":"black"},{"from":"uno.D9","to":"servo1.PWM","color":"orange"}]},"akis_adimlari":{"gozlemle":"Sol LDR (A0) ve Sağ LDR (A1) sensörleri iki yöndeki ışık şiddetini (0-1023) ölçer.","karar_ver":"Sol LDR (A0) ışık değeri Sağ LDR (A1) değerinden daha büyük mü?","evet_sonucu":"Sol tarafta ışık daha güçlü! SG90 Servo Motoru (D9) sola (135 derece) döndür.","hayir_sonucu":"Sağ tarafta ışık daha güçlü! SG90 Servo Motoru (D9) sağa (45 derece) döndür."},"arduino_kodu":"#include <Servo.h>\\n\\nconst int LDR_SOL = A0;\\nconst int LDR_SAG = A1;\\nconst int SERVO_PIN = 9;\\nServo gunebakanServo;\\n\\nvoid setup() {\\n  Serial.begin(9600);\\n  gunebakanServo.attach(SERVO_PIN);\\n  gunebakanServo.write(90);\\n}\\n\\nvoid loop() {\\n  int isikSol = analogRead(LDR_SOL);\\n  int isikSag = analogRead(LDR_SAG);\\n  if (isikSol > isikSag + 30) {\\n    gunebakanServo.write(135);\\n  } else if (isikSag > isikSol + 30) {\\n    gunebakanServo.write(45);\\n  } else {\\n    gunebakanServo.write(90);\\n  }\\n  delay(100);\\n}","guvenlik_notu":"Her iki 2 bacaklı LDR için ayrı 10kΩ dirençlerle iki adet gerilim bölücü kurduk."}
@@ -1996,7 +1999,8 @@ Yukarıdaki isteğe göre SADECE istenen parçaları içeren `netlist` (componen
             raise ValueError("AI yanıtında 'netlist' alanı eksik.")
         if not isinstance(parsed.get("akis_adimlari"), dict):
             raise ValueError("AI yanıtında 'akis_adimlari' alanı eksik.")
-        raw_code = str(parsed.get("arduino_kodu") or "").strip()
+        # Değişken adlarındaki Türkçe harfler avr-gcc'de derleme hatası verir (örn. ESİK_DEGER)
+        raw_code = sanitize_arduino_identifiers(str(parsed.get("arduino_kodu") or "").strip())
         if not raw_code:
             raise ValueError("AI yanıtında 'arduino_kodu' alanı eksik veya boş.")
 
@@ -2341,6 +2345,7 @@ LOGIC_ONLY_SYSTEM_PROMPT = """Sen Arduino kodlama öğretmenisin. Verilen kablol
 KURALLAR:
 1. Sadece verilen pin tablosundaki pinleri kullan.
 2. Akış diyagramında sadece devredeki gerçek parçalardan bahset.
+3. Koddaki değişken, sabit ve fonksiyon adlarında SADECE İngilizce harf, rakam ve alt çizgi kullan (ç, ğ, ı, İ, ö, ş, ü YASAK; örn: ESIK_DEGER). Türkçe karakter sadece yorumlarda ve tırnak içindeki metinlerde olabilir.
 Tek satır (minified) JSON döndür."""
 
 
@@ -2527,7 +2532,7 @@ Yukarıdaki kablolamaya uygun `akis_adimlari` ve `arduino_kodu` alanlarını iç
         if not isinstance(parsed, dict):
             raise ValueError("AI yanıtı bir JSON nesnesi değil.")
         raw_akis = parsed.get("akis_adimlari")
-        raw_code = str(parsed.get("arduino_kodu") or "").strip()
+        raw_code = sanitize_arduino_identifiers(str(parsed.get("arduino_kodu") or "").strip())
         if not isinstance(raw_akis, dict) or not raw_code:
             raise ValueError("AI yanıtında 'akis_adimlari' veya 'arduino_kodu' alanı eksik.")
 

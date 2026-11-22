@@ -6,6 +6,8 @@ import tempfile
 import time
 from typing import List, Dict, Any, Optional
 
+from arduino_code_utils import sanitize_arduino_identifiers
+
 try:
     import serial
     import serial.tools.list_ports
@@ -130,6 +132,8 @@ def compile_and_upload(code: str, port: Optional[str] = None) -> Dict[str, Any]:
     Verilen Arduino C++ kodunu geçici dizinde derler ve karta yükler.
     arduino-cli yoksa güvenli simülasyon modunda doğrular.
     """
+    # Bu düzeltmeden önce kaydedilmiş projelerdeki Türkçe harfli değişken adları da derlensin
+    code = sanitize_arduino_identifiers(code)
     cli_bin = find_arduino_cli_binary()
 
     # 1. arduino-cli kurulu değilse simülasyon testi yap
