@@ -1436,6 +1436,7 @@ def fix_arduino_code(code: str, error: str, project_context: str = "", model: Op
     chosen_model = model or "gemini/gemini-1.5-flash"
     prompt = f"""Aşağıdaki Arduino Uno kodunda derleme/yükleme hatası oluştu.
 LÜTFEN HATAYI DÜZELT VE SADECE DÜZELTİLMİŞ C++ ARDUINO KODUNU DÖNDÜR.
+Değişken, sabit ve fonksiyon adlarında Türkçe harf (ç, ğ, ı, İ, ö, ş, ü) KULLANMA; sadece İngilizce harf, rakam ve alt çizgi kullan.
 
 HATALI KOD:
 ```cpp
@@ -1458,7 +1459,7 @@ PROJE BAĞLAMI:
         out = res.choices[0].message.content.strip()
         out = re.sub(r"^```(?:cpp)?\s*", "", out).strip()
         out = re.sub(r"```$", "", out).strip()
-        return out
+        return sanitize_arduino_identifiers(out)
     except Exception as e:
         print(f"[Self-Healing Hatası] Kod düzeltilemedi ({e}). Orijinal kod korunuyor.")
         return code
@@ -2024,8 +2025,6 @@ Yukarıdaki isteğe göre SADECE istenen parçaları içeren `netlist` (componen
 
         if not isinstance(parsed.get("netlist"), dict):
             raise ValueError("AI yanıtında 'netlist' alanı eksik.")
-        if not isinstance(parsed.get("akis_adimlari"), dict):
-            raise ValueError("AI yanıtında 'akis_adimlari' alanı eksik.")
         # Değişken adlarındaki Türkçe harfler avr-gcc'de derleme hatası verir (örn. ESİK_DEGER)
         raw_code = sanitize_arduino_identifiers(str(parsed.get("arduino_kodu") or "").strip())
         if not raw_code:
@@ -2389,6 +2388,7 @@ LOGIC_ONLY_SYSTEM_PROMPT = """Sen Arduino kodlama öğretmenisin. Verilen kablol
 KURALLAR:
 1. Sadece verilen pin tablosundaki pinleri kullan.
 2. Akış diyagramında sadece devredeki gerçek parçalardan bahset.
+3. Koddaki değişken, sabit ve fonksiyon adlarında SADECE İngilizce harf, rakam ve alt çizgi kullan (ç, ğ, ı, İ, ö, ş, ü YASAK; örn: ESIK_DEGER). Türkçe karakter sadece yorumlarda ve tırnak içindeki metinlerde olabilir.
 Tek satır (minified) JSON döndür."""
 
 
@@ -2575,7 +2575,7 @@ Yukarıdaki kablolamaya uygun `akis_adimlari` ve `arduino_kodu` alanlarını iç
         if not isinstance(parsed, dict):
             raise ValueError("AI yanıtı bir JSON nesnesi değil.")
         raw_akis = parsed.get("akis_adimlari")
-        raw_code = str(parsed.get("arduino_kodu") or "").strip()
+        raw_code = sanitize_arduino_identifiers(str(parsed.get("arduino_kodu") or "").strip())
         if not isinstance(raw_akis, dict) or not raw_code:
             raise ValueError("AI yanıtında 'akis_adimlari' veya 'arduino_kodu' alanı eksik.")
 
