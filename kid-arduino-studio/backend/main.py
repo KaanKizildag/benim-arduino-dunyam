@@ -20,6 +20,7 @@ from schemas import (
 )
 from ai_service import (
     generate_full_project_one_shot,
+    generate_full_project_stream,
     generate_wiring_only,
     generate_logic_and_code_for_wiring,
     fix_arduino_code,
@@ -242,6 +243,41 @@ def generate_project(req: GenerateRequest):
 @app.post("/api/generate", response_model=ProjeTasarimi)
 def generate_project_alias(req: GenerateRequest):
     return generate_project(req)
+
+
+@app.post("/api/generate-stream")
+def generate_project_stream_endpoint(req: GenerateRequest):
+    """
+    Streaming (Server-Sent Events) AI Çağrısı:
+    Yapay zekanın ürettiği bileşenleri, kabloları, akış adımlarını ve C++ kodunu
+    canlı olarak istemciye (frontend) akar.
+    """
+    if not req.prompt.strip():
+        raise HTTPException(status_code=400, detail="Lütfen bir proje fikri yazın!")
+
+    inventory = list(req.inventory) if req.inventory else ["ARDUINO_UNO", "BREADBOARD", "LED_RED", "RESISTOR_220"]
+    if "ARDUINO_UNO" not in inventory:
+        inventory.append("ARDUINO_UNO")
+    if "BREADBOARD" not in inventory:
+        inventory.append("BREADBOARD")
+
+    generator = generate_full_project_stream(
+        prompt=req.prompt,
+        inventory=inventory,
+        model=req.model or "default",
+        ollama_url=req.ollama_url or DEFAULT_OLLAMA_URL,
+        api_key=req.api_key
+    )
+
+    return StreamingResponse(
+        generator,
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
 
 
 @app.post("/api/upload")

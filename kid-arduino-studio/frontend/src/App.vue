@@ -27,6 +27,7 @@
         :inventoryCount="selectedInventory.length"
         :selectedInventory="selectedInventory"
         :activeModelName="activeModelLabel"
+        :streamData="streamData"
         @open-inventory="isInventoryOpen = true"
         @generate="handleGenerateProject"
       />
@@ -212,7 +213,7 @@ import ProjelerimModal from './components/ProjelerimModal.vue';
 import AdminAILogsModal from './components/AdminAILogsModal.vue';
 import MalzemeCantasiModal from './components/MalzemeCantasiModal.vue';
 import AIModelModal from './components/AIModelModal.vue';
-import Page1HayalEt from './components/Page1HayalEt.vue';
+import Page1HayalEt, { type AIStreamProgress } from './components/Page1HayalEt.vue';
 import Page2DevreyiKur from './components/Page2DevreyiKur.vue';
 import Page3NasilCalisacak from './components/Page3NasilCalisacak.vue';
 import Page4Calistir from './components/Page4Calistir.vue';
@@ -278,6 +279,7 @@ const isGeneratingLogic = ref(false);
 const isUploading = ref(false);
 const uploadResult = ref<UploadResult | null>(null);
 const aiErrorMessage = ref<string | null>(null);
+const streamData = ref<AIStreamProgress | null>(null);
 
 const activeModelLabel = computed(() => {
   if (selectedModel.value.startsWith('ollama/')) {
@@ -457,20 +459,31 @@ async function fetchPorts() {
 }
 
 /**
- * TEK SORGU (ONE-SHOT) AI ÇAĞRISI:
- * Hayal Et aşamasından sonra yapay zekaya tek bir istek göndererek
- * hem devre şemasını (netlist: components + connections), hem akış diyagramını (akis_adimlari),
- * hem de aynı pinleri kullanan Arduino C++ kodunu (arduino_kodu) tek seferde alır ve doğrular.
- * Yanıt alınamazsa veya doğrulama başarısız olursa HİÇBİR ŞEY RENDER ETMEZ, sadece hata verir.
+ * GERÇEK ZAMANLI STREAMING (SSE) AI ÇAĞRISI:
+ * Hayal Et ekranında kullanıcı butona bastığında /api/generate-stream SSE akışına bağlanır.
+ * Yapay zeka bileşenleri tespit ettikçe live rozetler yeşillenir, kablolar ve kod
+ * gerçek zamanlı olarak ekranda görünür.
  */
 async function handleGenerateProject(prompt: string) {
   isGenerating.value = true;
   isGeneratingLogic.value = false;
   aiErrorMessage.value = null;
   currentPromptText.value = prompt;
+
+  streamData.value = {
+    stageIndex: 0,
+    stageTitle: '1. Proje Fikrin Analiz Ediliyor',
+    stageSubtitle: 'AI Mucit devreni kurgulamaya başladı...',
+    projectName: undefined,
+    discoveredComponents: [],
+    wireCount: 0,
+    codeLines: 0,
+    progressPercent: 12
+  };
+
   try {
     const apiKey = localStorage.getItem('kid_arduino_api_key') || undefined;
-    const res = await fetch('/api/generate', {
+    const res = await fetch('/api/generate-stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -481,8 +494,6 @@ async function handleGenerateProject(prompt: string) {
       })
     });
 
-    await fetchAILogs();
-
     if (!res.ok) {
       let detail = `Yapay zekadan yanıt alınamadı (HTTP ${res.status})`;
       try {
@@ -491,22 +502,108 @@ async function handleGenerateProject(prompt: string) {
       } catch {
         // ignore
       }
-      // HİÇBİR ŞEY RENDER ETME! Sayfa 1'de kal ve sadece hata göster.
       currentProject.value = createEmptyProject();
       currentStep.value = 1;
       aiErrorMessage.value = detail;
+      await fetchAILogs();
       return;
     }
 
-    const projectData: ProjeTasarimi = await res.json();
-    if (!projectData.netlist || !Array.isArray(projectData.netlist.components) || projectData.netlist.components.length === 0) {
+    if (!res.body) {
+      throw new Error('Tarayıcı stream okuyucusunu desteklemiyor.');
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    let buffer = '';
+    let completedProject: ProjeTasarimi | null = null;
+    let streamFailed = false;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const parts = buffer.split('\n\n');
+      buffer = parts.pop() || '';
+
+      for (const part of parts) {
+        const lines = part.split('\n');
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (data.type === 'stage') {
+                if (streamData.value) {
+                  streamData.value.stageIndex = data.stageIndex;
+                  streamData.value.stageTitle = data.title;
+                  streamData.value.stageSubtitle = data.subtitle;
+                  if (typeof data.progressPercent === 'number') {
+                    streamData.value.progressPercent = data.progressPercent;
+                  }
+                }
+              } else if (data.type === 'project_name') {
+                if (streamData.value) {
+                  streamData.value.projectName = data.name;
+                }
+              } else if (data.type === 'component_discovered') {
+                if (streamData.value) {
+                  const exists = streamData.value.discoveredComponents.some(c => c.id === data.id);
+                  if (!exists) {
+                    streamData.value.discoveredComponents.push({
+                      id: data.id,
+                      label: data.label,
+                      icon: data.icon,
+                      componentType: data.componentType,
+                      kind: data.kind
+                    });
+                  }
+                }
+              } else if (data.type === 'wires_progress') {
+                if (streamData.value) {
+                  streamData.value.wireCount = data.count;
+                  streamData.value.latestWire = data.latestWire;
+                }
+              } else if (data.type === 'code_progress') {
+                if (streamData.value) {
+                  streamData.value.codeLines = data.lines;
+                }
+              } else if (data.type === 'complete') {
+                completedProject = data.project as ProjeTasarimi;
+                if (streamData.value) {
+                  streamData.value.progressPercent = 100;
+                }
+              } else if (data.type === 'error') {
+                streamFailed = true;
+                aiErrorMessage.value = data.message || 'Yapay zeka devreyi tam doğrulayamadı.';
+              }
+            } catch {
+              // ignore parse errors for partial chunks
+            }
+          }
+        }
+      }
+    }
+
+    await fetchAILogs();
+
+    if (streamFailed || !completedProject) {
+      if (!aiErrorMessage.value) {
+        aiErrorMessage.value = 'Yapay zeka projesi eksiksiz oluşturulamadı.';
+      }
+      currentProject.value = createEmptyProject();
+      currentStep.value = 1;
+      return;
+    }
+
+    if (!completedProject.netlist || !Array.isArray(completedProject.netlist.components) || completedProject.netlist.components.length === 0) {
       currentProject.value = createEmptyProject();
       currentStep.value = 1;
       aiErrorMessage.value = 'Yapay zeka geçerli bir devre şeması (netlist) döndürmedi.';
       return;
     }
 
-    currentProject.value = projectData;
+    currentProject.value = completedProject;
     await saveCurrentProjectToHistory(prompt, 'AI Tasarımım ✨');
     currentStep.value = 2;
   } catch (err) {

@@ -152,21 +152,62 @@
 
         <!-- Orta Kısım: Canlı İlerleme Çubuğu ve Aşamalar -->
         <div class="p-5 flex flex-col gap-4 bg-slate-50">
-          <!-- Kullanıcının İstemi Özeti -->
-          <div class="px-3.5 py-2.5 rounded-2xl bg-white border-2 border-slate-900/20 text-xs font-bold text-slate-700 flex items-start gap-2">
-            <span class="text-base shrink-0">💭</span>
-            <span class="line-clamp-2 italic">"{{ promptText || 'Proje fikrin analiz ediliyor...' }}"</span>
+          <!-- Kullanıcının İstemi Özeti & Proje Adı -->
+          <div class="px-3.5 py-2.5 rounded-2xl bg-white border-2 border-slate-900/20 text-xs font-bold text-slate-700 flex flex-col gap-1">
+            <div class="flex items-start gap-2">
+              <span class="text-base shrink-0">💭</span>
+              <span class="line-clamp-2 italic">"{{ promptText || 'Proje fikrin analiz ediliyor...' }}"</span>
+            </div>
+            <div v-if="streamData?.projectName" class="flex items-center gap-1.5 text-slate-900 font-black text-xs pt-1 border-t border-slate-100">
+              <span class="text-emerald-600">🏷️</span>
+              <span>Proje: <strong class="text-emerald-700">{{ streamData.projectName }}</strong></span>
+            </div>
+          </div>
+
+          <!-- CANLI TESPİT EDİLEN ELEKTRONİK KOMPONENTLER (Analiz edildikçe yeşillenir!) -->
+          <div class="p-3.5 rounded-2xl bg-white border-2 border-slate-900/20 flex flex-col gap-2">
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-xs font-black text-slate-900 flex items-center gap-1.5">
+                <span class="text-base">⚡</span>
+                <span>Analiz Edilen Elektronik Komponentler:</span>
+              </span>
+              <span
+                v-if="activeComponents.length > 0"
+                class="px-2 py-0.5 rounded-full bg-emerald-100 border border-emerald-500 text-[10px] font-black text-emerald-950 flex items-center gap-1 animate-in fade-in"
+              >
+                <span>{{ activeComponents.length }} Parça Doğrulandı</span>
+                <span>✓</span>
+              </span>
+            </div>
+
+            <!-- Parçaların Canlı Yeşillenen Rozetleri -->
+            <div v-if="activeComponents.length > 0" class="flex flex-wrap items-center gap-2 pt-0.5">
+              <div
+                v-for="comp in activeComponents"
+                :key="comp.id"
+                class="px-3 py-1.5 rounded-xl bg-emerald-100 hover:bg-emerald-200 border-2 border-emerald-600 text-emerald-950 text-xs font-black flex items-center gap-1.5 shadow-[0_2px_0_#059669] animate-in zoom-in-95 duration-200 transition-all select-none"
+              >
+                <span class="text-base">{{ comp.icon }}</span>
+                <span>{{ comp.label }}</span>
+                <span class="w-4 h-4 rounded-full bg-emerald-600 text-white text-[10px] flex items-center justify-center font-bold">✓</span>
+              </div>
+            </div>
+            <!-- Henüz parça gelmediyse canlı tarama animasyonu -->
+            <div v-else class="flex items-center gap-2 text-xs font-bold text-slate-500 py-1">
+              <span class="animate-spin text-sm">🔍</span>
+              <span>Projen için ihtiyaç duyulan sensörler, motorlar ve dirençler taranıyor...</span>
+            </div>
           </div>
 
           <!-- Animasyonlu İlerleme Çubuğu -->
           <div class="w-full flex flex-col gap-1.5">
             <div class="flex items-center justify-between text-xs font-black text-slate-800">
               <span>{{ currentProgressStage.title }}</span>
-              <span class="text-sky-700">%{{ progressPercent }}</span>
+              <span class="text-sky-700 font-mono">%{{ progressPercent }}</span>
             </div>
             <div class="w-full h-4 rounded-full bg-slate-200 border-2 border-slate-900 overflow-hidden p-0.5">
               <div
-                class="h-full rounded-full bg-gradient-to-r from-[#38bdf8] via-[#4ade80] to-[#facc15] transition-all duration-500"
+                class="h-full rounded-full bg-gradient-to-r from-[#38bdf8] via-[#4ade80] to-[#facc15] transition-all duration-300"
                 :style="{ width: `${progressPercent}%` }"
               ></div>
             </div>
@@ -204,7 +245,7 @@
                 v-if="idx < activeStageIndex"
                 class="px-2 py-0.5 rounded-lg bg-emerald-500 text-white text-[9px] font-black shrink-0"
               >
-                Tamam
+                Tamam ✓
               </span>
               <span
                 v-else-if="idx === activeStageIndex"
@@ -215,12 +256,23 @@
             </div>
           </div>
 
-          <!-- Eğlenceli Elektronik İpucu Kartı (Dönen İpuçları) -->
-          <div class="p-3 rounded-2xl bg-sky-100/90 border-2 border-slate-900 flex items-center gap-3">
-            <span class="text-2xl shrink-0">💡</span>
+          <!-- Eğlenceli Elektronik İpucu Kartı (20 Çocuk Dostu Benzetme & Sıradaki Bilgi Butonu) -->
+          <div class="p-3.5 rounded-2xl bg-gradient-to-r from-sky-100 via-emerald-50 to-indigo-100 border-2 border-slate-900 flex flex-col gap-2">
+            <div class="flex items-center justify-between gap-2">
+              <div class="flex items-center gap-1.5 text-xs font-black text-slate-900">
+                <span class="text-base">{{ currentFunFact.icon }}</span>
+                <span>Biliyor muydun? — <strong>{{ currentFunFact.title }}</strong></span>
+              </div>
+              <button
+                type="button"
+                @click="nextFunFact"
+                class="px-2.5 py-0.5 rounded-lg bg-white hover:bg-slate-100 active:translate-y-0.5 border border-slate-900 text-[10px] font-black text-slate-900 shadow-2xs cursor-pointer shrink-0 transition"
+              >
+                🔄 Sıradaki Bilgi
+              </button>
+            </div>
             <div class="text-[11px] font-bold text-slate-800 leading-snug">
-              <strong class="text-slate-950 font-black">Biliyor muydun?</strong>
-              {{ currentFunFact }}
+              {{ currentFunFact.fact }}
             </div>
           </div>
         </div>
@@ -233,11 +285,40 @@
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted } from 'vue';
 
+export interface DiscoveredComponent {
+  id: string;
+  label: string;
+  icon: string;
+  componentType?: string;
+  kind?: string;
+}
+
+export interface AIStreamProgress {
+  stageIndex: number;
+  stageTitle: string;
+  stageSubtitle: string;
+  projectName?: string;
+  discoveredComponents: DiscoveredComponent[];
+  wireCount: number;
+  latestWire?: string;
+  codeLines: number;
+  progressPercent: number;
+  statusText?: string;
+}
+
+export interface FunFact {
+  id: string;
+  icon: string;
+  title: string;
+  fact: string;
+}
+
 const props = defineProps<{
   isGenerating: boolean;
   inventoryCount: number;
   selectedInventory?: string[];
   activeModelName?: string;
+  streamData?: AIStreamProgress | null;
 }>();
 
 const emit = defineEmits<{
@@ -248,6 +329,8 @@ const emit = defineEmits<{
 const promptText = ref('');
 const elapsedSeconds = ref(0);
 let timerHandle: ReturnType<typeof setInterval> | null = null;
+let funFactInterval: ReturnType<typeof setInterval> | null = null;
+const funFactIndex = ref(0);
 
 interface ProgressStage {
   id: string;
@@ -289,15 +372,137 @@ const progressStages: ProgressStage[] = [
   }
 ];
 
-const FUN_FACTS = [
-  'Breadboard üzerindeki aynı sütundaki 5 pin (A-B-C-D-E) içeriden metal bir klipsle birbirine bağlıdır!',
-  '2 bacaklı LDR ışık sensörü karanlıkta yüksek direnç, aydınlıkta düşük direnç gösterir; 10kΩ dirençle birlikte Arduino A0 pininden okunur.',
-  'LED ışıkların uzun bacağı (+) Anot, kısa bacağı (-) Katot uçtur ve yüksek akımdan korunmak için 220Ω dirençle bağlanır.',
-  'SG90 Servo motorların içinde minik bir dişli kutusu ve açı sensörü vardır; PWM sinyaliyle 0° ile 180° arasında istediğin açıya döner!',
-  'HC-SR04 mesafe sensörü tıpkı yarasalar gibi kulağımızın duyamadığı ultrasonik ses dalgaları gönderip yankı süresini ölçer.'
+const FUN_FACTS: FunFact[] = [
+  {
+    id: 'hc-sr04',
+    icon: '🦇',
+    title: 'HC-SR04 Mesafe Sensörü (Yarasalar & Yunuslar)',
+    fact: 'Tıpkı karanlıkta yönünü bulan yarasalar ve derin denizlerdeki yunuslar gibi çalışır! İnsan kulağının duyamayacağı ultrasonik ses dalgaları fırlatır ve yankının geri dönme süresinden mesafeyi şimşek hızında hesaplar.'
+  },
+  {
+    id: 'ldr',
+    icon: '🦎',
+    title: 'LDR Işık Sensörü (Bukalemun Gözü)',
+    fact: 'Ortamın ışığına göre ten rengini değiştiren bukalemunlar gibidir! Aydınlıkta elektrik akımına izin verirken, karanlıkta kapıları kapatır ve Arduino\'ya "Hava karardı, lambayı yak!" sinyali gönderir.'
+  },
+  {
+    id: 'pir',
+    icon: '🐍',
+    title: 'PIR Hareket Sensörü (Çıngıraklı Yılan)',
+    fact: 'Çıngıraklı yılanların karanlıkta canlıların vücut sıcaklığını hissetmesi gibi, PIR sensörü de etraftaki sıcak bedenlerin yaydığı görünmez kızılötesi ışınları anında algılar!'
+  },
+  {
+    id: 'servo',
+    icon: '🦾',
+    title: 'SG90 Servo Motor (İnsan Kol Eklemi & Dirsek)',
+    fact: 'Tıpkı dirseğini veya bileğini istediğin açıda bükebilmen gibi, servo motor da Arduino\'nun sinyaliyle 0° ile 180° arasında tam istediğin açıda durabilen kaslı bir robot eklemidir.'
+  },
+  {
+    id: 'dc-motor',
+    icon: '🌀',
+    title: 'DC Motor (Rüzgar Gülü & Fırıldak)',
+    fact: 'Sabit açıda durmaz; rüzgar estikçe dönen bir fırıldak veya araba tekerleği gibi durmaksızın fırıl fırıl döner! Robot arabaların tekerlekleri için süper bir güç kaynağıdır.'
+  },
+  {
+    id: 'buzzer',
+    icon: '🦗',
+    title: 'Buzzer (Cırcır Böceği)',
+    fact: 'Yaz gecelerinde neşeli şarkılar söyleyen minik cırcır böceklerine benzer! İçindeki piezo kristali saniyede binlerce kez titreşerek "bip-bip" sesleri veya mini melodiler üretir.'
+  },
+  {
+    id: 'led',
+    icon: '🪲',
+    title: 'LED Işık (Ateş Böceği)',
+    fact: 'Geceleri ormanda parlayan ateş böcekleri gibi, enerjisinin neredeyse tamamını ısıya dönüştürmeden doğrudan göz alıcı renkte ışığa çevirir. Uzun bacağı (+) Anot, kısa bacağı (-) Katottur!'
+  },
+  {
+    id: 'resistor',
+    icon: '🚰',
+    title: 'Direnç (Bahçe Hortumunu Sıkmak)',
+    fact: 'Bahçe hortumunu parmağınla sıktığında suyun akışı nasıl yavaşlarsa, direnç de devredeki elektrik akımını öyle sınırlar! Böylece narin LED\'lerin bozulmasını önleyen bir koruyucudur.'
+  },
+  {
+    id: 'breadboard',
+    icon: '🍞',
+    title: 'Breadboard (Yeraltı Tren Rayları)',
+    fact: 'Lehim yapmadan devre kurmanı sağlar! Pinlerin altında gizli metal tren rayları vardır; aynı sütundaki (A-B-C-D-E) pinler yeraltından birbirine sımsıkı bağlıdır.'
+  },
+  {
+    id: 'arduino-uno',
+    icon: '🧠',
+    title: 'Arduino Uno (Robotun Süper Beyni)',
+    fact: 'İçindeki mikroçip, tıpkı insan beyni gibi sensörlerden gelen bilgileri okur, yazdığın kuralları düşünür ve motorlara ne yapacağını saniyede 16 milyon kez emreder!'
+  },
+  {
+    id: 'potentiometer',
+    icon: '🎚️',
+    title: 'Potansiyometre (Araba Gaz Pedalı)',
+    fact: 'Döner başlığını çevirdikçe direnci artırıp azaltır; tıpkı yarış arabasındaki gaz pedalına basıp hızı ayarlamak veya müzik çaların sesini kısıp açmak gibidir!'
+  },
+  {
+    id: 'relay',
+    icon: '⚡',
+    title: 'Röle Modülü (Sihirli Güç Şalteri)',
+    fact: 'Küçük bir parmak hareketiyle dev bir baraj kapağını açmak gibidir! Arduino\'nun minik 5V gücüyle, evdeki 220V dev lambaları veya su motorlarını güvenle kontrol etmeni sağlar.'
+  },
+  {
+    id: 'soil-moisture',
+    icon: '🌱',
+    title: 'Toprak Nem Sensörü (Çiçek Kökleri)',
+    fact: 'Toprağın altındaki susuz çiçeğin kökleri gibi toprağın ıslaklığını hisseder. Toprak kuruduğunda elektriği zor iletir ve Arduino\'ya "Çok susadım, bana su ver!" der.'
+  },
+  {
+    id: 'rain-sensor',
+    icon: '🌧️',
+    title: 'Yağmur Sensörü (Akıllı Şemsiye)',
+    fact: 'Pencerene çarpan ilk yağmur damlasını anında fark eden akıllı bir şemsiye gibidir! Metal yüzeyine su damladığında iletkenlik artar ve silecekleri harekete geçirir.'
+  },
+  {
+    id: 'bluetooth',
+    icon: '📶',
+    title: 'Bluetooth Modülü (Görünmez Telsiz)',
+    fact: 'Telefonunla robotun arasında havadan geçen görünmez bir telsiz hattı kurar! Tıpkı gizli ajanların telsizle konuşması gibi, butona bastığında robota anında emirler iletir.'
+  },
+  {
+    id: 'dht22',
+    icon: '🌡️',
+    title: 'DHT22 Sıcaklık & Nem (Mini Hava İstasyonu)',
+    fact: 'Tıpkı televizyondaki meteoroloji uzmanı gibi havanın ne kadar sıcak ve ne kadar nemli olduğunu hassasça ölçüp sana fısıldayan mini bir çevre istasyonudur.'
+  },
+  {
+    id: 'button',
+    icon: '🔘',
+    title: 'Push Buton (Kapı Zili)',
+    fact: 'Evlerin kapı zili gibi çalışır! Parmağınla bastığın anda köprüyü indirir ve elektriğin akmasını sağlar; parmağını çektiğin anda köprü kalkar ve akım durur.'
+  },
+  {
+    id: 'analog-pins',
+    icon: '📏',
+    title: 'Analog Pinler (Elektronik Cetvel)',
+    fact: 'Dijital pinler sadece "Var (1)" ya da "Yok (0)" diyebilirken, analog pinler milimetrik bir cetvel gibi 0 ile 1023 arasında hassas ölçümler yapabilir!'
+  },
+  {
+    id: 'l293d',
+    icon: '🚗',
+    title: 'L293D Motor Sürücü (Trafik Polisi)',
+    fact: 'İki güçlü DC motoru aynı anda yöneten tecrübeli bir trafik polisidir! Arduino\'nun küçük sinyallerini dinleyip pillere emir vererek motorların ileri, geri ve hızlı dönmesini sağlar.'
+  },
+  {
+    id: 'rgb-led',
+    icon: '🚥',
+    title: 'RGB LED (Bukalemun Lambası)',
+    fact: 'İçinde Kırmızı (Red), Yeşil (Green) ve Mavi (Blue) olmak üzere 3 minik ateş böceği saklar! Bu renkleri bir ressam gibi karıştırarak gökkuşağındaki tüm renkleri oluşturabilirsin.'
+  }
 ];
 
+const activeComponents = computed(() => {
+  return props.streamData?.discoveredComponents || [];
+});
+
 const activeStageIndex = computed(() => {
+  if (props.streamData && typeof props.streamData.stageIndex === 'number') {
+    return Math.min(4, Math.max(0, props.streamData.stageIndex));
+  }
   const s = elapsedSeconds.value;
   if (s < 3) return 0;
   if (s < 7) return 1;
@@ -311,6 +516,9 @@ const currentProgressStage = computed(() => {
 });
 
 const progressPercent = computed(() => {
+  if (props.streamData && typeof props.streamData.progressPercent === 'number' && props.streamData.progressPercent > 0) {
+    return Math.min(99, Math.max(5, props.streamData.progressPercent));
+  }
   const s = elapsedSeconds.value;
   if (s <= 20) {
     return Math.min(92, Math.max(8, Math.round((s / 20) * 88) + 8));
@@ -319,9 +527,27 @@ const progressPercent = computed(() => {
 });
 
 const currentFunFact = computed(() => {
-  const idx = Math.floor(elapsedSeconds.value / 6) % FUN_FACTS.length;
-  return FUN_FACTS[idx];
+  return FUN_FACTS[funFactIndex.value % FUN_FACTS.length] || FUN_FACTS[0]!;
 });
+
+function nextFunFact() {
+  funFactIndex.value = (funFactIndex.value + 1) % FUN_FACTS.length;
+}
+
+function startFunFactCycle() {
+  stopFunFactCycle();
+  funFactIndex.value = Math.floor(Math.random() * FUN_FACTS.length);
+  funFactInterval = setInterval(() => {
+    nextFunFact();
+  }, 5000);
+}
+
+function stopFunFactCycle() {
+  if (funFactInterval) {
+    clearInterval(funFactInterval);
+    funFactInterval = null;
+  }
+}
 
 function startProgressTimer() {
   stopProgressTimer();
@@ -343,8 +569,10 @@ watch(
   (generating) => {
     if (generating) {
       startProgressTimer();
+      startFunFactCycle();
     } else {
       stopProgressTimer();
+      stopFunFactCycle();
     }
   },
   { immediate: true }
@@ -352,6 +580,7 @@ watch(
 
 onUnmounted(() => {
   stopProgressTimer();
+  stopFunFactCycle();
 });
 
 interface BagSuggestion {
