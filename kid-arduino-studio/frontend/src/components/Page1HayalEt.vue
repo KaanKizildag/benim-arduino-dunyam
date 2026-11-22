@@ -1,119 +1,157 @@
 <template>
-  <div class="w-full max-w-5xl mx-auto flex-1 flex flex-col items-center justify-between gap-4 py-3 sm:py-5 px-3 sm:px-6 select-none">
+  <div class="w-full max-w-4xl mx-auto flex-1 flex flex-col items-center justify-start gap-3 sm:gap-4 py-2 sm:py-3 px-3 sm:px-6 select-none">
     
-    <!-- 1. SEVİMLİ KARŞILAMA VE DİYALOG (Referans Görsel 1 Sol Üst Sohbet Stili) -->
-    <div class="w-full flex flex-col sm:flex-row items-center gap-4 bg-white rounded-3xl p-4 sm:p-5 border-[3px] border-slate-900 shadow-[0_4px_0_#0f172a]">
-      <!-- Sevimli Robot Başlığı -->
+    <!-- 1. KOMPAKT SEVİMLİ KARŞILAMA VE DİYALOG -->
+    <div class="w-full flex items-center gap-3 bg-white rounded-2xl sm:rounded-3xl p-3 sm:p-4 border-[3px] border-slate-900 shadow-[0_4px_0_#0f172a]">
+      <!-- Sevimli Robot Avatarı -->
       <div class="relative shrink-0 group">
-        <div class="w-20 h-20 sm:w-24 sm:h-24 rounded-3xl bg-[#38bdf8] border-[3px] border-slate-900 shadow-[0_4px_0_#0284c7] flex items-center justify-center text-4xl sm:text-5xl group-hover:rotate-6 transition-transform">
+        <div class="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl bg-[#38bdf8] border-2 sm:border-[3px] border-slate-900 shadow-[0_3px_0_#0284c7] flex items-center justify-center text-2xl sm:text-3xl group-hover:rotate-6 transition-transform">
           🤖
         </div>
-        <span class="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-emerald-400 border-2 border-slate-900 animate-ping"></span>
-        <span class="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-emerald-500 border-2 border-slate-900"></span>
+        <span class="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-emerald-400 border-2 border-slate-900 animate-ping"></span>
+        <span class="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-slate-900"></span>
       </div>
 
-      <!-- Konuşma Balonu -->
-      <div class="flex-1 text-center sm:text-left">
-        <div class="flex items-center justify-center sm:justify-start gap-2 mb-1">
-          <h2 class="text-base sm:text-xl font-black text-slate-900">
+      <!-- Konuşma Metni -->
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-2 mb-0.5">
+          <h2 class="text-sm sm:text-base font-black text-slate-900 truncate">
             Merhaba Geleceğin Mucidi! 👋
           </h2>
-          <span class="px-2 py-0.5 rounded-full bg-amber-200 border border-slate-900 text-[10px] font-black text-slate-900">
+          <span class="px-2 py-0.2 rounded-full bg-amber-200 border border-slate-900 text-[9.5px] font-black text-slate-900 shrink-0">
             AI Asistanın Hazır
           </span>
         </div>
-        <p class="text-xs sm:text-sm text-slate-600 font-bold leading-relaxed">
-          Ben senin yapay zeka devre asistanınım. Arduino ile yapmak istediğin şeyi bana kendi kelimelerinle anlat! Örneğin: <em>"Odam kararınca sarı gece lambam yansın, aydınlanınca sönsün."</em>
+        <p class="text-xs text-slate-600 font-bold leading-snug line-clamp-2 sm:line-clamp-none">
+          Arduino ile yapmak istediğin şeyi bana kendi kelimelerinle anlat! Örneğin: <em>"Odam kararınca sarı gece lambam yansın, aydınlanınca sönsün."</em>
         </p>
       </div>
     </div>
 
-      <!-- SAYFA 1: HAYAL ET (Yapay Zeka ile Tasarla!) -->
-    <!-- 2. BÜYÜK FİKİR GİRİŞ KUTUSU VE SESLİ GİRİŞ -->
-    <div class="w-full bg-white rounded-3xl p-4 sm:p-6 border-[3px] border-slate-900 shadow-[0_5px_0_#0f172a] flex flex-col gap-3">
+    <!-- 2. ANA FİKİR GİRİŞ KUTUSU VE TASARLA BUTONU (Kompakt ve Birleşik Düzen) -->
+    <div class="w-full bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-5 border-[3px] border-slate-900 shadow-[0_4px_0_#0f172a] flex flex-col gap-3">
+      
+      <!-- Kart Başlığı & Çanta Durum Rozeti -->
+      <div class="flex items-center justify-between gap-2">
+        <label class="text-xs font-black text-slate-900 flex items-center gap-1.5">
+          <span>💭</span>
+          <span>Aklındaki Projeyi Buraya Yaz:</span>
+        </label>
+        
+        <button
+          type="button"
+          @click="$emit('open-inventory')"
+          class="px-2.5 py-0.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-500 text-[10.5px] font-black text-emerald-950 flex items-center gap-1 cursor-pointer transition shadow-2xs"
+          title="Çantandaki elektronik parçaları incele"
+        >
+          <span>🎒</span>
+          <span>Çantanda {{ inventoryCount }} Parça Var</span>
+        </button>
+      </div>
+
+      <!-- Textarea Girişi (Auto-Undo & Ctrl+Z Desteği) -->
       <div class="relative">
         <textarea
           v-model="promptText"
           rows="3"
-          placeholder="Hayalindeki projeyi buraya yaz... (Örn: 2 bacaklı ldr sensörü ile günebakan projesi yapmak istiyorum. 2 tane ldr sensörüm var. hangisinden ışık fazla geliyorsa servo motor o yöne doğru hareket etmeli)"
-          class="w-full p-4 sm:p-5 rounded-2xl border-2 border-slate-900 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-sky-400 text-slate-900 font-black text-sm sm:text-base outline-none transition resize-none placeholder:text-slate-400 placeholder:font-bold"
-          @keydown.enter.prevent="handleGenerate"
+          placeholder="Hayalindeki projeyi buraya yaz... (Örn: LDR ışık sensörü ile hava kararınca yanan gece lambası veya 2 bacaklı ldr ile günebakan projesi)"
+          class="w-full p-3.5 sm:p-4 rounded-2xl border-2 border-slate-900 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-sky-400 text-slate-900 font-black text-xs sm:text-sm outline-none transition resize-none placeholder:text-slate-400 placeholder:font-bold leading-relaxed"
+          @keydown="handleKeydown"
         ></textarea>
+      </div>
 
-        <!-- Temizle Butonu -->
+      <!-- Alt Yardımcı Çubuk: Geri Al (Ctrl+Z), Yinele (Ctrl+Y) ve Temizle Butonu (Yanlışlıkla basılması önlendi) -->
+      <div class="flex items-center justify-between gap-2 text-xs">
+        <div class="flex items-center gap-1">
+          <!-- Geri Al Butonu -->
+          <button
+            type="button"
+            @click="undo"
+            :disabled="undoStack.length === 0"
+            class="px-2.5 py-1 rounded-lg border border-slate-300 hover:border-slate-900 bg-white hover:bg-slate-50 disabled:opacity-30 disabled:pointer-events-none text-[11px] font-bold text-slate-700 transition cursor-pointer flex items-center gap-1 shadow-2xs"
+            title="Geri Al (Ctrl+Z)"
+          >
+            <span>↩️</span>
+            <span>Geri Al</span>
+          </button>
+
+          <!-- Yinele Butonu -->
+          <button
+            type="button"
+            @click="redo"
+            :disabled="redoStack.length === 0"
+            class="px-2.5 py-1 rounded-lg border border-slate-300 hover:border-slate-900 bg-white hover:bg-slate-50 disabled:opacity-30 disabled:pointer-events-none text-[11px] font-bold text-slate-700 transition cursor-pointer flex items-center gap-1 shadow-2xs"
+            title="Yinele (Ctrl+Y)"
+          >
+            <span>↪️</span>
+            <span>Yinele</span>
+          </button>
+        </div>
+
+        <!-- Küçük Sade Temizle Linki (Geri Al ile kurtarılabilir) -->
         <button
           v-if="promptText"
           type="button"
-          @click="promptText = ''"
-          class="absolute bottom-3 right-3 px-3 py-1.5 rounded-xl border-2 border-slate-900 bg-white hover:bg-slate-100 text-slate-800 transition shadow-[0_2px_0_#0f172a] active:translate-y-0.5 active:shadow-none cursor-pointer flex items-center gap-1.5 text-xs font-black"
-          title="Metni Temizle"
+          @click="clearPrompt"
+          class="text-[11px] font-bold text-slate-500 hover:text-rose-600 transition underline decoration-dotted cursor-pointer px-1 py-0.5"
+          title="Metni Temizle (Geri Al ile tekrar getirebilirsin)"
         >
-          <span>🧹</span>
-          <span class="hidden sm:inline">Temizle</span>
+          🧹 Temizle
         </button>
       </div>
 
-      <!-- Elimdeki Malzemelerle Ne Yapabilirim? (Malzeme Çantası Tabanlı Dinamik Öneriler) -->
-      <div class="bg-amber-50/90 rounded-2xl border-2 border-slate-900 p-3 flex flex-col gap-2">
-        <div class="flex flex-wrap items-center justify-between gap-2">
-          <div class="flex items-center gap-1.5 text-xs font-black text-slate-900">
-            <span>🎒</span>
-            <span>Elimdeki Malzemelerle Ne Yapabilirim?</span>
-            <span class="px-2 py-0.5 rounded-lg bg-emerald-100 border border-slate-900 text-[10px] text-emerald-950">
-              Çantandaki {{ inventoryCount }} Parçaya Göre Öneriler
-            </span>
-          </div>
-          <button
-            type="button"
-            @click="$emit('open-inventory')"
-            class="px-2.5 py-1 rounded-xl bg-white hover:bg-slate-100 border border-slate-900 text-[10px] font-black text-slate-800 cursor-pointer shadow-2xs"
-          >
-            🧰 Çantamı Düzenle / Önerileri Gör
-          </button>
-        </div>
-
-        <div v-if="bagSuggestions.length > 0" class="grid grid-cols-1 sm:grid-cols-3 gap-2">
-          <button
-            v-for="item in bagSuggestions"
-            :key="item.id"
-            type="button"
-            @click="promptText = item.prompt"
-            class="p-2.5 rounded-xl bg-white hover:bg-[#fef08a] border-2 border-slate-900 text-left transition cursor-pointer shadow-[0_2px_0_#0f172a] active:translate-y-0.5 flex flex-col gap-0.5"
-          >
-            <div class="text-xs font-black text-slate-900 truncate">
-              {{ item.icon }} {{ item.title }}
-            </div>
-            <div class="text-[10px] font-bold text-slate-600 line-clamp-2 leading-snug">
-              {{ item.description }}
-            </div>
-          </button>
-        </div>
-        <div v-else class="text-[11px] font-bold text-slate-600">
-          Malzeme Çantana parçalarını ekleyerek elindeki malzemelerle yapabileceğin proje fikirlerini burada görebilirsin!
-        </div>
-      </div>
-    </div>
-
-    <!-- 3. ALT ÇUBUK: ÇANTA BİLGİSİ VE BÜYÜK TASARLA BUTONU -->
-    <div class="w-full bg-white rounded-2xl p-3 sm:p-4 border-[3px] border-slate-900 shadow-[0_4px_0_#0f172a] flex flex-col sm:flex-row items-center justify-between gap-3">
-      <div class="flex items-center gap-2 text-xs font-black text-slate-700">
-        <span class="text-lg">🎒</span>
-        <span>Malzeme Çantam:</span>
-        <span class="px-2 py-0.5 rounded-lg bg-emerald-100 text-emerald-900 border border-slate-900">
-          {{ inventoryCount }} Elektronik Parça Hazır
-        </span>
-      </div>
-
+      <!-- BÜYÜK VE ÇOK BELİRGİN "DEVREYİ VE KODU TASARLA" BUTONU -->
       <button
         type="button"
         @click="handleGenerate"
         :disabled="isGenerating || !promptText.trim()"
-        class="w-full sm:w-auto px-10 py-3.5 rounded-2xl bg-[#4ade80] hover:bg-[#22c55e] border-2 border-slate-900 shadow-[0_5px_0_#15803d] active:translate-y-1 active:shadow-[0_1px_0_#15803d] text-slate-950 font-black text-sm sm:text-base transition cursor-pointer flex items-center justify-center gap-2 group disabled:opacity-40 disabled:cursor-not-allowed"
+        class="w-full py-3.5 sm:py-4 px-6 rounded-2xl bg-gradient-to-r from-[#22c55e] via-[#4ade80] to-[#16a34a] hover:from-[#16a34a] hover:to-[#15803d] border-2 sm:border-[3px] border-slate-900 shadow-[0_5px_0_#14532d] active:translate-y-1 active:shadow-[0_1px_0_#14532d] text-slate-950 font-black text-sm sm:text-base transition cursor-pointer flex items-center justify-center gap-2 group disabled:opacity-40 disabled:cursor-not-allowed select-none"
       >
         <span v-if="isGenerating" class="animate-spin text-xl">⚙️</span>
-        <span v-else class="text-xl group-hover:rotate-12 transition-transform">🚀</span>
-        <span>{{ isGenerating ? 'Yapay Zeka Devreyi Tasarlıyor...' : 'Devreyi ve Kodu Tasarla! ➔' }}</span>
+        <span v-else class="text-xl group-hover:scale-125 group-hover:rotate-12 transition-transform">🚀</span>
+        <span class="tracking-wide">
+          {{ isGenerating ? 'Yapay Zeka Devreni Tasarlıyor...' : 'Devreyi ve Kodu Tasarla! ➔' }}
+        </span>
       </button>
+
+    </div>
+
+    <!-- 3. ELİMDEKİ MALZEMELERLE NE YAPABİLİRİM? HIZLI ÖNERİLER ŞERİDİ -->
+    <div class="w-full bg-amber-50/90 rounded-2xl border-2 border-slate-900 p-3 flex flex-col gap-2 shadow-[0_2px_0_#0f172a]">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <div class="flex items-center gap-1.5 text-xs font-black text-slate-900">
+          <span>💡</span>
+          <span>Hızlı Proje Fikirleri:</span>
+        </div>
+        <button
+          type="button"
+          @click="$emit('open-ideas')"
+          class="px-2.5 py-1 rounded-xl bg-amber-200 hover:bg-amber-300 border border-slate-900 text-[10.5px] font-black text-slate-900 cursor-pointer shadow-2xs transition flex items-center gap-1"
+        >
+          <span>🌟</span>
+          <span>Tüm Proje Fikirlerini Gör</span>
+        </button>
+      </div>
+
+      <div v-if="bagSuggestions.length > 0" class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+        <button
+          v-for="item in bagSuggestions"
+          :key="item.id"
+          type="button"
+          @click="promptText = item.prompt"
+          class="p-2.5 rounded-xl bg-white hover:bg-[#fef08a] border-2 border-slate-900 text-left transition cursor-pointer shadow-[0_2px_0_#0f172a] active:translate-y-0.5 flex flex-col gap-0.5"
+        >
+          <div class="text-xs font-black text-slate-900 truncate">
+            {{ item.icon }} {{ item.title }}
+          </div>
+          <div class="text-[10px] font-bold text-slate-600 line-clamp-2 leading-snug">
+            {{ item.description }}
+          </div>
+        </button>
+      </div>
+      <div v-else class="text-[11px] font-bold text-slate-600">
+        Malzeme Çantana parçalarını ekleyerek elindeki malzemelerle yapabileceğin proje fikirlerini burada görebilirsin!
+      </div>
     </div>
 
     <!-- 4. YAPAY ZEKA TASARIM SÜRECİ CANLI ANİMASYON MODALI (isGenerating === true) -->
@@ -324,9 +362,66 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'generate', prompt: string): void;
   (e: 'open-inventory'): void;
+  (e: 'open-ideas'): void;
 }>();
 
 const promptText = ref('');
+const undoStack = ref<string[]>([]);
+const redoStack = ref<string[]>([]);
+let isApplyingHistory = false;
+
+// Yazı değiştikçe geri al geçmişine kaydet
+watch(promptText, (newVal, oldVal) => {
+  if (isApplyingHistory) return;
+  if (oldVal !== undefined && oldVal !== newVal) {
+    if (undoStack.value.length === 0 || undoStack.value[undoStack.value.length - 1] !== oldVal) {
+      undoStack.value.push(oldVal);
+      if (undoStack.value.length > 50) undoStack.value.shift();
+      redoStack.value = [];
+    }
+  }
+});
+
+function undo() {
+  if (undoStack.value.length === 0) return;
+  isApplyingHistory = true;
+  redoStack.value.push(promptText.value);
+  promptText.value = undoStack.value.pop() || '';
+  setTimeout(() => { isApplyingHistory = false; }, 50);
+}
+
+function redo() {
+  if (redoStack.value.length === 0) return;
+  isApplyingHistory = true;
+  undoStack.value.push(promptText.value);
+  promptText.value = redoStack.value.pop() || '';
+  setTimeout(() => { isApplyingHistory = false; }, 50);
+}
+
+function clearPrompt() {
+  if (!promptText.value) return;
+  undoStack.value.push(promptText.value);
+  promptText.value = '';
+}
+
+function handleKeydown(e: KeyboardEvent) {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+    if (e.shiftKey) {
+      e.preventDefault();
+      redo();
+    } else {
+      e.preventDefault();
+      undo();
+    }
+  } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+    e.preventDefault();
+    redo();
+  } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+    e.preventDefault();
+    handleGenerate();
+  }
+}
+
 const elapsedSeconds = ref(0);
 let timerHandle: ReturnType<typeof setInterval> | null = null;
 let funFactInterval: ReturnType<typeof setInterval> | null = null;

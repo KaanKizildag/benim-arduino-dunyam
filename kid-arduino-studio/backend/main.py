@@ -21,6 +21,7 @@ from schemas import (
 from ai_service import (
     generate_full_project_one_shot,
     generate_full_project_stream,
+    generate_revised_project_stream,
     generate_wiring_only,
     generate_logic_and_code_for_wiring,
     fix_arduino_code,
@@ -91,6 +92,14 @@ class FixCodeRequest(BaseModel):
     error: str
     project_context: Optional[str] = ""
     model: Optional[str] = None
+
+class ReviseProjectRequest(BaseModel):
+    current_project: ProjeTasarimi
+    revision_prompt: str
+    inventory: List[str]
+    model: Optional[str] = None
+    api_key: Optional[str] = None
+    ollama_url: Optional[str] = None
 
 
 # ---------------------------------------------------------
@@ -263,6 +272,42 @@ def generate_project_stream_endpoint(req: GenerateRequest):
 
     generator = generate_full_project_stream(
         prompt=req.prompt,
+        inventory=inventory,
+        model=req.model or "default",
+        ollama_url=req.ollama_url or DEFAULT_OLLAMA_URL,
+        api_key=req.api_key
+    )
+
+    return StreamingResponse(
+        generator,
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
+
+
+@app.post("/api/revise-stream")
+def revise_project_stream_endpoint(req: ReviseProjectRequest):
+    """
+    Streaming Proje Revizyon AI Çağrısı:
+    Mevcut devreyi ve kodu kullanıcının revizyon isteğine göre günceller ve
+    canlı olarak istemciye (frontend) akar.
+    """
+    if not req.revision_prompt.strip():
+        raise HTTPException(status_code=400, detail="Lütfen yapılmasını istediğin değişikliği yazın!")
+
+    inventory = list(req.inventory) if req.inventory else ["ARDUINO_UNO", "BREADBOARD", "LED_RED", "RESISTOR_220"]
+    if "ARDUINO_UNO" not in inventory:
+        inventory.append("ARDUINO_UNO")
+    if "BREADBOARD" not in inventory:
+        inventory.append("BREADBOARD")
+
+    generator = generate_revised_project_stream(
+        current_project=req.current_project.model_dump(by_alias=True),
+        revision_prompt=req.revision_prompt,
         inventory=inventory,
         model=req.model or "default",
         ollama_url=req.ollama_url or DEFAULT_OLLAMA_URL,
