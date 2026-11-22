@@ -66,30 +66,42 @@
           <span class="text-base sm:text-lg leading-none">{{ currentStepNumber }}/{{ totalSteps }}</span>
         </div>
 
-        <div class="min-w-0 flex-1">
-          <!-- Nereden -> Nereye Görsel Rozetleri -->
-          <div v-if="currentWireDetails" class="flex flex-wrap items-center gap-1.5 mb-1">
-            <span
-              class="px-2 py-0.5 rounded-lg text-[10px] font-black border border-slate-900 text-white shadow-2xs"
-              :style="{ backgroundColor: currentWire?.color || '#3b82f6' }"
-            >
-              {{ currentWireDetails.colorName }} Kablo
-            </span>
-            <span class="px-2.5 py-0.5 rounded-lg bg-sky-100 border border-slate-900 text-[11px] font-black text-slate-900">
-              1️⃣ Nereden: {{ currentWireDetails.fromTitle }}
-            </span>
-            <span class="font-black text-slate-900 text-xs">➔</span>
-            <span class="px-2.5 py-0.5 rounded-lg bg-[#fde047] border border-slate-900 text-[11px] font-black text-slate-950">
-              2️⃣ Nereye Tak: {{ currentWireDetails.toTitle }}
-            </span>
-          </div>
+        <!--
+          Tüm adımların metinleri aynı ızgara hücresinde üst üste durur, sadece geçerli adım görünür.
+          Kart böylece en uzun adımın yüksekliğini alır ve adım değişince alttaki
+          Önceki/Sonraki Kablo butonları aşağı yukarı kaymaz.
+        -->
+        <div class="min-w-0 flex-1 grid">
+          <div
+            v-for="(details, idx) in stepTextVariants"
+            :key="details.id"
+            :class="['col-start-1 row-start-1 min-w-0', idx === currentStepIndex ? '' : 'invisible']"
+            :aria-hidden="idx !== currentStepIndex"
+          >
+            <!-- Nereden -> Nereye Görsel Rozetleri -->
+            <div v-if="!details.isPlaceholder" class="flex flex-wrap items-center gap-1.5 mb-1">
+              <span
+                class="px-2 py-0.5 rounded-lg text-[10px] font-black border border-slate-900 text-white shadow-2xs"
+                :style="{ backgroundColor: layoutResult.wires[idx]?.color || '#3b82f6' }"
+              >
+                {{ details.colorName }} Kablo
+              </span>
+              <span class="px-2.5 py-0.5 rounded-lg bg-sky-100 border border-slate-900 text-[11px] font-black text-slate-900">
+                1️⃣ Nereden: {{ details.fromTitle }}
+              </span>
+              <span class="font-black text-slate-900 text-xs">➔</span>
+              <span class="px-2.5 py-0.5 rounded-lg bg-[#fde047] border border-slate-900 text-[11px] font-black text-slate-950">
+                2️⃣ Nereye Tak: {{ details.toTitle }}
+              </span>
+            </div>
 
-          <h3 class="text-xs sm:text-sm md:text-base font-black text-slate-900 leading-snug">
-            {{ currentWireDetails?.kidInstruction || currentWire?.description || 'Kablo bağlantısı hazırlanıyor...' }}
-          </h3>
-          <p class="text-[11px] sm:text-xs text-slate-600 font-bold mt-0.5">
-            💡 <strong>Ne İşe Yarar?</strong> {{ currentWireDetails?.kidWhy }}
-          </p>
+            <h3 class="text-xs sm:text-sm md:text-base font-black text-slate-900 leading-snug">
+              {{ details.kidInstruction }}
+            </h3>
+            <p class="text-[11px] sm:text-xs text-slate-600 font-bold mt-0.5">
+              💡 <strong>Ne İşe Yarar?</strong> {{ details.kidWhy }}
+            </p>
+          </div>
         </div>
       </div>
 
@@ -105,7 +117,11 @@
               : 'bg-white text-slate-800 hover:bg-slate-50'
           ]"
         >
-          <span>{{ showAllWires ? '👁️ Tüm Kablolar Görünüyor' : '🔍 Adım Adım Kablo Modu' }}</span>
+          <!-- İki yazı da aynı hücrede durur; buton en uzun yazının genişliğinde sabit kalır -->
+          <span class="grid">
+            <span :class="['col-start-1 row-start-1', showAllWires ? '' : 'invisible']">👁️ Tüm Kablolar Görünüyor</span>
+            <span :class="['col-start-1 row-start-1', showAllWires ? 'invisible' : '']">🔍 Adım Adım Kablo Modu</span>
+          </span>
         </button>
       </div>
     </div>
@@ -869,8 +885,21 @@ const allWireDetails = computed(() => {
   return layoutResult.value.wires.map(w => buildWireKidDetail(w));
 });
 
-const currentWireDetails = computed(() => {
-  return allWireDetails.value[currentStepIndex.value] || null;
+// Talimat kartında üst üste dizilen adım metinleri (kablo yoksa tek bir bekleme metni)
+const stepTextVariants = computed(() => {
+  if (allWireDetails.value.length > 0) {
+    return allWireDetails.value.map(d => ({ ...d, isPlaceholder: false }));
+  }
+  return [{
+    id: '__bekleniyor__',
+    color: '#3b82f6',
+    colorName: '',
+    fromTitle: '',
+    toTitle: '',
+    kidInstruction: 'Kablo bağlantısı hazırlanıyor...',
+    kidWhy: '',
+    isPlaceholder: true
+  }];
 });
 
 const currentWireShortFrom = computed(() => {
