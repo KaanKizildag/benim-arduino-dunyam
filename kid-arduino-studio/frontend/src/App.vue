@@ -295,7 +295,18 @@ const selectedInventory = ref<string[]>([
   'BUZZER'
 ]);
 
-const selectedModel = ref('ollama/qwen2.5-coder:1.5b');
+// Seçilen AI modeli tarayıcıda saklanır; sayfa yenilenince tekrar Ollama'ya dönmez
+const SELECTED_MODEL_STORAGE_KEY = 'kid_arduino_selected_model';
+
+function loadSavedModel(): string {
+  try {
+    return localStorage.getItem(SELECTED_MODEL_STORAGE_KEY) || 'ollama/qwen2.5-coder:1.5b';
+  } catch {
+    return 'ollama/qwen2.5-coder:1.5b';
+  }
+}
+
+const selectedModel = ref(loadSavedModel());
 const availableModels = ref<string[]>([]);
 const availablePorts = ref<PortInfo[]>([]);
 
@@ -364,6 +375,11 @@ function onUseInventoryIdea(payload: { inventory: string[]; prompt: string }) {
 
 function onSaveAIModel(payload: { model: string; apiKey?: string }) {
   selectedModel.value = payload.model;
+  try {
+    localStorage.setItem(SELECTED_MODEL_STORAGE_KEY, payload.model);
+  } catch {
+    // Tarayıcı depolaması kapalıysa seçim sadece bu oturumda geçerli olur
+  }
 }
 
 async function fetchAILogs() {
@@ -487,7 +503,7 @@ async function fetchModels() {
       }
     }
   } catch {
-    availableModels.value = ['ollama/qwen2.5-coder:1.5b', 'gemini/gemini-2.0-flash', 'gpt-4o-mini', 'claude-3-5-haiku-20241022'];
+    availableModels.value = ['ollama/qwen2.5-coder:1.5b', 'gemini/gemini-2.5-flash', 'gpt-4o-mini', 'claude-3-5-haiku-20241022'];
   }
 }
 

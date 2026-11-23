@@ -26,6 +26,7 @@ from schemas import (
     SavedProjectEntry,
     AILogEntry,
 )
+from arduino_code_utils import sanitize_arduino_identifiers
 from flow_service import (
     legacy_akis_to_diyagram,
     validate_flow_diagram,
@@ -1206,10 +1207,6 @@ def get_gemini_available_models(api_key: Optional[str] = None) -> List[Dict[str,
         {"id": "gemini/gemini-3.5-flash-lite", "name": "Gemini 3.5 Flash Lite (Hızlı & Ekonomik)", "raw_name": "gemini-3.5-flash-lite", "provider": "gemini", "category": "Google Gemini", "badge": "☁️ Bulut"},
         {"id": "gemini/gemini-2.5-flash", "name": "Gemini 2.5 Flash (Legacy)", "raw_name": "gemini-2.5-flash", "provider": "gemini", "category": "Google Gemini", "badge": "☁️ Bulut"},
         {"id": "gemini/gemini-2.5-pro", "name": "Gemini 2.5 Pro (Legacy)", "raw_name": "gemini-2.5-pro", "provider": "gemini", "category": "Google Gemini", "badge": "☁️ Bulut"},
-        {"id": "gemini/gemini-2.0-flash", "name": "Gemini 2.0 Flash (Hızlı & Dengeli)", "raw_name": "gemini-2.0-flash", "provider": "gemini", "category": "Google Gemini", "badge": "☁️ Bulut"},
-        {"id": "gemini/gemini-2.0-flash-lite", "name": "Gemini 2.0 Flash Lite (Hafif)", "raw_name": "gemini-2.0-flash-lite", "provider": "gemini", "category": "Google Gemini", "badge": "☁️ Bulut"},
-        {"id": "gemini/gemini-1.5-flash", "name": "Gemini 1.5 Flash (Kararlı)", "raw_name": "gemini-1.5-flash", "provider": "gemini", "category": "Google Gemini", "badge": "☁️ Bulut"},
-        {"id": "gemini/gemini-1.5-pro", "name": "Gemini 1.5 Pro (Derin Analiz)", "raw_name": "gemini-1.5-pro", "provider": "gemini", "category": "Google Gemini", "badge": "☁️ Bulut"},
     ]
 
     effective_key = (api_key or os.getenv("GEMINI_API_KEY") or "").strip()
@@ -1249,12 +1246,10 @@ def get_gemini_available_models(api_key: Optional[str] = None) -> List[Dict[str,
                     "badge": "☁️ Bulut"
                 })
             if fetched:
-                # Önemli modelleri (3.8-flash, 3.5-flash-lite, 2.5-flash, 2.0-flash, 1.5-flash, vb.) üstte sırala
+                # Önemli modelleri (3.8-flash, 3.5-flash-lite, 2.5-flash, 2.5-pro) üstte sırala
                 priority = [
                     "gemini-3.8-flash", "gemini-3.5-flash-lite",
-                    "gemini-2.5-flash", "gemini-2.5-pro",
-                    "gemini-2.0-flash", "gemini-2.0-flash-lite",
-                    "gemini-1.5-flash", "gemini-1.5-pro"
+                    "gemini-2.5-flash", "gemini-2.5-pro"
                 ]
                 fetched.sort(key=lambda x: (
                     priority.index(x["raw_name"]) if x["raw_name"] in priority else 99,
@@ -1294,7 +1289,7 @@ def get_all_available_models(
     }
 
     default_model = "ollama/qwen2.5-coder:1.5b" if any(m["id"] == "ollama/qwen2.5-coder:1.5b" for m in local_models) else (
-        local_models[0]["id"] if local_models else "gemini/gemini-2.0-flash"
+        local_models[0]["id"] if local_models else "gemini/gemini-2.5-flash"
     )
 
     return {
@@ -1432,9 +1427,10 @@ generate_project_with_ai = generate_project_idea
 
 def fix_arduino_code(code: str, error: str, project_context: str = "", model: Optional[str] = None) -> str:
     """Derleme veya yükleme hatasını analiz edip düzelten kendini iyileştirme fonksiyonu."""
-    chosen_model = model or "gemini/gemini-1.5-flash"
+    chosen_model = model or "gemini/gemini-2.5-flash"
     prompt = f"""Aşağıdaki Arduino Uno kodunda derleme/yükleme hatası oluştu.
 LÜTFEN HATAYI DÜZELT VE SADECE DÜZELTİLMİŞ C++ ARDUINO KODUNU DÖNDÜR.
+Değişken, sabit ve fonksiyon adlarında Türkçe harf (ç, ğ, ı, İ, ö, ş, ü) KULLANMA; sadece İngilizce harf, rakam ve alt çizgi kullan.
 
 HATALI KOD:
 ```cpp
@@ -1457,7 +1453,7 @@ PROJE BAĞLAMI:
         out = res.choices[0].message.content.strip()
         out = re.sub(r"^```(?:cpp)?\s*", "", out).strip()
         out = re.sub(r"```$", "", out).strip()
-        return out
+        return sanitize_arduino_identifiers(out)
     except Exception as e:
         print(f"[Self-Healing Hatası] Kod düzeltilemedi ({e}). Orijinal kod korunuyor.")
         return code
@@ -1591,6 +1587,7 @@ KESİN KURALLAR:
 - wokwi-ir-receiver (IR Alıcı): ir1.VCC, ir1.GND, ir1.DAT
 4. Güç bağlantılarını her zaman "to":"5V" veya "to":"GND" yönünde yaz. Arduino pinlerini "uno.D2".."uno.D13", "uno.A0".."uno.A5" yaz.
 5. "arduino_kodu" içindeki pinler ile "connections" içindeki "uno.*" pinleri BİREBİR AYNI olmalı.
+6. "arduino_kodu" içindeki değişken, sabit ve fonksiyon adlarında SADECE İngilizce harf, rakam ve alt çizgi kullan (ç, ğ, ı, İ, ö, ş, ü YASAK; örn: ESIK_DEGER, isikDegeri). Arduino derleyicisi Türkçe harfli adları derleyemez. Türkçe karakter sadece yorumlarda ve tırnak içindeki metinlerde olabilir.
 
 ÖRNEK 1 (2 Adet 2 Bacaklı LDR + 2 Adet 10k Direnç + Servo ile Günebakan):
 {"proje_adi":"Çift LDR ile Günebakan Servo Projesi","karsilama_mesaji":"İki LDR sensöründen hangisine daha çok ışık geliyorsa servo motoru o yöne çeviren günebakan devresi!","gerekli_parcalar":["ARDUINO_UNO","BREADBOARD","LDR_DISCRETE","RESISTOR_10K","SERVO_SG90"],"netlist":{"board":"arduino-uno","components":[{"id":"ldr1","type":"wokwi-photoresistor","props":{},"label":"Sol LDR (2 Bacaklı)"},{"id":"r1","type":"wokwi-resistor","props":{"value":"10000"},"label":"Sol 10kΩ Direnç"},{"id":"ldr2","type":"wokwi-photoresistor","props":{},"label":"Sağ LDR (2 Bacaklı)"},{"id":"r2","type":"wokwi-resistor","props":{"value":"10000"},"label":"Sağ 10kΩ Direnç"},{"id":"servo1","type":"wokwi-servo","props":{},"label":"SG90 Servo Motor"}],"connections":[{"from":"ldr1.1","to":"5V","color":"red"},{"from":"ldr1.2","to":"uno.A0","color":"green"},{"from":"ldr1.2","to":"r1.1","color":"green"},{"from":"r1.2","to":"GND","color":"black"},{"from":"ldr2.1","to":"5V","color":"red"},{"from":"ldr2.2","to":"uno.A1","color":"blue"},{"from":"ldr2.2","to":"r2.1","color":"blue"},{"from":"r2.2","to":"GND","color":"black"},{"from":"servo1.V+","to":"5V","color":"red"},{"from":"servo1.GND","to":"GND","color":"black"},{"from":"uno.D9","to":"servo1.PWM","color":"orange"}]},"arduino_kodu":"#include <Servo.h>\\n\\nconst int LDR_SOL = A0;\\nconst int LDR_SAG = A1;\\nconst int SERVO_PIN = 9;\\nServo gunebakanServo;\\n\\nvoid setup() {\\n  Serial.begin(9600);\\n  gunebakanServo.attach(SERVO_PIN);\\n  gunebakanServo.write(90);\\n}\\n\\nvoid loop() {\\n  int isikSol = analogRead(LDR_SOL);\\n  int isikSag = analogRead(LDR_SAG);\\n  if (isikSol > isikSag + 30) {\\n    gunebakanServo.write(135);\\n  } else if (isikSag > isikSol + 30) {\\n    gunebakanServo.write(45);\\n  } else {\\n    gunebakanServo.write(90);\\n  }\\n  delay(100);\\n}","guvenlik_notu":"Her iki 2 bacaklı LDR için ayrı 10kΩ dirençlerle iki adet gerilim bölücü kurduk."}
@@ -2042,7 +2039,8 @@ Yukarıdaki isteğe göre SADECE istenen parçaları içeren `netlist` (componen
 
         if not isinstance(parsed.get("netlist"), dict):
             raise ValueError("AI yanıtında 'netlist' alanı eksik.")
-        raw_code = str(parsed.get("arduino_kodu") or "").strip()
+        # Değişken adlarındaki Türkçe harfler avr-gcc'de derleme hatası verir (örn. ESİK_DEGER)
+        raw_code = sanitize_arduino_identifiers(str(parsed.get("arduino_kodu") or "").strip())
         if not raw_code:
             raise ValueError("AI yanıtında 'arduino_kodu' alanı eksik veya boş.")
 
@@ -2244,8 +2242,10 @@ def generate_full_project_stream(
     models_info = get_all_available_models(ollama_url)
     chosen_model = model if model != "default" and model is not None else models_info["default_model"]
 
+    # Akış diyagramı AI'dan istenmez; aşağıda kesinleşen koddan ayrı bir adımda üretilir
+    # (ONE_SHOT_SYSTEM_PROMPT da "JSON'a akis_adimlari ekleme" diyor).
     user_prompt = f"""KULLANICI PROJE İSTEĞİ: "{prompt}"
-Yukarıdaki isteğe göre SADECE istenen parçaları içeren `netlist` (components + connections), bu devreye özel `akis_adimlari` ve aynı pinleri kullanan `arduino_kodu` alanlarını içeren tek bir geçerli JSON nesnesi üret. Sadece JSON döndür."""
+Yukarıdaki isteğe göre SADECE istenen parçaları içeren `netlist` (components + connections) ve aynı pinleri kullanan `arduino_kodu` alanlarını içeren tek bir geçerli JSON nesnesi üret. Sadece JSON döndür."""
 
     def format_sse(data: Dict[str, Any]) -> str:
         return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
@@ -2362,27 +2362,17 @@ Yukarıdaki isteğe göre SADECE istenen parçaları içeren `netlist` (componen
                     "latestWire": f"{last_from} ➔ {last_to}"
                 })
 
-        # 5. Akış Diyagramı Adımları Tespiti
-        if '"akis_adimlari"' in text and current_stage < 3:
+        # 5. Arduino C++ Kodu Tespiti
+        # (Akış diyagramı 5. aşamada, akış bittikten sonra koddan çıkarılır.)
+        if '"arduino_kodu"' in text and current_stage < 3:
             current_stage = 3
-            events.append({
-                "type": "stage",
-                "stageIndex": 3,
-                "title": "4. Sebep-Sonuç Akış Diyagramı Çiziliyor",
-                "subtitle": "Gözlemle ➔ Karar Ver ➔ Evet/Hayır adımları devrene özel kurgulanıyor...",
-                "progressPercent": 80
-            })
-
-        # 6. Arduino C++ Kodu Tespiti
-        if '"arduino_kodu"' in text and current_stage < 4:
-            current_stage = 4
             code_lines = max(5, text.count('\\n'))
             events.append({
                 "type": "stage",
-                "stageIndex": 4,
-                "title": "5. Arduino C++ Kodu Yazılıyor ve Doğrulanıyor",
+                "stageIndex": 3,
+                "title": "4. Arduino C++ Kodu Yazılıyor",
                 "subtitle": f"Arduino C++ kodu yazılıyor (~{code_lines} satır)...",
-                "progressPercent": 90
+                "progressPercent": 80
             })
             events.append({
                 "type": "code_progress",
@@ -2479,9 +2469,8 @@ Yukarıdaki isteğe göre SADECE istenen parçaları içeren `netlist` (componen
             raise ValueError("AI çıktısı geçerli bir JSON nesnesi değil.")
         if not isinstance(parsed.get("netlist"), dict):
             raise ValueError("AI yanıtında 'netlist' alanı eksik.")
-        if not isinstance(parsed.get("akis_adimlari"), dict):
-            raise ValueError("AI yanıtında 'akis_adimlari' alanı eksik.")
-        raw_code = str(parsed.get("arduino_kodu") or "").strip()
+        # Değişken adlarındaki Türkçe harfler avr-gcc'de derleme hatası verir (örn. ESİK_DEGER)
+        raw_code = sanitize_arduino_identifiers(str(parsed.get("arduino_kodu") or "").strip())
         if not raw_code:
             raise ValueError("AI yanıtında 'arduino_kodu' alanı eksik veya boş.")
 
@@ -2499,13 +2488,34 @@ Yukarıdaki isteğe göre SADECE istenen parçaları içeren `netlist` (componen
         norm_warnings.extend(actuator_notes + topo_notes)
 
         netlist_obj = CircuitNetlist(**norm_data["netlist"])
-        akis_obj = AkisAdimi(**norm_data["akis_adimlari"])
+
+        # 3) Kesinleşmiş netlist ve son Arduino kodundan ayrı, odaklanmış çağrıyla AkisDiyagrami üret
+        yield format_sse({
+            "type": "stage",
+            "stageIndex": 4,
+            "title": "5. Sebep-Sonuç Akış Diyagramı Çiziliyor",
+            "subtitle": "Arduino kodundan adım adım akış diyagramı çıkarılıyor...",
+            "progressPercent": 92
+        })
+        flow_obj, flow_warnings, flow_status = generate_flow_from_code(
+            prompt=prompt,
+            netlist=netlist_obj,
+            arduino_kodu=raw_code,
+            chosen_model=chosen_model,
+            provider_used=provider_used,
+            ollama_url=ollama_url,
+            api_key=api_key,
+            clean_json_fn=clean_llm_json_response
+        )
+        norm_warnings.extend(flow_warnings)
 
         blocking_errors, report = validate_one_shot_topology_and_code(
             netlist=netlist_obj,
-            akis=akis_obj,
+            akis=flow_obj,
             code=raw_code
         )
+        if flow_status == "REPAIRED":
+            report.auto_repaired = True
         if blocking_errors:
             raise ValueError(" | ".join(blocking_errors))
 
@@ -2516,7 +2526,8 @@ Yukarıdaki isteğe göre SADECE istenen parçaları içeren `netlist` (componen
             gerekli_parcalar=norm_data.get("gerekli_parcalar") or ["ARDUINO_UNO", "BREADBOARD"],
             netlist=netlist_obj,
             baglanti_adimlari=steps,
-            akis_adimlari=akis_obj,
+            akis_adimlari=None,
+            akis_diyagrami=flow_obj,
             arduino_kodu=raw_code,
             guvenlik_notu=str(parsed.get("guvenlik_notu") or "").strip() or "Parçaları breadboard pinlerine dikkatlice yerleştir.",
             uyarilar=norm_warnings + list(report.warnings),
@@ -2807,7 +2818,7 @@ Yukarıdaki mevcut projeyi, kullanıcının revizyon isteğine göre güncelle. 
             raise ValueError("AI revizyon yanıtında 'netlist' alanı eksik.")
         if not parsed.get("akis_adimlari") or not isinstance(parsed.get("akis_adimlari"), dict):
             raise ValueError("AI revizyon yanıtında 'akis_adimlari' alanı eksik.")
-        raw_code = str(parsed.get("arduino_kodu") or "").strip()
+        raw_code = sanitize_arduino_identifiers(str(parsed.get("arduino_kodu") or "").strip())
         if not raw_code:
             raise ValueError("AI revizyon yanıtında 'arduino_kodu' alanı eksik veya boş.")
 
@@ -3160,6 +3171,7 @@ LOGIC_ONLY_SYSTEM_PROMPT = """Sen Arduino kodlama öğretmenisin. Verilen kablol
 KURALLAR:
 1. Sadece verilen pin tablosundaki pinleri kullan.
 2. Akış diyagramında sadece devredeki gerçek parçalardan bahset.
+3. Koddaki değişken, sabit ve fonksiyon adlarında SADECE İngilizce harf, rakam ve alt çizgi kullan (ç, ğ, ı, İ, ö, ş, ü YASAK; örn: ESIK_DEGER). Türkçe karakter sadece yorumlarda ve tırnak içindeki metinlerde olabilir.
 Tek satır (minified) JSON döndür."""
 
 
@@ -3346,7 +3358,7 @@ Yukarıdaki kablolamaya uygun `akis_adimlari` ve `arduino_kodu` alanlarını iç
         if not isinstance(parsed, dict):
             raise ValueError("AI yanıtı bir JSON nesnesi değil.")
         raw_akis = parsed.get("akis_adimlari")
-        raw_code = str(parsed.get("arduino_kodu") or "").strip()
+        raw_code = sanitize_arduino_identifiers(str(parsed.get("arduino_kodu") or "").strip())
         if not isinstance(raw_akis, dict) or not raw_code:
             raise ValueError("AI yanıtında 'akis_adimlari' veya 'arduino_kodu' alanı eksik.")
 

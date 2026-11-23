@@ -157,8 +157,7 @@ const cloudModels = computed<ModelOption[]>(() => {
     return props.modelsData.cloud_models;
   }
   return [
-    { id: 'gemini/gemini-2.0-flash', name: 'Gemini 2.0 Flash', provider: 'gemini', category: 'Google Gemini', badge: '☁️ Bulut' },
-    { id: 'gemini/gemini-1.5-flash', name: 'Gemini 1.5 Flash', provider: 'gemini', category: 'Google Gemini', badge: '☁️ Bulut' },
+    { id: 'gemini/gemini-2.5-flash', name: 'Gemini 2.5 Flash', provider: 'gemini', category: 'Google Gemini', badge: '☁️ Bulut' },
     { id: 'gpt-4o-mini', name: 'GPT-4o Mini', provider: 'openai', category: 'OpenAI', badge: '☁️ Bulut' },
     { id: 'claude-3-5-haiku-20241022', name: 'Claude 3.5 Haiku', provider: 'anthropic', category: 'Claude', badge: '☁️ Bulut' },
     { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet', provider: 'anthropic', category: 'Claude', badge: '☁️ Bulut' },

@@ -274,7 +274,7 @@
 
               <!-- 2. Google Gemini -->
               <div
-                @click="selectedModel = 'gemini/gemini-2.0-flash'"
+                @click="selectedModel = 'gemini/gemini-2.5-flash'"
                 :class="[
                   'p-3 rounded-2xl border-[2.5px] flex items-center gap-3 relative select-none cursor-pointer transition-all shadow-[0_3px_0_#0f172a]',
                   selectedModel.includes('gemini')

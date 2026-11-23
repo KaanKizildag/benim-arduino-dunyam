@@ -1,0 +1,5 @@
+# Linux konteynerlerinde çalışacak kabuk betikleri her zaman LF satır sonuyla
+# çıkarılmalı. Windows'ta core.autocrlf=true bunları CRLF'e çevirince betik
+# "syntax error near unexpected token $'{\r'" hatası verir (eski
+# ollama/entrypoint.sh bu yüzden çöküyordu).
+*.sh text eol=lf
