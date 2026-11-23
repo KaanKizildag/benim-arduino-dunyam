@@ -454,7 +454,7 @@ async function fetchModels() {
       }
     }
   } catch {
-    availableModels.value = ['ollama/qwen2.5-coder:1.5b', 'gemini/gemini-2.0-flash', 'gpt-4o-mini', 'claude-3-5-haiku-20241022'];
+    availableModels.value = ['ollama/qwen2.5-coder:1.5b', 'gemini/gemini-2.5-flash', 'gpt-4o-mini', 'claude-3-5-haiku-20241022'];
   }
 }
 

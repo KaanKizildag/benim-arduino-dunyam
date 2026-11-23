@@ -1207,10 +1207,6 @@ def get_gemini_available_models(api_key: Optional[str] = None) -> List[Dict[str,
         {"id": "gemini/gemini-3.5-flash-lite", "name": "Gemini 3.5 Flash Lite (Hızlı & Ekonomik)", "raw_name": "gemini-3.5-flash-lite", "provider": "gemini", "category": "Google Gemini", "badge": "☁️ Bulut"},
         {"id": "gemini/gemini-2.5-flash", "name": "Gemini 2.5 Flash (Legacy)", "raw_name": "gemini-2.5-flash", "provider": "gemini", "category": "Google Gemini", "badge": "☁️ Bulut"},
         {"id": "gemini/gemini-2.5-pro", "name": "Gemini 2.5 Pro (Legacy)", "raw_name": "gemini-2.5-pro", "provider": "gemini", "category": "Google Gemini", "badge": "☁️ Bulut"},
-        {"id": "gemini/gemini-2.0-flash", "name": "Gemini 2.0 Flash (Hızlı & Dengeli)", "raw_name": "gemini-2.0-flash", "provider": "gemini", "category": "Google Gemini", "badge": "☁️ Bulut"},
-        {"id": "gemini/gemini-2.0-flash-lite", "name": "Gemini 2.0 Flash Lite (Hafif)", "raw_name": "gemini-2.0-flash-lite", "provider": "gemini", "category": "Google Gemini", "badge": "☁️ Bulut"},
-        {"id": "gemini/gemini-1.5-flash", "name": "Gemini 1.5 Flash (Kararlı)", "raw_name": "gemini-1.5-flash", "provider": "gemini", "category": "Google Gemini", "badge": "☁️ Bulut"},
-        {"id": "gemini/gemini-1.5-pro", "name": "Gemini 1.5 Pro (Derin Analiz)", "raw_name": "gemini-1.5-pro", "provider": "gemini", "category": "Google Gemini", "badge": "☁️ Bulut"},
     ]
 
     effective_key = (api_key or os.getenv("GEMINI_API_KEY") or "").strip()
@@ -1250,12 +1246,10 @@ def get_gemini_available_models(api_key: Optional[str] = None) -> List[Dict[str,
                     "badge": "☁️ Bulut"
                 })
             if fetched:
-                # Önemli modelleri (3.8-flash, 3.5-flash-lite, 2.5-flash, 2.0-flash, 1.5-flash, vb.) üstte sırala
+                # Önemli modelleri (3.8-flash, 3.5-flash-lite, 2.5-flash, 2.5-pro) üstte sırala
                 priority = [
                     "gemini-3.8-flash", "gemini-3.5-flash-lite",
-                    "gemini-2.5-flash", "gemini-2.5-pro",
-                    "gemini-2.0-flash", "gemini-2.0-flash-lite",
-                    "gemini-1.5-flash", "gemini-1.5-pro"
+                    "gemini-2.5-flash", "gemini-2.5-pro"
                 ]
                 fetched.sort(key=lambda x: (
                     priority.index(x["raw_name"]) if x["raw_name"] in priority else 99,
@@ -1295,7 +1289,7 @@ def get_all_available_models(
     }
 
     default_model = "ollama/qwen2.5-coder:1.5b" if any(m["id"] == "ollama/qwen2.5-coder:1.5b" for m in local_models) else (
-        local_models[0]["id"] if local_models else "gemini/gemini-2.0-flash"
+        local_models[0]["id"] if local_models else "gemini/gemini-2.5-flash"
     )
 
     return {
@@ -1433,7 +1427,7 @@ generate_project_with_ai = generate_project_idea
 
 def fix_arduino_code(code: str, error: str, project_context: str = "", model: Optional[str] = None) -> str:
     """Derleme veya yükleme hatasını analiz edip düzelten kendini iyileştirme fonksiyonu."""
-    chosen_model = model or "gemini/gemini-1.5-flash"
+    chosen_model = model or "gemini/gemini-2.5-flash"
     prompt = f"""Aşağıdaki Arduino Uno kodunda derleme/yükleme hatası oluştu.
 LÜTFEN HATAYI DÜZELT VE SADECE DÜZELTİLMİŞ C++ ARDUINO KODUNU DÖNDÜR.
 Değişken, sabit ve fonksiyon adlarında Türkçe harf (ç, ğ, ı, İ, ö, ş, ü) KULLANMA; sadece İngilizce harf, rakam ve alt çizgi kullan.
