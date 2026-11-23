@@ -12,7 +12,7 @@
 İki yol var. İkisini **aynı anda çalıştırmayın**: ikisi de 5173 ve 8001 portlarını kullanır ve tarayıcının hangisine bağlandığı karışır.
 
 ### Seçenek A: Docker ile
-Tüm servisler (Ollama, backend, frontend) tek komutla ayağa kalkar. Ayrıntılar ve ilk çalıştırma hazırlığı için **[README.Docker.md](README.Docker.md)** dosyasına bakın.
+Backend ve frontend tek komutla ayağa kalkar. Yerel model kullanacaksanız Ollama Docker'da değil, bilgisayarınızda çalışır. Ayrıntılar ve ilk çalıştırma hazırlığı için **[README.Docker.md](README.Docker.md)** dosyasına bakın.
 
 ```bash
 cd kid-arduino-studio
@@ -55,14 +55,14 @@ arduino-cli core install arduino:avr
 
 ## 🧠 Yapay Zeka Seçenekleri (Yerel ve Bulut)
 
-KidArduino Studio, **LiteLLM** sayesinde hem yerel (Ollama) hem de bulut modelleriyle çalışır. Model, üst menüdeki **🤖 AI Modeli** butonundan seçilir ve seçiminiz tarayıcıda hatırlanır.
+KidArduino Studio, **LiteLLM** sayesinde hem yerel (Ollama) hem de bulut modelleriyle çalışır. Model, üst menüdeki **🤖 AI Modeli** butonundan seçilir ve seçiminiz tarayıcıda hatırlanır. Bu buton yalnızca **admin modunda** görünür: sol üstteki çocuk avatarına (👦) tıklayarak admin moduna (👑) geçebilirsiniz.
 
 ### A. Yerel Model (Ollama)
-1. Docker ile çalıştırıyorsanız Ollama konteyneri `qwen2.5:1.5b` modelini kendisi indirir. Yerelde çalıştırıyorsanız [Ollama](https://ollama.com)'yı kurup bir model indirin:
+1. [Ollama](https://ollama.com)'yı bilgisayarınıza kurup bir model indirin (Docker ile çalıştırsanız da Ollama bilgisayarınızda çalışır):
    ```bash
    ollama pull qwen2.5-coder:1.5b
    ```
-2. **🤖 AI Modeli** penceresi `http://127.0.0.1:11434` üzerindeki kurulu modelleri otomatik listeler.
+2. **🤖 AI Modeli** penceresi kurulu modelleri otomatik listeler. Yerel modda backend `http://127.0.0.1:11434` adresine, Docker'da `http://host.docker.internal:11434` adresine bağlanır.
 
 > ⚠️ 1.5B gibi küçük modeller çoğu zaman doğrulamadan geçen bir devre üretemiyor ve bilgisayarı yoruyor. Daha güvenilir sonuç için bulut modeli önerilir.
 
@@ -83,12 +83,14 @@ KidArduino Studio, **LiteLLM** sayesinde hem yerel (Ollama) hem de bulut modelle
 
 ## ⚡ 4 Adımlı Mucit Serüveni
 
-1. **💭 1. Hayal Et (Page1HayalEt):** Hayalindeki projeyi yaz ya da fikir kartlarından birini seç. **🧰 Malzeme Çantam** ile elindeki parçaları işaretle; yapay zeka devreyi bu parçalara göre tasarlar.
-2. **🔌 2. Devreyi Kur (Page2DevreyiKur):** Wokwi parçalarıyla çizilmiş Arduino Uno ve 30 sütunluk breadboard. Kablolar tek tek gösterilir; **Sonraki Kablo** ile adım adım ilerlenir veya tüm kablolar birden görüntülenir. Sahne ekrana sığacak şekilde ölçeklenir.
+1. **💭 1. Hayal Et (Page1HayalEt):** Hayalindeki projeyi yaz ya da **💡 Fikirler** atölyesinden elindeki malzemelere uygun bir proje seç. **🧰 Çantam** ile elindeki parçaları işaretle; yapay zeka devreyi bu parçalara göre tasarlar. Üretim sırasında yapay zekanın yanıtı canlı akar (SSE): tespit edilen parçalar anında yeşillenir ve beklerken çocuk dostu benzetme kartları gösterilir.
+2. **🔌 2. Devreyi Kur (Page2DevreyiKur):** Wokwi parçalarıyla çizilmiş Arduino Uno ve 30 sütunluk breadboard. Kablolar tek tek gösterilir; **Sonraki Kablo** ile adım adım ilerlenir veya tüm kablolar birden görüntülenir. Sahne ekrana sığacak şekilde ölçeklenir. **Projeyi AI ile Geliştir & Revize Et** ile mevcut projeye yeni istek eklenebilir (ör. "sarı ikaz lambası ekle").
 3. **🧠 3. Nasıl Çalışacak? (Page3NasilCalisacak):** Arduino kodundan türetilen **dinamik akış diyagramı**: kurulum, sensör okuma, karar (Evet/Hayır dalları), eylem, bekleme ve döngü adımları; her adımda ilgili parçalar ve pinler gösterilir.
 4. **🚀 4. Çalıştır (Page4Calistir):** Kodu derleyip tek tıkla Arduino Uno'ya yükle ve karttan gelen canlı seri port verilerini izle. Meraklılar **</> Perde Arkasındaki Kodu Gör** ile C++ kodunu inceleyebilir.
 
-Ek pencereler: **📂 Projelerim** (kayıtlı projeler) ve **🛠️ Admin (AI Log)** (yapay zekaya giden istekler ve yanıtlar, hata ayıklama için).
+Ek özellikler:
+- **📂 Projelerim:** Kayıtlı projeler. **💾 Otomatik Kayıt** açıksa üretilen projeler kendiliğinden arşive eklenir; kapalıysa elle kaydedilir.
+- **👦 Çocuk modu / 👑 Admin modu:** Sol üstteki avatara tıklanarak geçilir. **🤖 AI Modeli** ve **🛠️ Admin Log** (yapay zekaya giden istekler ve yanıtlar, hata ayıklama için) yalnızca admin modunda görünür.
 
 ---
 
@@ -123,11 +125,7 @@ python test_backend_repair.py
 
 ## 🩹 Sık Karşılaşılan Sorunlar
 
-- **Ollama konteyneri `syntax error near unexpected token $'{\r'` ile çöküyor (Windows):** Git, `entrypoint.sh` dosyasını Windows satır sonuna (CRLF) çevirmiş. Depodaki `.gitattributes` bunu yeni klonlarda engeller. Eski bir klonunuz varsa dosyayı silip yeniden çıkarın ve Ollama imajını yeniden derleyin:
-  ```bash
-  rm kid-arduino-studio/ollama/entrypoint.sh
-  git checkout -- kid-arduino-studio/ollama/entrypoint.sh
-  ```
+- **Ollama modelleri listede görünmüyor:** Bilgisayarınızda Ollama'nın çalıştığını ve en az bir model indirildiğini kontrol edin (`ollama list`).
 - **Arayüz değişikliği görünmüyor:** Tarayıcı eski sayfayı önbellekten açıyor olabilir; **Ctrl+F5** ile yenileyin.
 - **Backend değişikliği etki etmiyor:** Yerel modda `uvicorn`'u `--reload` ile başlatın ya da yeniden başlatın. Docker'da imajı yeniden derleyin (bkz. [README.Docker.md](README.Docker.md)).
 
@@ -138,7 +136,7 @@ python test_backend_repair.py
 ```text
 kid-arduino-studio/
 ├── backend/
-│   ├── main.py                  # FastAPI uç noktaları (/api/generate-project, /api/models, /api/projects, /api/upload, /api/fix-code, /api/ports, /api/serial-events, /api/ai-logs)
+│   ├── main.py                  # FastAPI uç noktaları (/api/generate-stream, /api/revise-stream, /api/generate-project, /api/models, /api/projects, /api/upload, /api/fix-code, /api/ports, /api/serial-events, /api/ai-logs)
 │   ├── ai_service.py            # LiteLLM ile çoklu sağlayıcı (Ollama, Gemini, OpenAI, Claude) proje üretimi ve doğrulama
 │   ├── flow_service.py          # Koddan dinamik akış diyagramı (AkisDiyagrami) üretimi ve doğrulaması
 │   ├── arduino_service.py       # arduino-cli ile port algılama, derleme ve yükleme
@@ -159,7 +157,9 @@ kid-arduino-studio/
 │   │   │   ├── Page3NasilCalisacak.vue  # Koddan türetilen dinamik akış diyagramı
 │   │   │   ├── Page4Calistir.vue        # Karta yükleme ve canlı seri port verisi
 │   │   │   ├── AIModelModal.vue         # '🤖 AI Modeli' seçici (Ollama, Gemini, OpenAI, Claude)
-│   │   │   ├── MalzemeCantasiModal.vue  # '🧰 Malzeme Çantam'
+│   │   │   ├── MalzemeCantasiModal.vue  # '🧰 Çantam' (elindeki malzemeler)
+│   │   │   ├── ProjeFikirleriModal.vue  # '💡 Fikirler' (Proje Fikirleri Atölyesi)
+│   │   │   ├── AIRevisionModal.vue      # 'Projeyi AI ile Geliştir & Revize Et'
 │   │   │   ├── ProjelerimModal.vue      # '📂 Projelerim'
 │   │   │   ├── AdminAILogsModal.vue     # '🛠️ Admin (AI Log)'
 │   │   │   ├── CodePeekModal.vue        # '</> Perde Arkasındaki Kodu Gör'
@@ -171,8 +171,7 @@ kid-arduino-studio/
 │   ├── vite.config.ts                   # Geliştirme sunucusu ve /api → 127.0.0.1:8001 yönlendirmesi
 │   ├── nginx.conf                       # Docker'da derlenmiş arayüzü sunar ve /api'yi backend'e iletir
 │   └── package.json
-├── ollama/                              # Docker için Ollama imajı ve model indiren entrypoint.sh
-├── docker-compose.yml
+├── docker-compose.yml                   # backend + frontend (Ollama bilgisayarda çalışır)
 ├── README.Docker.md
 └── README.md
 ```

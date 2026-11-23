@@ -105,13 +105,37 @@
         </div>
       </div>
 
-      <!-- Tümü / Adım Adım Modu Butonları -->
-      <div class="flex items-center gap-2 shrink-0 self-end lg:self-center">
+      <!-- Aksiyon Butonları: AI ile Revize Et, Oto-Kayıt kapalıysa Kaydet, Tümü/Adım Adım -->
+      <div class="flex items-center gap-1.5 sm:gap-2 shrink-0 flex-wrap self-end lg:self-center">
+        <!-- AI ile Geliştir / Revize Et Butonu -->
+        <button
+          type="button"
+          @click="$emit('open-revision')"
+          class="px-3.5 py-2 rounded-xl text-xs font-black border-2 border-slate-900 bg-gradient-to-r from-purple-200 via-indigo-100 to-sky-200 hover:from-purple-300 hover:to-sky-300 text-slate-950 transition flex items-center gap-1.5 cursor-pointer shadow-[0_2px_0_#0f172a] active:translate-y-0.5"
+          title="Mevcut devreye yeni bir sensör, LED veya kural eklemek için yapay zekayı kullan"
+        >
+          <span>✨</span>
+          <span>Projeyi Geliştir</span>
+        </button>
+
+        <!-- Projeyi Kaydet (Otomatik kayıt kapalıysa görünür) -->
+        <button
+          v-if="!autoSave"
+          type="button"
+          @click="$emit('save-project')"
+          class="px-3 py-2 rounded-xl text-xs font-black border-2 border-slate-900 bg-emerald-100 hover:bg-emerald-200 text-emerald-950 transition flex items-center gap-1.5 cursor-pointer shadow-[0_2px_0_#0f172a] active:translate-y-0.5"
+          title="Bu projeyi arşivime kaydet"
+        >
+          <span>💾</span>
+          <span>Projeyi Kaydet</span>
+        </button>
+
+        <!-- Tümü / Adım Adım Modu Butonları -->
         <button
           type="button"
           @click="showAllWires = !showAllWires"
           :class="[
-            'px-3.5 py-2 rounded-xl text-xs font-black border-2 border-slate-900 transition flex items-center gap-1.5 cursor-pointer shadow-[0_2px_0_#0f172a] active:translate-y-0.5',
+            'px-3 py-2 rounded-xl text-xs font-black border-2 border-slate-900 transition flex items-center gap-1.5 cursor-pointer shadow-[0_2px_0_#0f172a] active:translate-y-0.5',
             showAllWires
               ? 'bg-[#38bdf8] text-slate-950'
               : 'bg-white text-slate-800 hover:bg-slate-50'
@@ -119,8 +143,8 @@
         >
           <!-- İki yazı da aynı hücrede durur; buton en uzun yazının genişliğinde sabit kalır -->
           <span class="grid">
-            <span :class="['col-start-1 row-start-1', showAllWires ? '' : 'invisible']">👁️ Tüm Kablolar Görünüyor</span>
-            <span :class="['col-start-1 row-start-1', showAllWires ? 'invisible' : '']">🔍 Adım Adım Kablo Modu</span>
+            <span :class="['col-start-1 row-start-1', showAllWires ? '' : 'invisible']">👁️ Tüm Kablolar</span>
+            <span :class="['col-start-1 row-start-1', showAllWires ? 'invisible' : '']">🔍 Adım Adım</span>
           </span>
         </button>
       </div>
@@ -173,11 +197,14 @@
       </div>
     </div>
 
-    <!-- 3. OTOMATİK NETLIST-TO-BREADBOARD GÖRSEL ÇALIŞMA ALANI (Dinamik Fit-to-Screen) -->
+    <!-- 3. OTOMATİK NETLIST-TO-BREADBOARD GÖRSEL ÇALIŞMA ALANI (Dinamik Fit-to-Screen & Tam Ekran) -->
     <div
       ref="workspaceRef"
-      class="relative w-full overflow-auto bg-slate-900 rounded-3xl border-[3px] border-slate-900 shadow-[0_8px_0_rgba(15,23,42,0.2)] select-none pt-11 pb-3 px-3"
-      :style="{ minHeight: `${workspaceMinHeight}px` }"
+      :class="[
+        'relative w-full overflow-auto bg-slate-900 border-[3px] border-slate-900 shadow-[0_8px_0_rgba(15,23,42,0.2)] select-none pt-12 pb-3 px-3 transition-all',
+        isFullscreen ? 'fixed inset-0 z-50 rounded-none h-screen' : 'rounded-3xl min-h-[540px]'
+      ]"
+      :style="isFullscreen ? {} : { minHeight: `${workspaceMinHeight}px` }"
     >
       <!-- Arka Plan Grid Ağı -->
       <div class="absolute inset-0 pointer-events-none opacity-25" style="background-image: radial-gradient(#64748b 1px, transparent 1px); background-size: 20px 20px;"></div>
@@ -185,13 +212,13 @@
       <!-- Üst Bilgi Rozeti -->
       <div class="absolute top-3 left-4 right-32 z-20 pointer-events-none flex flex-wrap items-center gap-2">
         <span class="px-2.5 py-1 rounded-lg bg-slate-800/90 border border-slate-700 text-[11px] font-black tracking-wide text-amber-300">
-          ⚡ AKILLI DEVRE ŞEMASI • Çocuk Dostu Basit Kablolama
+          ⚡ AKILLI DEVRE ŞEMASI • Çocuk Dostu Kablolama
         </span>
         <span
           v-if="layoutResult.errors.length === 0"
           class="px-2 py-0.5 rounded-lg bg-emerald-950/90 border border-emerald-500/60 text-[10px] font-bold text-emerald-300"
         >
-          ✓ Elektriksel Kontrol: 0 Kısa Devre, 0 Hatalı Bağlantı
+          ✓ Elektriksel Kontrol: 0 Kısa Devre, 0 Hata
         </span>
         <span
           v-else
@@ -201,8 +228,22 @@
         </span>
       </div>
 
-      <!-- Sağ Üst Zoom / Sığdır Kontrolleri -->
+      <!-- Sağ Üst Zoom, Tam Ekran ve Entegre Rehber Kontrolleri -->
       <div class="absolute top-2.5 right-3 z-40 flex items-center gap-1 bg-slate-800/90 border border-slate-700 rounded-xl p-1 shadow-md">
+        <!-- Entegre Devre Rehberi Dock Butonu -->
+        <button
+          type="button"
+          @click="isDockOpen = !isDockOpen"
+          :class="[
+            'px-2.5 h-6 rounded-lg font-black text-[10px] flex items-center gap-1 cursor-pointer transition',
+            isDockOpen ? 'bg-indigo-400 text-slate-950' : 'bg-slate-700 hover:bg-slate-600 text-slate-200'
+          ]"
+          :title="isDockOpen ? 'Rehber Panelini Gizle' : 'Rehber Panelini Göster'"
+        >
+          <span>📋</span>
+          <span class="hidden sm:inline">{{ isDockOpen ? 'Paneli Kapat' : 'Parça & Kablo Rehberi' }}</span>
+        </button>
+
         <button
           type="button"
           @click="zoomOut"
@@ -226,6 +267,16 @@
           class="w-6 h-6 rounded-lg bg-slate-900 hover:bg-slate-700 text-slate-200 font-black text-xs flex items-center justify-center cursor-pointer"
         >
           +
+        </button>
+
+        <!-- Tam Ekran Modu Butonu -->
+        <button
+          type="button"
+          @click="toggleFullscreen"
+          class="w-6 h-6 rounded-lg bg-slate-700 hover:bg-slate-600 text-white font-black text-xs flex items-center justify-center cursor-pointer"
+          :title="isFullscreen ? 'Tam Ekrandan Çık' : 'Tam Ekran Moduna Geç'"
+        >
+          {{ isFullscreen ? '🗗' : '⛶' }}
         </button>
       </div>
 
@@ -580,109 +631,106 @@
           </svg>
         </div>
       </div>
-    </div>
 
-    <!-- 4. ÇOCUKLAR İÇİN BASİT PARÇA YERLEŞİM & KABLOLAMA ÖZET REHBERİ -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
-      <!-- Sol Kutu: Parçalar Nereye Takılıyor? -->
-      <div class="bg-white rounded-2xl p-3.5 border-[2.5px] border-slate-900 shadow-[0_3px_0_#0f172a] flex flex-col gap-2">
-        <div class="flex items-center justify-between">
-          <h4 class="text-xs sm:text-sm font-black text-slate-900 flex items-center gap-1.5">
-            <span>🧩</span>
-            <span>1. Parçaları Breadboard'a Nasıl Takıyoruz?</span>
-          </h4>
-          <span class="px-2 py-0.5 rounded-full bg-amber-100 border border-slate-900 text-[10px] font-black text-amber-950">
-            {{ layoutResult.components.length }} Parça
-          </span>
+      <!-- ENTEGRE ÇOCUK DOSTU PARÇA & KABLO REHBERİ (Açılıp Kapanabilen Akıllı Dock) -->
+      <div
+        v-if="isDockOpen"
+        class="absolute bottom-3 right-3 left-3 sm:left-auto sm:w-[390px] max-h-[300px] bg-white/95 backdrop-blur-md rounded-2xl border-2 border-slate-900 shadow-[0_8px_0_rgba(15,23,42,0.4)] z-40 flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-2 duration-150 pointer-events-auto"
+      >
+        <!-- Dock Başlık & Sekmeler -->
+        <div class="px-3 py-2 bg-slate-100 border-b border-slate-300 flex items-center justify-between gap-2 shrink-0">
+          <div class="flex items-center gap-1">
+            <button
+              type="button"
+              @click="activeDockTab = 'parts'"
+              :class="[
+                'px-2.5 py-1 rounded-lg text-xs font-black transition cursor-pointer border',
+                activeDockTab === 'parts'
+                  ? 'bg-amber-300 text-slate-950 border-slate-900 shadow-2xs'
+                  : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+              ]"
+            >
+              🧩 Parçalar ({{ layoutResult.components.length }})
+            </button>
+            <button
+              type="button"
+              @click="activeDockTab = 'wires'"
+              :class="[
+                'px-2.5 py-1 rounded-lg text-xs font-black transition cursor-pointer border',
+                activeDockTab === 'wires'
+                  ? 'bg-sky-300 text-slate-950 border-slate-900 shadow-2xs'
+                  : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+              ]"
+            >
+              🔌 Kablo Adımları ({{ layoutResult.wires.length }})
+            </button>
+          </div>
+
+          <button
+            type="button"
+            @click="isDockOpen = false"
+            class="w-6 h-6 rounded-lg bg-slate-200 hover:bg-rose-100 hover:text-rose-700 text-slate-700 font-black text-xs flex items-center justify-center cursor-pointer transition"
+            title="Paneli Kapat"
+          >
+            ✕
+          </button>
         </div>
 
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          <div
-            v-for="comp in layoutResult.components"
-            :key="comp.id"
-            :class="[
-              'p-2.5 rounded-xl border flex flex-col gap-1',
-              isComponentInInventory(comp)
-                ? 'bg-slate-50 border-slate-300'
-                : 'bg-amber-50/70 border-amber-300'
-            ]"
-          >
-            <div class="flex items-center justify-between gap-1">
-              <div class="flex items-center gap-1 min-w-0">
-                <strong class="text-xs font-black text-slate-900 truncate">{{ comp.label }}</strong>
-                <span
-                  v-if="!isComponentInInventory(comp)"
-                  class="px-1.5 py-0.2 rounded bg-amber-200 border border-amber-500 text-[8.5px] font-black text-amber-950 shrink-0"
-                  title="Bu parça Malzeme Çantanda işaretli değil"
-                >
-                  ⚠️ Çantada Yok
+        <!-- Dock İçeriği -->
+        <div class="p-2.5 overflow-y-auto flex-1 flex flex-col gap-1.5 text-xs">
+          <!-- Sekme 1: Parça Yerleşimleri -->
+          <template v-if="activeDockTab === 'parts'">
+            <div
+              v-for="comp in layoutResult.components"
+              :key="comp.id"
+              class="p-2 rounded-xl bg-slate-50 border border-slate-200 flex flex-col gap-1"
+            >
+              <div class="flex items-center justify-between gap-1">
+                <strong class="font-black text-slate-900 truncate">{{ comp.label }}</strong>
+                <span class="text-[9.5px] px-1.5 py-0.2 rounded bg-amber-100 border border-amber-300 text-amber-950 font-bold">
+                  {{ comp.isBreadboardMounted ? 'Breadboard' : 'Harici Modül' }}
                 </span>
               </div>
-              <span
-                :class="[
-                  'px-1.5 py-0.2 rounded text-[9px] font-black border shrink-0',
-                  comp.isBreadboardMounted
-                    ? 'bg-amber-100 text-amber-950 border-amber-400'
-                    : 'bg-cyan-100 text-cyan-950 border-cyan-400'
-                ]"
-              >
-                {{ comp.isBreadboardMounted ? 'Breadboard' : 'Doğrudan Kablolu' }}
-              </span>
+              <div class="flex flex-wrap gap-1">
+                <span
+                  v-for="pin in Object.values(comp.pins)"
+                  :key="pin.pinName"
+                  class="px-1.5 py-0.5 rounded bg-white border border-slate-300 text-[9px] font-bold text-slate-700"
+                >
+                  {{ pin.pinName }}: <strong class="text-slate-950">{{ comp.isBreadboardMounted ? `${pin.holeName} Pini` : `${pin.pinName} Pini` }}</strong>
+                </span>
+              </div>
             </div>
-            <div class="flex flex-wrap gap-1 mt-0.5">
-              <span
-                v-for="pin in Object.values(comp.pins)"
-                :key="pin.pinName"
-                class="px-2 py-0.5 rounded-md bg-white border border-slate-300 text-[10px] font-bold text-slate-700"
-              >
-                {{ formatPinFriendlyName(comp.type, pin.pinName) }}:
-                <strong class="text-slate-950 font-black">
-                  {{ comp.isBreadboardMounted ? `${pin.holeName} Pini` : `${pin.pinName} Pini` }}
-                </strong>
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
+          </template>
 
-      <!-- Sağ Kutu: Hangi Kablo Nereden Nereye Gidiyor? (Tıklanabilir Liste) -->
-      <div class="bg-white rounded-2xl p-3.5 border-[2.5px] border-slate-900 shadow-[0_3px_0_#0f172a] flex flex-col gap-2">
-        <div class="flex items-center justify-between">
-          <h4 class="text-xs sm:text-sm font-black text-slate-900 flex items-center gap-1.5">
-            <span>🔌</span>
-            <span>2. Hangi Pin Nereye Bağlanıyor? (Tıkla & Gör)</span>
-          </h4>
-          <span class="px-2 py-0.5 rounded-full bg-sky-100 border border-slate-900 text-[10px] font-black text-sky-950">
-            {{ layoutResult.wires.length }} Kablo Adımı
-          </span>
-        </div>
-
-        <div class="max-h-[135px] overflow-y-auto flex flex-col gap-1.5 pr-1">
-          <button
-            v-for="(item, idx) in allWireDetails"
-            :key="item.id"
-            type="button"
-            @click="selectStep(idx)"
-            :class="[
-              'w-full text-left px-2.5 py-1.5 rounded-xl border text-[11px] font-bold transition flex items-center justify-between gap-2 cursor-pointer',
-              currentStepIndex === idx
-                ? 'bg-[#fde047] border-slate-900 text-slate-950 font-black shadow-2xs'
-                : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700'
-            ]"
-          >
-            <div class="flex items-center gap-2 min-w-0">
-              <span
-                class="w-4 h-4 rounded-md border border-slate-900 text-[9px] font-black text-white flex items-center justify-center shrink-0"
-                :style="{ backgroundColor: item.color }"
-              >
-                {{ idx + 1 }}
-              </span>
-              <span class="truncate">
-                <strong>{{ item.fromTitle }}</strong> ➔ <strong>{{ item.toTitle }}</strong>
-              </span>
-            </div>
-            <span class="text-[10px] font-black shrink-0 opacity-75">{{ item.colorName }}</span>
-          </button>
+          <!-- Sekme 2: Kablo Adımları Listesi -->
+          <template v-else>
+            <button
+              v-for="(item, idx) in allWireDetails"
+              :key="item.id"
+              type="button"
+              @click="selectStep(idx)"
+              :class="[
+                'w-full text-left px-2 py-1.5 rounded-xl border text-[11px] font-bold transition flex items-center justify-between gap-2 cursor-pointer',
+                currentStepIndex === idx
+                  ? 'bg-[#fde047] border-slate-900 text-slate-950 font-black shadow-2xs'
+                  : 'bg-white hover:bg-slate-50 border-slate-200 text-slate-700'
+              ]"
+            >
+              <div class="flex items-center gap-1.5 min-w-0">
+                <span
+                  class="w-4 h-4 rounded-md border border-slate-900 text-[8.5px] font-black text-white flex items-center justify-center shrink-0"
+                  :style="{ backgroundColor: item.color }"
+                >
+                  {{ idx + 1 }}
+                </span>
+                <span class="truncate">
+                  {{ item.fromTitle }} ➔ {{ item.toTitle }}
+                </span>
+              </div>
+              <span class="text-[9px] font-black shrink-0 opacity-75">{{ item.colorName }}</span>
+            </button>
+          </template>
         </div>
       </div>
     </div>
@@ -738,12 +786,15 @@ const props = defineProps<{
   selectedInventory?: string[];
   isGeneratingLogic?: boolean;
   verification?: LogicVerificationReport;
+  autoSave?: boolean;
 }>();
 
-defineEmits<{
+const emit = defineEmits<{
   (e: 'next-page'): void;
   (e: 'prev-page'): void;
   (e: 'open-inventory'): void;
+  (e: 'open-revision'): void;
+  (e: 'save-project'): void;
 }>();
 
 function isComponentInInventory(comp: PlacedComponent): boolean {
@@ -822,12 +873,27 @@ const containerHeight = ref(540);
 const userZoom = ref(1);
 let workspaceObserver: ResizeObserver | null = null;
 
+const isFullscreen = ref(false);
+const isDockOpen = ref(false);
+const activeDockTab = ref<'parts' | 'wires'>('parts');
+
+function toggleFullscreen() {
+  isFullscreen.value = !isFullscreen.value;
+  setTimeout(() => {
+    updateWorkspaceSize();
+  }, 100);
+}
+
 function updateWorkspaceSize() {
   const el = workspaceRef.value;
   if (!el) return;
   containerWidth.value = Math.max(260, el.clientWidth - 24);
   const vh = typeof window !== 'undefined' ? window.innerHeight : 800;
-  containerHeight.value = Math.max(360, Math.min(660, Math.round(vh * 0.62)));
+  if (isFullscreen.value) {
+    containerHeight.value = Math.max(500, vh - 60);
+  } else {
+    containerHeight.value = Math.max(480, Math.min(850, Math.round(vh * 0.74)));
+  }
 }
 
 onMounted(() => {
@@ -870,7 +936,7 @@ const effectiveScale = computed(() => {
 
 const scaledStageWidth = computed(() => Math.ceil(sceneBounds.value.width * effectiveScale.value));
 const scaledStageHeight = computed(() => Math.ceil(sceneBounds.value.height * effectiveScale.value));
-const workspaceMinHeight = computed(() => Math.max(320, scaledStageHeight.value + 58));
+const workspaceMinHeight = computed(() => Math.max(480, scaledStageHeight.value + 58));
 
 function zoomIn() {
   userZoom.value = Math.min(2.2, Number((userZoom.value + 0.15).toFixed(2)));

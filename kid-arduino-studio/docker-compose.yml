@@ -1,17 +1,4 @@
 services:
-  ollama:
-    build:
-      context: ./ollama
-      dockerfile: Dockerfile
-    container_name: kid-arduino-ollama
-    ports:
-      - "${OLLAMA_PORT:-11434}:11434"
-    environment:
-      - OLLAMA_MODEL=qwen2.5:1.5b
-    volumes:
-      - ollama_models:/root/.ollama
-    restart: unless-stopped
-
   backend:
     build:
       context: ./backend
@@ -21,15 +8,15 @@ services:
       - "8001:8001"
     environment:
       - PORT=8001
-      - OLLAMA_API_BASE=http://ollama:11434
+      - OLLAMA_API_BASE=http://host.docker.internal:11434
     env_file:
       - path: ./backend/.env
         required: false
     volumes:
       - ./backend/saved_projects.json:/app/saved_projects.json
       - ./backend/ai_logs.json:/app/ai_logs.json
-    depends_on:
-      - ollama
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped
 
   frontend:
@@ -42,6 +29,3 @@ services:
     depends_on:
       - backend
     restart: unless-stopped
-
-volumes:
-  ollama_models:

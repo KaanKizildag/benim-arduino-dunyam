@@ -217,57 +217,32 @@
           </div>
         </div>
 
-        <!-- ALT ÇUBUK: ELİMDEKİ MALZEMELERLE NE YAPABİLİRİM? PROJE ÖNERİLERİ & KAYDET -->
-        <div class="p-3.5 sm:p-4 bg-white border-t-[3px] border-slate-900 flex flex-col gap-2.5 shrink-0">
-          <!-- Elimdeki Malzemelerle Ne Yapabilirim? Dinamik Öneri Şeridi -->
-          <div class="bg-amber-50 border-2 border-slate-900 rounded-2xl p-2.5 flex flex-col gap-2">
-            <div class="flex items-center justify-between gap-2">
-              <div class="text-xs font-black text-slate-900 flex items-center gap-1.5">
-                <span class="text-base">💡</span>
-                <span>Elimdeki Malzemelerle Ne Yapabilirim? ({{ suggestedIdeas.length }} Proje Önerisi)</span>
-              </div>
-              <span class="text-[10px] font-bold text-slate-600 hidden sm:inline">
-                Bir öneriye tıklayarak hemen tasarlayabilirsin!
-              </span>
-            </div>
-
-            <div v-if="suggestedIdeas.length > 0" class="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              <button
-                v-for="idea in suggestedIdeas"
-                :key="idea.id"
-                type="button"
-                @click="handleSelectIdea(idea.prompt)"
-                class="p-2.5 rounded-xl bg-white hover:bg-[#fef08a] border-2 border-slate-900 text-left transition cursor-pointer shadow-[0_2px_0_#0f172a] active:translate-y-0.5 flex flex-col justify-between gap-1 group"
-              >
-                <div class="flex items-center justify-between gap-1">
-                  <span class="text-xs font-black text-slate-900 group-hover:text-slate-950 truncate">
-                    {{ idea.icon }} {{ idea.title }}
-                  </span>
-                  <span class="px-1.5 py-0.2 rounded bg-emerald-100 border border-emerald-500 text-[9px] font-black text-emerald-900 shrink-0">
-                    Çantana Uygun ✓
-                  </span>
-                </div>
-                <p class="text-[10px] font-bold text-slate-600 line-clamp-2 leading-snug">
-                  {{ idea.description }}
-                </p>
-              </button>
-            </div>
-            <div v-else class="text-[11px] font-bold text-slate-600 py-1">
-              Çantana en az bir sensör (LDR, Mesafe, Buton, Potansiyometre) ve bir çıkış elemanı (LED, Servo, Buzzer) ekleyerek sana özel proje önerilerini görebilirsin!
-            </div>
+        <!-- ALT ÇUBUK: ENVENTER BİLGİSİ, FİKİRLER ATÖLYESİNE GEÇİŞ VE KAYDET -->
+        <div class="p-3.5 sm:p-4 bg-white border-t-[3px] border-slate-900 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-bold text-slate-700">
+              Toplam <strong>{{ selectedCount }}</strong> malzeme çantanda seçili.
+            </span>
           </div>
 
-          <div class="flex items-center justify-between">
-            <div class="text-xs font-bold text-slate-600">
-              Toplam <strong>{{ selectedCount }}</strong> malzeme çantada seçili.
-            </div>
+          <div class="flex items-center gap-2">
+            <!-- Proje Fikirleri Atölyesi Butonu -->
+            <button
+              type="button"
+              @click="$emit('open-ideas'); $emit('close')"
+              class="px-4 py-2.5 rounded-2xl bg-[#fef08a] hover:bg-[#fde047] active:translate-y-0.5 text-slate-950 font-black text-xs border-2 border-slate-900 shadow-[0_2px_0_#ca8a04] transition flex items-center gap-1.5 cursor-pointer"
+            >
+              <span>💡</span>
+              <span>Proje Fikirlerini Gör</span>
+            </button>
 
+            <!-- Kaydet Butonu -->
             <button
               type="button"
               @click="handleSave"
-              class="px-8 py-2.5 rounded-full bg-gradient-to-r from-[#4ade80] to-[#22c55e] hover:from-[#86efac] hover:to-[#16a34a] active:translate-y-1 active:shadow-none text-slate-950 font-black text-xs sm:text-sm border-2 border-slate-900 shadow-[0_4px_0_#0f172a] transition-all cursor-pointer flex items-center gap-1.5"
+              class="px-6 py-2.5 rounded-2xl bg-gradient-to-r from-[#4ade80] to-[#22c55e] hover:from-[#86efac] hover:to-[#16a34a] active:translate-y-0.5 text-slate-950 font-black text-xs sm:text-sm border-2 border-slate-900 shadow-[0_3px_0_#15803d] transition flex items-center gap-1.5 cursor-pointer"
             >
-              <span>Kaydet ve Çantaya Koy! 🎒</span>
+              <span>Çantayı Kaydet 🎒</span>
             </button>
           </div>
         </div>
@@ -289,114 +264,10 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'close'): void;
+  (e: 'open-ideas'): void;
   (e: 'save', inventory: string[]): void;
   (e: 'use-idea', payload: { inventory: string[]; prompt: string }): void;
 }>();
-
-interface InventoryIdea {
-  id: string;
-  title: string;
-  icon: string;
-  description: string;
-  prompt: string;
-  check: (inv: Set<string>) => boolean;
-}
-
-const IDEA_RULES: InventoryIdea[] = [
-  {
-    id: 'idea-sunflower-2ldr',
-    title: 'Günebakan Servo (2 LDR ile)',
-    icon: '🌻',
-    description: '2 adet 2 bacaklı LDR ile ışığın daha güçlü geldiği yöne dönen akıllı günebakan servo sistemi.',
-    prompt: '2 bacaklı ldr sensörü ile günebakan projesi yapmak istiyorum. 2 tane ldr sensörüm var. hangisinden ışık fazla geliyorsa servo motor o yöne doğru hareket etmeli.',
-    check: (inv) => (inv.has('LDR_DISCRETE') || inv.has('LDR_SENSOR') || inv.has('LDR_MODULE')) && inv.has('SERVO_SG90')
-  },
-  {
-    id: 'idea-bluetooth-car',
-    title: 'Bluetooth Kontrollü Araba',
-    icon: '🏎️',
-    description: 'HC-05 Bluetooth modülü ve L293D motor sürücü ile telefondan yönlendirilen 2 DC motorlu araba.',
-    prompt: 'HC-05 bluetooth modülü ve L293D motor sürücü ile bluetooth kontrollü 2 motorlu araba yapmak istiyorum.',
-    check: (inv) => (inv.has('BLUETOOTH_HC05') || inv.has('BLUETOOTH_HC06')) && (inv.has('MOTOR_DRIVER_L293D') || inv.has('MOTOR_DRIVER_L298N') || inv.has('DC_MOTOR_5V'))
-  },
-  {
-    id: 'idea-night-lamp',
-    title: 'Otomatik Gece Lambası',
-    icon: '🌙',
-    description: 'Oda karanlık olduğunda LDR sensörü algılasın ve LED otomatik olarak yansın.',
-    prompt: 'LDR ışık sensörü ile ortam karanlık olduğunda LED yansın, aydınlık olduğunda LED sönsün.',
-    check: (inv) =>
-      (inv.has('LDR_DISCRETE') || inv.has('LDR_SENSOR') || inv.has('LDR_MODULE')) &&
-      (inv.has('LED_RED') || inv.has('LED_GREEN') || inv.has('LED_YELLOW') || inv.has('LED_BLUE'))
-  },
-  {
-    id: 'idea-parking-radar',
-    title: 'Ultrasonik Park Sensörü',
-    icon: '🚗',
-    description: 'HC-SR04 mesafe sensörü 15 cm yakında engel gördüğünde buzzer ile sesli uyarı versin.',
-    prompt: 'HC-SR04 ultrasonik mesafe sensörü ile 15 cm yaklaşınca buzzer sesli uyarı versin.',
-    check: (inv) => inv.has('HCSR04') && (inv.has('BUZZER') || inv.has('ACTIVE_BUZZER'))
-  },
-  {
-    id: 'idea-smart-barrier',
-    title: 'Akıllı Otopark Bariyeri',
-    icon: '🚧',
-    description: 'Mesafe sensörü yaklaşan aracı görünce servo motor bariyeri 90 derece kaldırsın.',
-    prompt: 'HC-SR04 mesafe sensörü önüne araç yaklaştığında SG90 servo motor bariyeri 90 derece açsın.',
-    check: (inv) => inv.has('HCSR04') && inv.has('SERVO_SG90')
-  },
-  {
-    id: 'idea-button-door',
-    title: 'Butonlu Kapı Kilidi (Servo)',
-    icon: '🚪',
-    description: 'Push butona basıldığında servo motor kapıyı açsın, bırakıldığında kapatsın.',
-    prompt: 'Push butona basıldığında SG90 servo motor 90 derece dönerek kapıyı açsın.',
-    check: (inv) => inv.has('PUSH_BUTTON') && inv.has('SERVO_SG90')
-  },
-  {
-    id: 'idea-pot-servo',
-    title: 'Potansiyometre ile Robot Kol',
-    icon: '🦾',
-    description: 'Potansiyometreyi çevirdikçe servo motorun açısını 0 ile 180 derece arasında kontrol et.',
-    prompt: '10k potansiyometreyi çevirdikçe SG90 servo motorun açısı 0 ile 180 derece arasında dönsün.',
-    check: (inv) => inv.has('POTENTIOMETER') && inv.has('SERVO_SG90')
-  },
-  {
-    id: 'idea-morning-alarm',
-    title: 'Güneş Doğdu Alarmı (LDR + Buzzer)',
-    icon: '⏰',
-    description: 'Sabah güneş doğup oda aydınlandığında LDR algılasın ve buzzer uyandırma alarmı çalsın.',
-    prompt: 'LDR ışık sensörü üzerine güçlü ışık düştüğünde buzzer ile sabah uyandırma alarmı çalsın.',
-    check: (inv) =>
-      (inv.has('LDR_DISCRETE') || inv.has('LDR_SENSOR') || inv.has('LDR_MODULE')) &&
-      (inv.has('BUZZER') || inv.has('ACTIVE_BUZZER'))
-  },
-  {
-    id: 'idea-doorbell',
-    title: 'Işıklı Kapı Zili',
-    icon: '🔔',
-    description: 'Butona basıldığında hem buzzer zil çalsın hem de LED ışık yansın.',
-    prompt: 'Push butona basıldığında buzzer zil sesi çıkarsın ve kırmızı LED yansın.',
-    check: (inv) =>
-      inv.has('PUSH_BUTTON') &&
-      ((inv.has('BUZZER') || inv.has('ACTIVE_BUZZER')) ||
-        (inv.has('LED_RED') || inv.has('LED_GREEN') || inv.has('LED_YELLOW') || inv.has('LED_BLUE')))
-  }
-];
-
-const suggestedIdeas = computed(() => {
-  const invSet = new Set(selectedItems.value.map(i => i.toUpperCase()));
-  return IDEA_RULES.filter(rule => rule.check(invSet)).slice(0, 3);
-});
-
-function handleSelectIdea(prompt: string) {
-  emit('save', selectedItems.value);
-  emit('use-idea', {
-    inventory: [...selectedItems.value],
-    prompt
-  });
-  emit('close');
-}
 
 const selectedItems = ref<string[]>([...props.selectedInventory]);
 const searchQuery = ref('');

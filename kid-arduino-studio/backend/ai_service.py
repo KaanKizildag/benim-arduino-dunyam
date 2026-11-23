@@ -3,7 +3,7 @@ import os
 import re
 import time
 import uuid
-from typing import List, Optional, Dict, Any, Set, Tuple, Callable
+from typing import List, Optional, Dict, Any, Set, Tuple, Callable, Generator
 import httpx
 from dotenv import load_dotenv
 import litellm
@@ -644,7 +644,7 @@ void loop() {
 SYSTEM_PROMPT = """Sen 8-14 yaş çocuklar için 'Arduino Robot Arkadaşı'sın. Görevin çocuğun fikrini ve envanterini kullanarak standart Netlist JSON üretmek.
 
 KURALLAR:
-1. KOORDİNAT YASAĞI: Asla breadboard deliği (5A, 12C, bn.1) veya piksel koordinatı üretme!
+1. KOORDİNAT YASAĞI: Asla breadboard pini koordinatı (5A, 12C, bn.1) veya piksel koordinatı üretme!
 2. TAM PİN VE TİP SÖZLÜĞÜ (Sadece bu type ve pinleri kullan):
 - wokwi-resistor: r1.1, r1.2 (props: {"value":"220"} veya {"value":"10000"})
 - wokwi-led: led1.A (Anot), led1.C (Katot) (props: {"color":"red"|"green"|"yellow"|"blue"})
@@ -1596,6 +1596,26 @@ KESİN KURALLAR:
 {"proje_adi":"Bluetooth Kontrollü Akıllı Araba","karsilama_mesaji":"HC-05 Bluetooth modülü ve L293D motor sürücü ile telefondan kontrol edilen 2 motorlu araba devresi!","gerekli_parcalar":["ARDUINO_UNO","BREADBOARD","BLUETOOTH_HC05","MOTOR_DRIVER_L293D","DC_MOTOR_5V"],"netlist":{"board":"arduino-uno","components":[{"id":"hc05","type":"wokwi-hc-05","props":{},"label":"HC-05 Bluetooth Modülü"},{"id":"l293d","type":"wokwi-l293d","props":{},"label":"L293D Motor Sürücü"},{"id":"motor1","type":"wokwi-dc-motor","props":{},"label":"Sol DC Motor"},{"id":"motor2","type":"wokwi-dc-motor","props":{},"label":"Sağ DC Motor"}],"connections":[{"from":"hc05.VCC","to":"5V","color":"red"},{"from":"hc05.GND","to":"GND","color":"black"},{"from":"hc05.TXD","to":"uno.D10","color":"green"},{"from":"hc05.RXD","to":"uno.D11","color":"blue"},{"from":"l293d.VCC1","to":"5V","color":"red"},{"from":"l293d.VCC2","to":"5V","color":"red"},{"from":"l293d.GND","to":"GND","color":"black"},{"from":"l293d.EN1","to":"5V","color":"red"},{"from":"l293d.EN2","to":"5V","color":"red"},{"from":"l293d.IN1","to":"uno.D2","color":"orange"},{"from":"l293d.IN2","to":"uno.D3","color":"yellow"},{"from":"l293d.IN3","to":"uno.D4","color":"green"},{"from":"l293d.IN4","to":"uno.D5","color":"blue"},{"from":"l293d.OUT1","to":"motor1.1","color":"orange"},{"from":"l293d.OUT2","to":"motor1.2","color":"black"},{"from":"l293d.OUT3","to":"motor2.1","color":"green"},{"from":"l293d.OUT4","to":"motor2.2","color":"black"}]},"arduino_kodu":"#include <SoftwareSerial.h>\\n\\nconst int BT_RX = 10;\\nconst int BT_TX = 11;\\nSoftwareSerial bt(BT_RX, BT_TX);\\n\\nconst int IN1 = 2;\\nconst int IN2 = 3;\\nconst int IN3 = 4;\\nconst int IN4 = 5;\\n\\nvoid setup() {\\n  Serial.begin(9600);\\n  bt.begin(9600);\\n  pinMode(IN1, OUTPUT);\\n  pinMode(IN2, OUTPUT);\\n  pinMode(IN3, OUTPUT);\\n  pinMode(IN4, OUTPUT);\\n}\\n\\nvoid loop() {\\n  if (bt.available()) {\\n    char c = bt.read();\\n    if (c == 'F') {\\n      digitalWrite(IN1, HIGH); digitalWrite(IN2, LOW);\\n      digitalWrite(IN3, HIGH); digitalWrite(IN4, LOW);\\n    } else if (c == 'B') {\\n      digitalWrite(IN1, LOW); digitalWrite(IN2, HIGH);\\n      digitalWrite(IN3, LOW); digitalWrite(IN4, HIGH);\\n    } else if (c == 'L') {\\n      digitalWrite(IN1, LOW); digitalWrite(IN2, HIGH);\\n      digitalWrite(IN3, HIGH); digitalWrite(IN4, LOW);\\n    } else if (c == 'R') {\\n      digitalWrite(IN1, HIGH); digitalWrite(IN2, LOW);\\n      digitalWrite(IN3, LOW); digitalWrite(IN4, HIGH);\\n    } else {\\n      digitalWrite(IN1, LOW); digitalWrite(IN2, LOW);\\n      digitalWrite(IN3, LOW); digitalWrite(IN4, LOW);\\n    }\\n  }\\n}","guvenlik_notu":"DC motorlar yüksek akım çektiği için Arduino pinlerine doğrudan değil, L293D motor sürücü üzerinden bağlanır."}
 """
 
+REVISION_SYSTEM_PROMPT = """Sen çocuklar için Arduino devre ve C++ kodu geliştirme ve revizyon uzmanısın.
+Sana MEVCUT PROJE (devre şeması netlist, akış adımları ve Arduino C++ kodu) ile kullanıcının İSTEDİĞİ DEĞİŞİKLİK / REVİZYON verilecek.
+Görevin mevcut projeyi kullanıcının isteği doğrultusunda GÜNCELLEMEK ve TEK BİR JSON nesnesi olarak döndürmektir.
+
+KESİN REVİZYON KURALLARI:
+1. MEVCUT ÇALIŞAN DEVREYİ VE KODU KORU:
+   - Halihazırda çalışan pin bağlantılarını gereksiz yere değiştirme veya silme.
+   - Sadece kullanıcının talep ettiği yeni sensör, buton, motor veya LED'leri ekle ya da istenen davranışı değiştir.
+2. NETLİST VE KOD SENKRONİZASYONU:
+   - Yeni bir parça ekleniyorsa `netlist.components` ve `netlist.connections` içine eksiksiz ekle.
+   - Arduino C++ kodunda tanımlanan tüm pinler netlist'teki `uno.D*` ve `uno.A*` pinleriyle %100 birebir uyuşmalıdır!
+   - Çıkış parçalarını (LED'ler 220Ω dirençle, butonlar 10kΩ dirençle veya INPUT_PULLUP ile) standart Wokwi kurallarına uygun bağla.
+3. AKIŞ VE KARŞILAMA:
+   - `proje_adi`: Güncellenen projeyi yansıtacak sevimli bir başlık.
+   - `karsilama_mesaji`: Yapılan revizyonu çocuğa özetleyen neşeli bir cümle (örn: "Harika fikir! Devrene sarı ikaz lambası ve mesafe uyarısı ekledik! 🚀").
+   - `akis_adimlari`: Güncel devrenin çalışma mantığını anlatan (gozlemle, karar_ver, evet_sonucu, hayir_sonucu) adımları.
+4. SADECE GEÇERLİ JSON DÖNDÜR:
+   Markdown kod blokları veya fazladan açıklama yazma. Sadece {"proje_adi":"...","karsilama_mesaji":"...","gerekli_parcalar":[...],"netlist":{...},"akis_adimlari":{...},"arduino_kodu":"...","guvenlik_notu":"..."} JSON nesnesi döndür.
+"""
+
 
 def auto_complete_electrical_topology(netlist_dict: Dict[str, Any]) -> Tuple[Dict[str, Any], List[str]]:
     """
@@ -2074,7 +2094,7 @@ Yukarıdaki isteğe göre SADECE istenen parçaları içeren `netlist` (componen
             akis_adimlari=None,
             akis_diyagrami=flow_obj,
             arduino_kodu=raw_code,
-            guvenlik_notu=str(parsed.get("guvenlik_notu") or "").strip() or "Parçaları breadboard deliklerine dikkatlice yerleştir.",
+            guvenlik_notu=str(parsed.get("guvenlik_notu") or "").strip() or "Parçaları breadboard pinlerine dikkatlice yerleştir.",
             uyarilar=norm_warnings + list(report.warnings),
             verification=report
         )
@@ -2109,6 +2129,762 @@ Yukarıdaki isteğe göre SADECE istenen parçaları içeren `netlist` (componen
             notes=[err_msg]
         )
         raise RuntimeError(err_msg)
+
+
+def get_component_meta(comp_identifier: str, comp_type: str = "") -> Tuple[str, str]:
+    """Bileşen ID veya tipine göre çocuk dostu Türkçe etiket ve emoji ikonu döner."""
+    cid = comp_identifier.upper()
+    ctype = comp_type.lower()
+
+    if ctype in ("wokwi-photoresistor", "ldr_discrete", "discrete-ldr"):
+        return ("2 Bacaklı LDR (Işık Sensörü)", "☀️")
+    if ctype in ("wokwi-photoresistor-sensor", "ldr_module", "ldr-module"):
+        return ("LDR Işık Sensör Modülü", "🎛️")
+    if ctype in ("wokwi-servo", "servo_sg90", "sg90"):
+        return ("SG90 Servo Motor", "🦾")
+    if ctype in ("wokwi-hc-sr04", "hcsr04", "ultrasonic"):
+        return ("HC-SR04 Mesafe Sensörü", "🦇")
+    if ctype in ("wokwi-led", "led"):
+        return ("LED Işık Lambası", "💡")
+    if ctype in ("wokwi-resistor", "resistor"):
+        return ("Direnç", "🟤")
+    if ctype in ("wokwi-hc-05", "wokwi-hc05", "hc-05", "hc05"):
+        return ("HC-05 Bluetooth Modülü", "📶")
+    if ctype in ("wokwi-hc-06", "wokwi-hc06", "hc-06", "hc06"):
+        return ("HC-06 Bluetooth Modülü", "📶")
+    if ctype in ("wokwi-l293d", "l293d"):
+        return ("L293D Motor Sürücü", "🚗")
+    if ctype in ("wokwi-l298n", "l298n"):
+        return ("L298N Motor Sürücü", "🏎️")
+    if ctype in ("wokwi-dc-motor", "wokwi-dcmotor", "dc-motor", "dcmotor"):
+        return ("5V DC Motor", "🌀")
+    if ctype in ("wokwi-buzzer", "buzzer"):
+        return ("Buzzer (Hoparlör)", "🔊")
+    if ctype in ("wokwi-pushbutton", "pushbutton", "button"):
+        return ("Push Buton (Düğme)", "🔘")
+    if ctype in ("wokwi-potentiometer", "potentiometer"):
+        return ("10kΩ Potansiyometre", "🎚️")
+    if ctype in ("wokwi-relay-module", "relay"):
+        return ("5V Röle Modülü", "⚡")
+    if ctype in ("wokwi-pir-motion-sensor", "pir"):
+        return ("PIR Hareket Sensörü", "🚶")
+    if ctype in ("wokwi-dht22", "dht22", "dht11"):
+        return ("DHT22 Sıcaklık & Nem", "🌡️")
+    if ctype in ("wokwi-soil-moisture-sensor", "soil"):
+        return ("Toprak Nem Sensörü", "🌱")
+    if ctype in ("wokwi-rain-sensor", "rain"):
+        return ("Yağmur Sensörü", "🌧️")
+    if ctype in ("wokwi-water-sensor", "water"):
+        return ("Su Seviye Sensörü", "💧")
+
+    INVENTORY_DICT = {
+        "ARDUINO_UNO": ("Arduino Uno R3 (Beyin)", "🟦"),
+        "ARDUINO_NANO": ("Arduino Nano", "🎛️"),
+        "ARDUINO_MEGA": ("Arduino Mega", "🏢"),
+        "BREADBOARD": ("Breadboard (Devre Tahtası)", "🍞"),
+        "LED_RED": ("Kırmızı LED Lambası", "🔴"),
+        "LED_GREEN": ("Yeşil LED Lambası", "🟢"),
+        "LED_BLUE": ("Mavi LED Lambası", "🔵"),
+        "LED_YELLOW": ("Sarı LED Lambası", "🟡"),
+        "LED_RGB": ("RGB Çok Renkli LED", "🌈"),
+        "RESISTOR_220": ("220Ω Koruma Direnci", "🟤"),
+        "RESISTOR_1K": ("1kΩ Direnç", "🟤"),
+        "RESISTOR_10K": ("10kΩ Direnç", "🟤"),
+        "POTENTIOMETER": ("10kΩ Potansiyometre", "🎚️"),
+        "PUSH_BUTTON": ("Push Buton (Düğme)", "🔘"),
+        "LDR_DISCRETE": ("2 Bacaklı LDR (Işık Sensörü)", "☀️"),
+        "LDR_MODULE": ("4 Pin LDR Sensör Modülü", "🎛️"),
+        "LDR_SENSOR": ("LDR Işık Sensörü", "☀️"),
+        "HCSR04": ("HC-SR04 Mesafe Sensörü", "🦇"),
+        "PIR_SENSOR": ("PIR Hareket Sensörü", "🚶"),
+        "DHT11": ("DHT22 Sıcaklık & Nem", "🌡️"),
+        "DHT22": ("DHT22 Sıcaklık & Nem", "🌡️"),
+        "JOYSTICK_MODULE": ("Analog Joystick", "🕹️"),
+        "BUZZER": ("Piezo Buzzer (Hoparlör)", "🔊"),
+        "ACTIVE_BUZZER": ("Aktif Buzzer", "📢"),
+        "SERVO_SG90": ("SG90 Servo Motor", "🦾"),
+        "DC_MOTOR_5V": ("5V DC Motor", "🌀"),
+        "DC_MOTOR": ("5V DC Motor", "🌀"),
+        "BLUETOOTH_HC05": ("HC-05 Bluetooth Modülü", "📶"),
+        "BLUETOOTH_HC06": ("HC-06 Bluetooth Modülü", "📶"),
+        "MOTOR_DRIVER_L293D": ("L293D Motor Sürücü", "🚗"),
+        "MOTOR_DRIVER_L298N": ("L298N Motor Sürücü", "🏎️"),
+        "RELAY_5V": ("5V Röle Modülü", "⚡"),
+        "RELAY_MODULE": ("5V Röle Modülü", "⚡"),
+        "SOIL_MOISTURE": ("Toprak Nem Sensörü", "🌱"),
+        "RAIN_SENSOR": ("Yağmur Sensörü", "🌧️"),
+        "WATER_SENSOR": ("Su Seviye Sensörü", "💧"),
+        "SOUND_SENSOR": ("Ses Sensörü", "🎤"),
+        "MQ2_GAS": ("MQ-2 Gaz Sensörü", "💨"),
+        "LCD_16X2_I2C": ("16x2 LCD Ekran", "📟"),
+        "OLED_096_I2C": ("0.96 OLED Ekran", "📺")
+    }
+
+    if cid in INVENTORY_DICT:
+        return INVENTORY_DICT[cid]
+
+    clean_label = comp_identifier.replace("_", " ").title()
+    return (clean_label, "🧩")
+
+
+def generate_full_project_stream(
+    prompt: str,
+    inventory: List[str],
+    model: str = "default",
+    ollama_url: str = "http://127.0.0.1:11434",
+    api_key: Optional[str] = None
+) -> Generator[str, None, None]:
+    """
+    Streaming (Server-Sent Events) AI Çağrısı:
+    Yapay zekanın ürettiği bileşenleri, kabloları, akış adımlarını ve C++ kodunu
+    canlı olarak istemciye (frontend) akar.
+    """
+    models_info = get_all_available_models(ollama_url)
+    chosen_model = model if model != "default" and model is not None else models_info["default_model"]
+
+    user_prompt = f"""KULLANICI PROJE İSTEĞİ: "{prompt}"
+Yukarıdaki isteğe göre SADECE istenen parçaları içeren `netlist` (components + connections), bu devreye özel `akis_adimlari` ve aynı pinleri kullanan `arduino_kodu` alanlarını içeren tek bir geçerli JSON nesnesi üret. Sadece JSON döndür."""
+
+    def format_sse(data: Dict[str, Any]) -> str:
+        return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+    yield format_sse({
+        "type": "stage",
+        "stageIndex": 0,
+        "title": "1. Proje Fikrin Analiz Ediliyor",
+        "subtitle": f"AI Mucit ({chosen_model}) devreni kurgulamaya başladı...",
+        "progressPercent": 15
+    })
+
+    provider_used = "ollama" if (chosen_model.startswith("ollama/") or chosen_model == "local") else "litellm"
+    t0 = time.time()
+    accumulated_text = ""
+    error_note: Optional[str] = None
+
+    project_name_found = False
+    seen_component_keys: Set[str] = set()
+    discovered_components: List[Dict[str, Any]] = []
+    seen_wire_count = 0
+    current_stage = 0
+
+    def parse_incremental_stream(text: str) -> List[Dict[str, Any]]:
+        nonlocal project_name_found, seen_wire_count, current_stage
+        events = []
+
+        # 1. Proje Adı Tespiti
+        if not project_name_found:
+            m_name = re.search(r'"proje_adi"\s*:\s*"([^"]+)"', text)
+            if m_name:
+                p_name = m_name.group(1).strip()
+                project_name_found = True
+                events.append({
+                    "type": "project_name",
+                    "name": p_name
+                })
+
+        # 2. Gerekli Parçalar Dizisi Tespiti
+        m_parts_block = re.search(r'"gerekli_parcalar"\s*:\s*\[(.*?)\]', text, re.DOTALL)
+        if m_parts_block:
+            found_parts = re.findall(r'"([A-Za-z0-9_]+)"', m_parts_block.group(1))
+            for p in found_parts:
+                k = f"inv_{p.upper()}"
+                if k not in seen_component_keys:
+                    seen_component_keys.add(k)
+                    label, icon = get_component_meta(p)
+                    discovered_components.append({
+                        "id": p,
+                        "label": label,
+                        "icon": icon,
+                        "kind": "inventory"
+                    })
+                    events.append({
+                        "type": "component_discovered",
+                        "id": p,
+                        "label": label,
+                        "icon": icon,
+                        "totalCount": len(discovered_components)
+                    })
+
+        # 3. Components Nesneleri Tespiti
+        found_comps = re.findall(r'\{\s*"id"\s*:\s*"([^"]+)"\s*,\s*"type"\s*:\s*"([^"]+)"', text)
+        for cid, ctype in found_comps:
+            k = f"comp_{cid.lower()}"
+            if k not in seen_component_keys:
+                seen_component_keys.add(k)
+                label, icon = get_component_meta(cid, ctype)
+                discovered_components.append({
+                    "id": cid,
+                    "label": label,
+                    "icon": icon,
+                    "componentType": ctype,
+                    "kind": "circuit"
+                })
+                events.append({
+                    "type": "component_discovered",
+                    "id": cid,
+                    "label": label,
+                    "icon": icon,
+                    "componentType": ctype,
+                    "totalCount": len(discovered_components)
+                })
+
+        # Aşama 1: Parçalar tespit edilmeye başlandıysa
+        if discovered_components and current_stage < 1:
+            current_stage = 1
+            events.append({
+                "type": "stage",
+                "stageIndex": 1,
+                "title": "2. Elektronik Parçalar Seçiliyor",
+                "subtitle": f"{len(discovered_components)} parça tespit edildi ({discovered_components[-1]['label']})...",
+                "progressPercent": 40
+            })
+
+        # 4. Connections (Kablo Bağlantıları) Tespiti
+        found_wires = re.findall(r'\{\s*"from"\s*:\s*"([^"]+)"\s*,\s*"to"\s*:\s*"([^"]+)"', text)
+        if len(found_wires) > seen_wire_count:
+            seen_wire_count = len(found_wires)
+            last_from, last_to = found_wires[-1]
+            if current_stage < 2:
+                current_stage = 2
+                events.append({
+                    "type": "stage",
+                    "stageIndex": 2,
+                    "title": "3. Breadboard ve Arduino Pinleri Bağlanıyor",
+                    "subtitle": f"{seen_wire_count} kablo bağlandı ({last_from} ➔ {last_to})...",
+                    "progressPercent": 65
+                })
+            else:
+                events.append({
+                    "type": "wires_progress",
+                    "count": seen_wire_count,
+                    "latestWire": f"{last_from} ➔ {last_to}"
+                })
+
+        # 5. Akış Diyagramı Adımları Tespiti
+        if '"akis_adimlari"' in text and current_stage < 3:
+            current_stage = 3
+            events.append({
+                "type": "stage",
+                "stageIndex": 3,
+                "title": "4. Sebep-Sonuç Akış Diyagramı Çiziliyor",
+                "subtitle": "Gözlemle ➔ Karar Ver ➔ Evet/Hayır adımları devrene özel kurgulanıyor...",
+                "progressPercent": 80
+            })
+
+        # 6. Arduino C++ Kodu Tespiti
+        if '"arduino_kodu"' in text and current_stage < 4:
+            current_stage = 4
+            code_lines = max(5, text.count('\\n'))
+            events.append({
+                "type": "stage",
+                "stageIndex": 4,
+                "title": "5. Arduino C++ Kodu Yazılıyor ve Doğrulanıyor",
+                "subtitle": f"Arduino C++ kodu yazılıyor (~{code_lines} satır)...",
+                "progressPercent": 90
+            })
+            events.append({
+                "type": "code_progress",
+                "lines": code_lines
+            })
+
+        return events
+
+    try:
+        if provider_used == "ollama":
+            if not models_info["ollama_active"]:
+                raise RuntimeError(f"Yerel Ollama servisi ({ollama_url}) çalışmıyor veya ulaşılamıyor.")
+
+            local_ids = [m["id"] for m in models_info.get("local_models", [])]
+            if chosen_model not in local_ids and models_info.get("default_model"):
+                chosen_model = models_info["default_model"]
+            clean_model = chosen_model.replace("ollama/", "")
+            is_reasoning_model = any(k in clean_model.lower() for k in ("deepseek-r1", "qwq", "r1"))
+
+            ollama_payload: Dict[str, Any] = {
+                "model": clean_model,
+                "system": ONE_SHOT_SYSTEM_PROMPT,
+                "prompt": user_prompt,
+                "stream": True,
+                "options": {
+                    "temperature": 0.1,
+                    "num_predict": 2500 if is_reasoning_model else 1500
+                }
+            }
+            if not is_reasoning_model:
+                ollama_payload["format"] = "json"
+
+            with httpx.Client(timeout=180.0) as client:
+                with client.stream("POST", f"{ollama_url}/api/generate", json=ollama_payload) as response:
+                    if response.status_code != 200:
+                        raise RuntimeError(f"Ollama HTTP {response.status_code}")
+                    for line in response.iter_lines():
+                        if not line:
+                            continue
+                        try:
+                            item = json.loads(line)
+                            chunk = item.get("response", "")
+                            if chunk:
+                                accumulated_text += chunk
+                                for ev in parse_incremental_stream(accumulated_text):
+                                    yield format_sse(ev)
+                        except json.JSONDecodeError:
+                            continue
+        else:
+            if not api_key:
+                if "gemini" in chosen_model:
+                    api_key = os.getenv("GEMINI_API_KEY")
+                elif "gpt" in chosen_model:
+                    api_key = os.getenv("OPENAI_API_KEY")
+                elif "claude" in chosen_model:
+                    api_key = os.getenv("ANTHROPIC_API_KEY")
+
+            if not api_key:
+                raise RuntimeError(f"Seçilen bulut modeli ('{chosen_model}') için API anahtarı girilmemiş.")
+
+            from litellm import completion
+            stream_resp = completion(
+                model=chosen_model,
+                messages=[
+                    {"role": "system", "content": ONE_SHOT_SYSTEM_PROMPT},
+                    {"role": "user", "content": user_prompt}
+                ],
+                stream=True,
+                api_key=api_key,
+                temperature=0.2
+            )
+            for chunk_obj in stream_resp:
+                if chunk_obj.choices and chunk_obj.choices[0].delta:
+                    delta = chunk_obj.choices[0].delta.content or ""
+                    if delta:
+                        accumulated_text += delta
+                        for ev in parse_incremental_stream(accumulated_text):
+                            yield format_sse(ev)
+
+        duration_ms = int((time.time() - t0) * 1000)
+
+        if not accumulated_text or not accumulated_text.strip():
+            raise RuntimeError(f"Yapay zeka modelinden ('{chosen_model}') yanıt alınamadı.")
+
+        yield format_sse({
+            "type": "validating",
+            "message": "Kablolama, akış adımları ve Arduino C++ kodu doğrulanıyor...",
+            "progressPercent": 96
+        })
+
+        cleaned = clean_llm_json_response(accumulated_text)
+        parsed = json.loads(cleaned)
+        if not isinstance(parsed, dict):
+            raise ValueError("AI çıktısı geçerli bir JSON nesnesi değil.")
+        if not isinstance(parsed.get("netlist"), dict):
+            raise ValueError("AI yanıtında 'netlist' alanı eksik.")
+        if not isinstance(parsed.get("akis_adimlari"), dict):
+            raise ValueError("AI yanıtında 'akis_adimlari' alanı eksik.")
+        raw_code = str(parsed.get("arduino_kodu") or "").strip()
+        if not raw_code:
+            raise ValueError("AI yanıtında 'arduino_kodu' alanı eksik veya boş.")
+
+        norm_data, norm_warnings = normalize_project_dict(parsed)
+
+        # 1) Kodda/istemde kullanılıp netlist'te unutulan bileşenleri tamamla
+        completed_netlist, actuator_notes = ensure_code_actuators_in_netlist(
+            netlist_dict=norm_data["netlist"],
+            code=raw_code,
+            prompt=prompt
+        )
+        # 2) 2 bacaklı LDR gerilim bölücü 10kΩ dirençleri unutulmuşsa otomatik tamamla
+        completed_netlist, topo_notes = auto_complete_electrical_topology(completed_netlist)
+        norm_data["netlist"] = completed_netlist
+        norm_warnings.extend(actuator_notes + topo_notes)
+
+        netlist_obj = CircuitNetlist(**norm_data["netlist"])
+        akis_obj = AkisAdimi(**norm_data["akis_adimlari"])
+
+        blocking_errors, report = validate_one_shot_topology_and_code(
+            netlist=netlist_obj,
+            akis=akis_obj,
+            code=raw_code
+        )
+        if blocking_errors:
+            raise ValueError(" | ".join(blocking_errors))
+
+        steps = build_baglanti_adimlari_from_netlist(netlist_obj)
+        project = ProjeTasarimi(
+            proje_adi=str(parsed.get("proje_adi") or "").strip() or (prompt.strip()[:42] or "Arduino Projem"),
+            karsilama_mesaji=str(parsed.get("karsilama_mesaji") or "").strip() or "Devren, akış şeman ve Arduino kodun hazır!",
+            gerekli_parcalar=norm_data.get("gerekli_parcalar") or ["ARDUINO_UNO", "BREADBOARD"],
+            netlist=netlist_obj,
+            baglanti_adimlari=steps,
+            akis_adimlari=akis_obj,
+            arduino_kodu=raw_code,
+            guvenlik_notu=str(parsed.get("guvenlik_notu") or "").strip() or "Parçaları breadboard pinlerine dikkatlice yerleştir.",
+            uyarilar=norm_warnings + list(report.warnings),
+            verification=report
+        )
+
+        record_ai_log(
+            stage="Tek Sorgu (One-Shot): Devre + Akış + Kod (Stream)",
+            model=chosen_model,
+            provider=provider_used,
+            duration_ms=duration_ms,
+            status="SUCCESS" if report.is_valid else "VALIDATION_WARNING",
+            user_goal=prompt,
+            system_prompt=ONE_SHOT_SYSTEM_PROMPT,
+            user_prompt=user_prompt,
+            raw_response=accumulated_text,
+            processed_output=project.model_dump(by_alias=True),
+            notes=list(report.checks) + norm_warnings + list(report.warnings)
+        )
+
+        yield format_sse({
+            "type": "complete",
+            "project": project.model_dump(by_alias=True),
+            "progressPercent": 100
+        })
+
+    except Exception as e:
+        duration_ms = int((time.time() - t0) * 1000)
+        err_msg = f"Yapay zeka yanıtı doğrulanamadı: {e}"
+        record_ai_log(
+            stage="Tek Sorgu (One-Shot): Devre + Akış + Kod (Stream)",
+            model=chosen_model,
+            provider=provider_used,
+            duration_ms=duration_ms,
+            status="ERROR",
+            user_goal=prompt,
+            system_prompt=ONE_SHOT_SYSTEM_PROMPT,
+            user_prompt=user_prompt,
+            raw_response=accumulated_text,
+            processed_output=None,
+            notes=[err_msg]
+        )
+        yield format_sse({
+            "type": "error",
+            "message": err_msg
+        })
+
+
+
+def generate_revised_project_stream(
+    current_project: Dict[str, Any],
+    revision_prompt: str,
+    inventory: List[str],
+    model: str = "default",
+    ollama_url: str = "http://127.0.0.1:11434",
+    api_key: Optional[str] = None
+) -> Generator[str, None, None]:
+    """
+    Streaming (SSE) Proje Revizyon AI Çağrısı:
+    Mevcut devreyi ve kodu kullanıcının revizyon isteğine göre günceller ve
+    canlı olarak istemciye (frontend) akar.
+    """
+    models_info = get_all_available_models(ollama_url)
+    chosen_model = model if model != "default" and model is not None else models_info["default_model"]
+
+    user_prompt = f"""MEVCUT PROJE BİLGİSİ:
+- Proje Adı: {current_project.get('proje_adi', 'Arduino Projesi')}
+- Mevcut Netlist (Bileşenler ve Bağlantılar):
+{json.dumps(current_project.get('netlist', {}), ensure_ascii=False)}
+- Mevcut Akış Adımları:
+{json.dumps(current_project.get('akis_adimlari', {}), ensure_ascii=False)}
+- Mevcut Arduino C++ Kodu:
+{current_project.get('arduino_kodu', '')}
+
+KULLANICININ İSTEDİĞİ DEĞİŞİKLİK / REVİZYON:
+"{revision_prompt}"
+
+KULLANILABİLİR ELEKTRONİK ENVANTERİ:
+{json.dumps(inventory, ensure_ascii=False)}
+
+Yukarıdaki mevcut projeyi, kullanıcının revizyon isteğine göre güncelle. Halihazırdaki çalışan pinleri gereksiz yere bozma, sadece istenen ekleme/düzeltmeleri yap. Çıktı olarak sadece tek bir geçerli JSON nesnesi döndür."""
+
+    def format_sse(data: Dict[str, Any]) -> str:
+        return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+    yield format_sse({
+        "type": "stage",
+        "stageIndex": 0,
+        "title": "1. Revizyon İsteğin İnceleniyor",
+        "subtitle": f"AI Mucit ({chosen_model}) mevcut devreni ve isteğini analiz ediyor...",
+        "progressPercent": 15
+    })
+
+    provider_used = "ollama" if (chosen_model.startswith("ollama/") or chosen_model == "local") else "litellm"
+    t0 = time.time()
+    accumulated_text = ""
+    error_note: Optional[str] = None
+
+    project_name_found = False
+    seen_component_keys: Set[str] = set()
+    discovered_components: List[Dict[str, Any]] = []
+    seen_wire_count = 0
+    current_stage = 0
+
+    def parse_incremental_stream(text: str) -> List[Dict[str, Any]]:
+        nonlocal project_name_found, seen_wire_count, current_stage
+        events = []
+
+        if not project_name_found:
+            m_name = re.search(r'"proje_adi"\s*:\s*"([^"]+)"', text)
+            if m_name:
+                p_name = m_name.group(1).strip()
+                project_name_found = True
+                events.append({
+                    "type": "project_name",
+                    "name": p_name
+                })
+
+        m_parts_block = re.search(r'"gerekli_parcalar"\s*:\s*\[(.*?)\]', text, re.DOTALL)
+        if m_parts_block:
+            found_parts = re.findall(r'"([A-Za-z0-9_]+)"', m_parts_block.group(1))
+            for p in found_parts:
+                k = f"inv_{p.upper()}"
+                if k not in seen_component_keys:
+                    seen_component_keys.add(k)
+                    label, icon = get_component_meta(p)
+                    discovered_components.append({
+                        "id": p,
+                        "label": label,
+                        "icon": icon,
+                        "kind": "inventory"
+                    })
+                    events.append({
+                        "type": "component_discovered",
+                        "id": p,
+                        "label": label,
+                        "icon": icon,
+                        "totalCount": len(discovered_components)
+                    })
+
+        found_comps = re.findall(r'\{\s*"id"\s*:\s*"([^"]+)"\s*,\s*"type"\s*:\s*"([^"]+)"', text)
+        for cid, ctype in found_comps:
+            k = f"comp_{cid.lower()}"
+            if k not in seen_component_keys:
+                seen_component_keys.add(k)
+                label, icon = get_component_meta(cid, ctype)
+                discovered_components.append({
+                    "id": cid,
+                    "label": label,
+                    "icon": icon,
+                    "componentType": ctype,
+                    "kind": "circuit"
+                })
+                events.append({
+                    "type": "component_discovered",
+                    "id": cid,
+                    "label": label,
+                    "icon": icon,
+                    "componentType": ctype,
+                    "totalCount": len(discovered_components)
+                })
+
+        if discovered_components and current_stage < 1:
+            current_stage = 1
+            events.append({
+                "type": "stage",
+                "stageIndex": 1,
+                "title": "2. Parçalar Güncelleniyor",
+                "subtitle": f"{len(discovered_components)} parça devrene entegre ediliyor...",
+                "progressPercent": 40
+            })
+
+        found_wires = re.findall(r'\{\s*"from"\s*:\s*"([^"]+)"\s*,\s*"to"\s*:\s*"([^"]+)"', text)
+        if len(found_wires) > seen_wire_count:
+            seen_wire_count = len(found_wires)
+            last_from, last_to = found_wires[-1]
+            if current_stage < 2:
+                current_stage = 2
+                events.append({
+                    "type": "stage",
+                    "stageIndex": 2,
+                    "title": "3. Kablo Bağlantıları Yeniden Düzenleniyor",
+                    "subtitle": f"{seen_wire_count} kablo bağlandı ({last_from} ➔ {last_to})...",
+                    "progressPercent": 65
+                })
+            else:
+                events.append({
+                    "type": "wires_progress",
+                    "count": seen_wire_count,
+                    "latestWire": f"{last_from} ➔ {last_to}"
+                })
+
+        if '"akis_adimlari"' in text and current_stage < 3:
+            current_stage = 3
+            events.append({
+                "type": "stage",
+                "stageIndex": 3,
+                "title": "4. Akış Şeması Revize Ediliyor",
+                "subtitle": "Gözlemle ➔ Karar Ver ➔ Evet/Hayır adımları yeni parçalarla güncelleniyor...",
+                "progressPercent": 80
+            })
+
+        if '"arduino_kodu"' in text and current_stage < 4:
+            current_stage = 4
+            code_lines = max(5, text.count('\\n'))
+            events.append({
+                "type": "stage",
+                "stageIndex": 4,
+                "title": "5. Arduino Kodu Yenileniyor ve Doğrulanıyor",
+                "subtitle": f"Arduino C++ kodu güncelleniyor (~{code_lines} satır)...",
+                "progressPercent": 90
+            })
+            events.append({
+                "type": "code_progress",
+                "lines": code_lines
+            })
+
+        return events
+
+    try:
+        if provider_used == "ollama":
+            if not models_info["ollama_active"]:
+                raise RuntimeError(f"Yerel Ollama servisi ({ollama_url}) çalışmıyor veya ulaşılamıyor.")
+
+            local_ids = [m["id"] for m in models_info.get("local_models", [])]
+            if chosen_model not in local_ids and models_info.get("default_model"):
+                chosen_model = models_info["default_model"]
+            clean_model = chosen_model.replace("ollama/", "")
+            is_reasoning_model = any(k in clean_model.lower() for k in ("deepseek-r1", "qwq", "r1"))
+
+            ollama_payload: Dict[str, Any] = {
+                "model": clean_model,
+                "system": REVISION_SYSTEM_PROMPT,
+                "prompt": user_prompt,
+                "stream": True,
+                "options": {
+                    "temperature": 0.1,
+                    "num_predict": 2500 if is_reasoning_model else 1500
+                }
+            }
+            if not is_reasoning_model:
+                ollama_payload["format"] = "json"
+
+            client_timeout = httpx.Timeout(120.0, connect=10.0)
+            with httpx.Client(timeout=client_timeout) as client:
+                with client.stream("POST", f"{ollama_url}/api/generate", json=ollama_payload) as resp:
+                    if resp.status_code != 200:
+                        raise RuntimeError(f"Ollama stream hatası: HTTP {resp.status_code}")
+                    for line in resp.iter_lines():
+                        if not line:
+                            continue
+                        try:
+                            chunk = json.loads(line)
+                            token = chunk.get("response", "")
+                            accumulated_text += token
+                            sub_events = parse_incremental_stream(accumulated_text)
+                            for sev in sub_events:
+                                yield format_sse(sev)
+                        except Exception:
+                            continue
+        else:
+            stream_resp = litellm.completion(
+                model=chosen_model,
+                messages=[
+                    {"role": "system", "content": REVISION_SYSTEM_PROMPT},
+                    {"role": "user", "content": user_prompt}
+                ],
+                stream=True,
+                api_key=api_key,
+                temperature=0.2
+            )
+            for chunk_obj in stream_resp:
+                if chunk_obj.choices and chunk_obj.choices[0].delta:
+                    delta = chunk_obj.choices[0].delta.content or ""
+                    if delta:
+                        accumulated_text += delta
+                        sub_events = parse_incremental_stream(accumulated_text)
+                        for sev in sub_events:
+                            yield format_sse(sev)
+
+        duration_ms = int((time.time() - t0) * 1000)
+        cleaned = clean_llm_json_response(accumulated_text)
+        parsed = json.loads(cleaned)
+
+        if not isinstance(parsed, dict):
+            raise ValueError("AI revizyon yanıtı geçerli bir JSON nesnesi değil.")
+        if not parsed.get("netlist") or not isinstance(parsed.get("netlist"), dict):
+            raise ValueError("AI revizyon yanıtında 'netlist' alanı eksik.")
+        if not parsed.get("akis_adimlari") or not isinstance(parsed.get("akis_adimlari"), dict):
+            raise ValueError("AI revizyon yanıtında 'akis_adimlari' alanı eksik.")
+        raw_code = str(parsed.get("arduino_kodu") or "").strip()
+        if not raw_code:
+            raise ValueError("AI revizyon yanıtında 'arduino_kodu' alanı eksik veya boş.")
+
+        norm_data, norm_warnings = normalize_project_dict(parsed)
+
+        completed_netlist, actuator_notes = ensure_code_actuators_in_netlist(
+            netlist_dict=norm_data["netlist"],
+            code=raw_code,
+            prompt=revision_prompt
+        )
+        completed_netlist, topo_notes = auto_complete_electrical_topology(completed_netlist)
+        norm_data["netlist"] = completed_netlist
+        norm_warnings.extend(actuator_notes + topo_notes)
+
+        netlist_obj = CircuitNetlist(**norm_data["netlist"])
+        akis_obj = AkisAdimi(**norm_data["akis_adimlari"])
+
+        blocking_errors, report = validate_one_shot_topology_and_code(
+            netlist=netlist_obj,
+            akis=akis_obj,
+            code=raw_code
+        )
+        if blocking_errors:
+            raise ValueError(" | ".join(blocking_errors))
+
+        steps = build_baglanti_adimlari_from_netlist(netlist_obj)
+        project = ProjeTasarimi(
+            proje_adi=str(parsed.get("proje_adi") or "").strip() or current_project.get("proje_adi", "Revize Edilen Proje"),
+            karsilama_mesaji=str(parsed.get("karsilama_mesaji") or "").strip() or "Devren ve kodun revizyon isteğine göre başarıyla güncellendi! 🚀",
+            gerekli_parcalar=norm_data.get("gerekli_parcalar") or ["ARDUINO_UNO", "BREADBOARD"],
+            netlist=netlist_obj,
+            baglanti_adimlari=steps,
+            akis_adimlari=akis_obj,
+            arduino_kodu=raw_code,
+            guvenlik_notu=str(parsed.get("guvenlik_notu") or "").strip() or "Parçaları breadboard pinlerine dikkatlice yerleştir.",
+            uyarilar=norm_warnings + list(report.warnings),
+            verification=report
+        )
+
+        record_ai_log(
+            stage="Proje Revizyonu: Devre + Akış + Kod (Stream)",
+            model=chosen_model,
+            provider=provider_used,
+            duration_ms=duration_ms,
+            status="SUCCESS" if report.is_valid else "VALIDATION_WARNING",
+            user_goal=revision_prompt,
+            system_prompt=REVISION_SYSTEM_PROMPT,
+            user_prompt=user_prompt,
+            raw_response=accumulated_text,
+            processed_output=project.model_dump(by_alias=True),
+            notes=list(report.checks) + norm_warnings + list(report.warnings)
+        )
+
+        yield format_sse({
+            "type": "complete",
+            "project": project.model_dump(by_alias=True),
+            "progressPercent": 100
+        })
+
+    except Exception as e:
+        duration_ms = int((time.time() - t0) * 1000)
+        err_msg = f"Revizyon yanıtı doğrulanamadı: {e}"
+        record_ai_log(
+            stage="Proje Revizyonu: Devre + Akış + Kod (Stream)",
+            model=chosen_model,
+            provider=provider_used,
+            duration_ms=duration_ms,
+            status="ERROR",
+            user_goal=revision_prompt,
+            system_prompt=REVISION_SYSTEM_PROMPT,
+            user_prompt=user_prompt,
+            raw_response=accumulated_text,
+            processed_output=None,
+            notes=[err_msg]
+        )
+        yield format_sse({
+            "type": "error",
+            "message": err_msg
+        })
 
 
 
@@ -2335,7 +3111,7 @@ Sadece yukarıdaki istekte belirtilen parçaları kullanarak Netlist JSON üret.
             gerekli_parcalar=norm_data.get("gerekli_parcalar") or ["ARDUINO_UNO", "BREADBOARD"],
             netlist=netlist_obj,
             baglanti_adimlari=steps,
-            guvenlik_notu=norm_data.get("guvenlik_notu") or "Parçaları breadboard deliklerine dikkatlice yerleştir.",
+            guvenlik_notu=norm_data.get("guvenlik_notu") or "Parçaları breadboard pinlerine dikkatlice yerleştir.",
             pin_bindings=pin_bindings,
             uyarilar=norm_warnings
         )

@@ -8,12 +8,17 @@
       :projectsCount="savedProjects.length"
       :aiLogsCount="aiLogs.length"
       :activeModelName="activeModelLabel"
+      :isAdmin="isAdmin"
+      :autoSave="autoSave"
       @go-step="currentStep = $event"
       @open-projects="isProjectsOpen = true"
+      @open-ideas="isIdeasOpen = true"
       @open-inventory="isInventoryOpen = true"
       @open-ai-model="isAIModelOpen = true"
       @open-admin-logs="openAdminLogsModal"
       @open-settings="isSettingsOpen = true"
+      @toggle-auto-save="toggleAutoSave"
+      @toggle-admin="toggleAdmin"
       @reset-or-close="handleResetProject"
     />
 
@@ -27,7 +32,9 @@
         :inventoryCount="selectedInventory.length"
         :selectedInventory="selectedInventory"
         :activeModelName="activeModelLabel"
+        :streamData="streamData"
         @open-inventory="isInventoryOpen = true"
+        @open-ideas="isIdeasOpen = true"
         @generate="handleGenerateProject"
       />
 
@@ -40,9 +47,12 @@
         :selectedInventory="selectedInventory"
         :isGeneratingLogic="isGeneratingLogic"
         :verification="currentProject.verification"
+        :autoSave="autoSave"
         @next-page="currentStep = 3"
         @prev-page="currentStep = 1"
         @open-inventory="isInventoryOpen = true"
+        @open-revision="isRevisionOpen = true"
+        @save-project="saveCurrentProjectToHistory(currentPromptText, 'AI Tasarımım ⭐')"
       />
 
       <!-- SAYFA 3: NASIL ÇALIŞACAK? (Projeye Özgü Dinamik Akış Diyagramı) -->
@@ -101,8 +111,28 @@
       :isOpen="isInventoryOpen"
       :selectedInventory="selectedInventory"
       @close="isInventoryOpen = false"
+      @open-ideas="isIdeasOpen = true"
       @save="onSaveInventory"
       @use-idea="onUseInventoryIdea"
+    />
+
+    <!-- B-2) PROJE FİKİRLERİ ATÖLYESİ MODALI -->
+    <ProjeFikirleriModal
+      :isOpen="isIdeasOpen"
+      :selectedInventory="selectedInventory"
+      @close="isIdeasOpen = false"
+      @open-inventory="isIdeasOpen = false; isInventoryOpen = true"
+      @use-idea="onUseInventoryIdea"
+    />
+
+    <!-- B-3) PROJEYİ GELİŞTİR & REVİZE ET MODALI -->
+    <AIRevisionModal
+      :isOpen="isRevisionOpen"
+      :projectName="currentProject.proje_adi"
+      :isRevising="isRevising"
+      :streamData="streamData"
+      @close="isRevisionOpen = false"
+      @revise="handleReviseProject"
     />
 
     <!-- C) AI ASİSTAN MODELİ MODALI -->
@@ -212,11 +242,13 @@ import ProjelerimModal from './components/ProjelerimModal.vue';
 import AdminAILogsModal from './components/AdminAILogsModal.vue';
 import MalzemeCantasiModal from './components/MalzemeCantasiModal.vue';
 import AIModelModal from './components/AIModelModal.vue';
-import Page1HayalEt from './components/Page1HayalEt.vue';
+import Page1HayalEt, { type AIStreamProgress } from './components/Page1HayalEt.vue';
 import Page2DevreyiKur from './components/Page2DevreyiKur.vue';
 import Page3NasilCalisacak from './components/Page3NasilCalisacak.vue';
 import Page4Calistir from './components/Page4Calistir.vue';
 import CodePeekModal from './components/CodePeekModal.vue';
+import ProjeFikirleriModal from './components/ProjeFikirleriModal.vue';
+import AIRevisionModal from './components/AIRevisionModal.vue';
 
 // Örnek proje içermeyen başlangıç durumu
 function createEmptyProject(): ProjeTasarimi {
@@ -281,6 +313,9 @@ const availablePorts = ref<PortInfo[]>([]);
 const isProjectsOpen = ref(false);
 const isAdminLogsOpen = ref(false);
 const isInventoryOpen = ref(false);
+const isIdeasOpen = ref(false);
+const isRevisionOpen = ref(false);
+const isRevising = ref(false);
 const isAIModelOpen = ref(false);
 const isSettingsOpen = ref(false);
 const isCodeModalOpen = ref(false);
@@ -289,6 +324,20 @@ const isGeneratingLogic = ref(false);
 const isUploading = ref(false);
 const uploadResult = ref<UploadResult | null>(null);
 const aiErrorMessage = ref<string | null>(null);
+const streamData = ref<AIStreamProgress | null>(null);
+
+const isAdmin = ref(localStorage.getItem('kid_arduino_is_admin') === 'true');
+const autoSave = ref(localStorage.getItem('kid_arduino_auto_save') !== 'false');
+
+function toggleAdmin() {
+  isAdmin.value = !isAdmin.value;
+  localStorage.setItem('kid_arduino_is_admin', isAdmin.value ? 'true' : 'false');
+}
+
+function toggleAutoSave() {
+  autoSave.value = !autoSave.value;
+  localStorage.setItem('kid_arduino_auto_save', autoSave.value ? 'true' : 'false');
+}
 
 const activeModelLabel = computed(() => {
   if (selectedModel.value.startsWith('ollama/')) {
@@ -473,20 +522,31 @@ async function fetchPorts() {
 }
 
 /**
- * TEK SORGU (ONE-SHOT) AI ÇAĞRISI:
- * Hayal Et aşamasından sonra yapay zekaya tek bir istek göndererek
- * hem devre şemasını (netlist: components + connections), hem akış diyagramını (akis_adimlari),
- * hem de aynı pinleri kullanan Arduino C++ kodunu (arduino_kodu) tek seferde alır ve doğrular.
- * Yanıt alınamazsa veya doğrulama başarısız olursa HİÇBİR ŞEY RENDER ETMEZ, sadece hata verir.
+ * GERÇEK ZAMANLI STREAMING (SSE) AI ÇAĞRISI:
+ * Hayal Et ekranında kullanıcı butona bastığında /api/generate-stream SSE akışına bağlanır.
+ * Yapay zeka bileşenleri tespit ettikçe live rozetler yeşillenir, kablolar ve kod
+ * gerçek zamanlı olarak ekranda görünür.
  */
 async function handleGenerateProject(prompt: string) {
   isGenerating.value = true;
   isGeneratingLogic.value = false;
   aiErrorMessage.value = null;
   currentPromptText.value = prompt;
+
+  streamData.value = {
+    stageIndex: 0,
+    stageTitle: '1. Proje Fikrin Analiz Ediliyor',
+    stageSubtitle: 'AI Mucit devreni kurgulamaya başladı...',
+    projectName: undefined,
+    discoveredComponents: [],
+    wireCount: 0,
+    codeLines: 0,
+    progressPercent: 12
+  };
+
   try {
     const apiKey = localStorage.getItem('kid_arduino_api_key') || undefined;
-    const res = await fetch('/api/generate', {
+    const res = await fetch('/api/generate-stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -497,8 +557,6 @@ async function handleGenerateProject(prompt: string) {
       })
     });
 
-    await fetchAILogs();
-
     if (!res.ok) {
       let detail = `Yapay zekadan yanıt alınamadı (HTTP ${res.status})`;
       try {
@@ -507,23 +565,111 @@ async function handleGenerateProject(prompt: string) {
       } catch {
         // ignore
       }
-      // HİÇBİR ŞEY RENDER ETME! Sayfa 1'de kal ve sadece hata göster.
       currentProject.value = createEmptyProject();
       currentStep.value = 1;
       aiErrorMessage.value = detail;
+      await fetchAILogs();
       return;
     }
 
-    const projectData: ProjeTasarimi = await res.json();
-    if (!projectData.netlist || !Array.isArray(projectData.netlist.components) || projectData.netlist.components.length === 0) {
+    if (!res.body) {
+      throw new Error('Tarayıcı stream okuyucusunu desteklemiyor.');
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    let buffer = '';
+    let completedProject: ProjeTasarimi | null = null;
+    let streamFailed = false;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const parts = buffer.split('\n\n');
+      buffer = parts.pop() || '';
+
+      for (const part of parts) {
+        const lines = part.split('\n');
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (data.type === 'stage') {
+                if (streamData.value) {
+                  streamData.value.stageIndex = data.stageIndex;
+                  streamData.value.stageTitle = data.title;
+                  streamData.value.stageSubtitle = data.subtitle;
+                  if (typeof data.progressPercent === 'number') {
+                    streamData.value.progressPercent = data.progressPercent;
+                  }
+                }
+              } else if (data.type === 'project_name') {
+                if (streamData.value) {
+                  streamData.value.projectName = data.name;
+                }
+              } else if (data.type === 'component_discovered') {
+                if (streamData.value) {
+                  const exists = streamData.value.discoveredComponents.some(c => c.id === data.id);
+                  if (!exists) {
+                    streamData.value.discoveredComponents.push({
+                      id: data.id,
+                      label: data.label,
+                      icon: data.icon,
+                      componentType: data.componentType,
+                      kind: data.kind
+                    });
+                  }
+                }
+              } else if (data.type === 'wires_progress') {
+                if (streamData.value) {
+                  streamData.value.wireCount = data.count;
+                  streamData.value.latestWire = data.latestWire;
+                }
+              } else if (data.type === 'code_progress') {
+                if (streamData.value) {
+                  streamData.value.codeLines = data.lines;
+                }
+              } else if (data.type === 'complete') {
+                completedProject = data.project as ProjeTasarimi;
+                if (streamData.value) {
+                  streamData.value.progressPercent = 100;
+                }
+              } else if (data.type === 'error') {
+                streamFailed = true;
+                aiErrorMessage.value = data.message || 'Yapay zeka devreyi tam doğrulayamadı.';
+              }
+            } catch {
+              // ignore parse errors for partial chunks
+            }
+          }
+        }
+      }
+    }
+
+    await fetchAILogs();
+
+    if (streamFailed || !completedProject) {
+      if (!aiErrorMessage.value) {
+        aiErrorMessage.value = 'Yapay zeka projesi eksiksiz oluşturulamadı.';
+      }
+      currentProject.value = createEmptyProject();
+      currentStep.value = 1;
+      return;
+    }
+
+    if (!completedProject.netlist || !Array.isArray(completedProject.netlist.components) || completedProject.netlist.components.length === 0) {
       currentProject.value = createEmptyProject();
       currentStep.value = 1;
       aiErrorMessage.value = 'Yapay zeka geçerli bir devre şeması (netlist) döndürmedi.';
       return;
     }
 
-    currentProject.value = projectData;
-    await saveCurrentProjectToHistory(prompt, 'AI Tasarımım ✨');
+    currentProject.value = completedProject;
+    if (autoSave.value) {
+      await saveCurrentProjectToHistory(prompt, 'AI Tasarımım ✨');
+    }
     currentStep.value = 2;
   } catch (err) {
     await fetchAILogs();
@@ -536,6 +682,164 @@ async function handleGenerateProject(prompt: string) {
   } finally {
     isGenerating.value = false;
     isGeneratingLogic.value = false;
+  }
+}
+
+/**
+ * PROJE REVİZYON (SSE) AI ÇAĞRISI:
+ * Mevcut devreyi koruyarak yeni parçalar ve kodlar ekler.
+ */
+async function handleReviseProject(revisionPrompt: string) {
+  isRevising.value = true;
+  aiErrorMessage.value = null;
+
+  streamData.value = {
+    stageIndex: 0,
+    stageTitle: '1. Revizyon Fikrin Analiz Ediliyor',
+    stageSubtitle: 'Mevcut devrene yeni parçalar ve kodlar ekleniyor...',
+    projectName: currentProject.value.proje_adi,
+    discoveredComponents: [],
+    wireCount: currentProject.value.netlist?.connections?.length || 0,
+    codeLines: currentProject.value.arduino_kodu?.split('\n').length || 0,
+    progressPercent: 15
+  };
+
+  try {
+    const apiKey = localStorage.getItem('kid_arduino_api_key') || undefined;
+    const res = await fetch('/api/revise-stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        current_project: currentProject.value,
+        revision_prompt: revisionPrompt,
+        inventory: selectedInventory.value,
+        model: selectedModel.value,
+        api_key: apiKey
+      })
+    });
+
+    if (!res.ok) {
+      let detail = `Revizyon yanıtı alınamadı (HTTP ${res.status})`;
+      try {
+        const errBody = await res.json();
+        if (errBody?.detail) detail = errBody.detail;
+      } catch {}
+      aiErrorMessage.value = detail;
+      await fetchAILogs();
+      return;
+    }
+
+    if (!res.body) {
+      throw new Error('Tarayıcı stream okuyucusunu desteklemiyor.');
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    let buffer = '';
+    let completedProject: ProjeTasarimi | null = null;
+    let streamFailed = false;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const parts = buffer.split('\n\n');
+      buffer = parts.pop() || '';
+
+      for (const part of parts) {
+        const lines = part.split('\n');
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (data.type === 'stage') {
+                if (streamData.value) {
+                  streamData.value.stageIndex = data.stageIndex;
+                  streamData.value.stageTitle = data.title;
+                  streamData.value.stageSubtitle = data.subtitle;
+                  if (typeof data.progressPercent === 'number') {
+                    streamData.value.progressPercent = data.progressPercent;
+                  }
+                }
+              } else if (data.type === 'project_name') {
+                if (streamData.value) {
+                  streamData.value.projectName = data.name;
+                }
+              } else if (data.type === 'component_discovered') {
+                if (streamData.value) {
+                  const exists = streamData.value.discoveredComponents.some(c => c.id === data.id);
+                  if (!exists) {
+                    streamData.value.discoveredComponents.push({
+                      id: data.id,
+                      label: data.label,
+                      icon: data.icon,
+                      componentType: data.componentType,
+                      kind: data.kind
+                    });
+                  }
+                }
+              } else if (data.type === 'wires_progress') {
+                if (streamData.value) {
+                  streamData.value.wireCount = data.count;
+                  streamData.value.latestWire = data.latestWire;
+                }
+              } else if (data.type === 'code_progress') {
+                if (streamData.value) {
+                  streamData.value.codeLines = data.lines;
+                }
+              } else if (data.type === 'complete') {
+                completedProject = data.project as ProjeTasarimi;
+                if (streamData.value) {
+                  streamData.value.progressPercent = 100;
+                }
+              } else if (data.type === 'error') {
+                streamFailed = true;
+                aiErrorMessage.value = data.message || 'Revizyon doğrulanamadı.';
+              }
+            } catch {
+              // ignore parse errors for partial chunks
+            }
+          }
+        }
+      }
+    }
+
+    await fetchAILogs();
+
+    if (streamFailed || !completedProject) {
+      if (!aiErrorMessage.value) {
+        aiErrorMessage.value = 'Proje revizyonu tamamlanamadı.';
+      }
+      return;
+    }
+
+    if (!completedProject.netlist || !Array.isArray(completedProject.netlist.components) || completedProject.netlist.components.length === 0) {
+      aiErrorMessage.value = 'Revize edilen devre şeması geçersiz.';
+      return;
+    }
+
+    currentProject.value = completedProject;
+    currentPromptText.value = `${currentPromptText.value} + ${revisionPrompt}`;
+    isRevisionOpen.value = false;
+
+    if (autoSave.value) {
+      await saveCurrentProjectToHistory(currentPromptText.value, 'AI Revizyon ✨');
+    }
+
+    confetti({
+      particleCount: 100,
+      spread: 70,
+      origin: { y: 0.6 }
+    });
+  } catch (err) {
+    await fetchAILogs();
+    aiErrorMessage.value =
+      err instanceof Error
+        ? `Revizyon servisine ulaşılamadı: ${err.message}`
+        : 'Revizyon işleminde bir hata oluştu.';
+  } finally {
+    isRevising.value = false;
   }
 }
 
