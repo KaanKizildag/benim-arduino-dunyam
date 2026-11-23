@@ -7,7 +7,7 @@ Detaylı dokümantasyon, kurulum ve kullanım yönergeleri için [kid-arduino-st
 
 ## 🚀 Hızlı Başlatma
 
-### Seçenek A: Docker ile (önerilen)
+### Seçenek A: Docker ile
 ```bash
 cd kid-arduino-studio
 docker compose up -d --build
