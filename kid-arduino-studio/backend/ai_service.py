@@ -2242,8 +2242,10 @@ def generate_full_project_stream(
     models_info = get_all_available_models(ollama_url)
     chosen_model = model if model != "default" and model is not None else models_info["default_model"]
 
+    # Akış diyagramı AI'dan istenmez; aşağıda kesinleşen koddan ayrı bir adımda üretilir
+    # (ONE_SHOT_SYSTEM_PROMPT da "JSON'a akis_adimlari ekleme" diyor).
     user_prompt = f"""KULLANICI PROJE İSTEĞİ: "{prompt}"
-Yukarıdaki isteğe göre SADECE istenen parçaları içeren `netlist` (components + connections), bu devreye özel `akis_adimlari` ve aynı pinleri kullanan `arduino_kodu` alanlarını içeren tek bir geçerli JSON nesnesi üret. Sadece JSON döndür."""
+Yukarıdaki isteğe göre SADECE istenen parçaları içeren `netlist` (components + connections) ve aynı pinleri kullanan `arduino_kodu` alanlarını içeren tek bir geçerli JSON nesnesi üret. Sadece JSON döndür."""
 
     def format_sse(data: Dict[str, Any]) -> str:
         return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
@@ -2360,27 +2362,17 @@ Yukarıdaki isteğe göre SADECE istenen parçaları içeren `netlist` (componen
                     "latestWire": f"{last_from} ➔ {last_to}"
                 })
 
-        # 5. Akış Diyagramı Adımları Tespiti
-        if '"akis_adimlari"' in text and current_stage < 3:
+        # 5. Arduino C++ Kodu Tespiti
+        # (Akış diyagramı 5. aşamada, akış bittikten sonra koddan çıkarılır.)
+        if '"arduino_kodu"' in text and current_stage < 3:
             current_stage = 3
-            events.append({
-                "type": "stage",
-                "stageIndex": 3,
-                "title": "4. Sebep-Sonuç Akış Diyagramı Çiziliyor",
-                "subtitle": "Gözlemle ➔ Karar Ver ➔ Evet/Hayır adımları devrene özel kurgulanıyor...",
-                "progressPercent": 80
-            })
-
-        # 6. Arduino C++ Kodu Tespiti
-        if '"arduino_kodu"' in text and current_stage < 4:
-            current_stage = 4
             code_lines = max(5, text.count('\\n'))
             events.append({
                 "type": "stage",
-                "stageIndex": 4,
-                "title": "5. Arduino C++ Kodu Yazılıyor ve Doğrulanıyor",
+                "stageIndex": 3,
+                "title": "4. Arduino C++ Kodu Yazılıyor",
                 "subtitle": f"Arduino C++ kodu yazılıyor (~{code_lines} satır)...",
-                "progressPercent": 90
+                "progressPercent": 80
             })
             events.append({
                 "type": "code_progress",
@@ -2477,9 +2469,8 @@ Yukarıdaki isteğe göre SADECE istenen parçaları içeren `netlist` (componen
             raise ValueError("AI çıktısı geçerli bir JSON nesnesi değil.")
         if not isinstance(parsed.get("netlist"), dict):
             raise ValueError("AI yanıtında 'netlist' alanı eksik.")
-        if not isinstance(parsed.get("akis_adimlari"), dict):
-            raise ValueError("AI yanıtında 'akis_adimlari' alanı eksik.")
-        raw_code = str(parsed.get("arduino_kodu") or "").strip()
+        # Değişken adlarındaki Türkçe harfler avr-gcc'de derleme hatası verir (örn. ESİK_DEGER)
+        raw_code = sanitize_arduino_identifiers(str(parsed.get("arduino_kodu") or "").strip())
         if not raw_code:
             raise ValueError("AI yanıtında 'arduino_kodu' alanı eksik veya boş.")
 
@@ -2497,13 +2488,34 @@ Yukarıdaki isteğe göre SADECE istenen parçaları içeren `netlist` (componen
         norm_warnings.extend(actuator_notes + topo_notes)
 
         netlist_obj = CircuitNetlist(**norm_data["netlist"])
-        akis_obj = AkisAdimi(**norm_data["akis_adimlari"])
+
+        # 3) Kesinleşmiş netlist ve son Arduino kodundan ayrı, odaklanmış çağrıyla AkisDiyagrami üret
+        yield format_sse({
+            "type": "stage",
+            "stageIndex": 4,
+            "title": "5. Sebep-Sonuç Akış Diyagramı Çiziliyor",
+            "subtitle": "Arduino kodundan adım adım akış diyagramı çıkarılıyor...",
+            "progressPercent": 92
+        })
+        flow_obj, flow_warnings, flow_status = generate_flow_from_code(
+            prompt=prompt,
+            netlist=netlist_obj,
+            arduino_kodu=raw_code,
+            chosen_model=chosen_model,
+            provider_used=provider_used,
+            ollama_url=ollama_url,
+            api_key=api_key,
+            clean_json_fn=clean_llm_json_response
+        )
+        norm_warnings.extend(flow_warnings)
 
         blocking_errors, report = validate_one_shot_topology_and_code(
             netlist=netlist_obj,
-            akis=akis_obj,
+            akis=flow_obj,
             code=raw_code
         )
+        if flow_status == "REPAIRED":
+            report.auto_repaired = True
         if blocking_errors:
             raise ValueError(" | ".join(blocking_errors))
 
@@ -2514,7 +2526,8 @@ Yukarıdaki isteğe göre SADECE istenen parçaları içeren `netlist` (componen
             gerekli_parcalar=norm_data.get("gerekli_parcalar") or ["ARDUINO_UNO", "BREADBOARD"],
             netlist=netlist_obj,
             baglanti_adimlari=steps,
-            akis_adimlari=akis_obj,
+            akis_adimlari=None,
+            akis_diyagrami=flow_obj,
             arduino_kodu=raw_code,
             guvenlik_notu=str(parsed.get("guvenlik_notu") or "").strip() or "Parçaları breadboard pinlerine dikkatlice yerleştir.",
             uyarilar=norm_warnings + list(report.warnings),
@@ -2805,7 +2818,7 @@ Yukarıdaki mevcut projeyi, kullanıcının revizyon isteğine göre güncelle. 
             raise ValueError("AI revizyon yanıtında 'netlist' alanı eksik.")
         if not parsed.get("akis_adimlari") or not isinstance(parsed.get("akis_adimlari"), dict):
             raise ValueError("AI revizyon yanıtında 'akis_adimlari' alanı eksik.")
-        raw_code = str(parsed.get("arduino_kodu") or "").strip()
+        raw_code = sanitize_arduino_identifiers(str(parsed.get("arduino_kodu") or "").strip())
         if not raw_code:
             raise ValueError("AI revizyon yanıtında 'arduino_kodu' alanı eksik veya boş.")
 

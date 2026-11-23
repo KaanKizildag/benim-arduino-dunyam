@@ -453,17 +453,18 @@ const progressStages: ProgressStage[] = [
     title: '3. Breadboard ve Arduino Pinleri Bağlanıyor',
     subtitle: '5V, GND ve sinyal kabloları kısa devre olmayacak şekilde yönlendiriliyor...'
   },
+  // Sıra backend ile aynı: önce kod yazılır, akış diyagramı sonra koddan çıkarılır.
   {
     id: 'stage-4',
-    icon: '🗺️',
-    title: '4. Sebep-Sonuç Akış Diyagramı Çiziliyor',
-    subtitle: 'Gözlemle ➔ Karar Ver ➔ Evet/Hayır adımları devrene özel kurgulanıyor...'
+    icon: '💻',
+    title: '4. Arduino C++ Kodu Yazılıyor',
+    subtitle: 'Koddaki pin numaraları ile devre kablolaması %100 eşleştiriliyor...'
   },
   {
     id: 'stage-5',
-    icon: '💻',
-    title: '5. Arduino C++ Kodu Yazılıyor ve Doğrulanıyor',
-    subtitle: 'Koddaki pin numaraları ile devre kablolaması %100 eşleştiriliyor...'
+    icon: '🗺️',
+    title: '5. Sebep-Sonuç Akış Diyagramı Çiziliyor',
+    subtitle: 'Arduino kodundan adım adım akış diyagramı çıkarılıyor...'
   }
 ];
 
