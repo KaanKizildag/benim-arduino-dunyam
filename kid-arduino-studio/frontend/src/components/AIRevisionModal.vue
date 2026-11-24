@@ -24,12 +24,12 @@
             </div>
           </div>
 
-          <!-- Kapat Butonu -->
+          <!-- Kapat / Durdur Butonu -->
           <button
-            v-if="!isRevising"
             type="button"
-            @click="$emit('close')"
+            @click="isRevising ? $emit('cancel') : $emit('close')"
             class="w-8 h-8 rounded-xl bg-rose-500 hover:bg-rose-600 active:translate-y-0.5 text-white font-black text-sm flex items-center justify-center border-2 border-slate-900 shadow-[0_2px_0_#9f1239] cursor-pointer transition"
+            :title="isRevising ? 'Revizyonu Durdur' : 'Kapat'"
           >
             ✕
           </button>
@@ -71,6 +71,16 @@
                 <span>{{ comp.label }}</span>
                 <span>✓</span>
               </span>
+            </div>
+
+            <div class="pt-2 flex justify-end">
+              <button
+                type="button"
+                @click="$emit('cancel')"
+                class="px-3.5 py-1.5 rounded-xl bg-rose-100 hover:bg-rose-200 border-2 border-rose-600 text-rose-950 text-xs font-black cursor-pointer shadow-xs active:translate-y-0.5"
+              >
+                🛑 Revizyonu Durdur
+              </button>
             </div>
           </div>
 
@@ -150,6 +160,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'close'): void;
   (e: 'revise', prompt: string): void;
+  (e: 'cancel'): void;
 }>();
 
 const revisionText = ref('');

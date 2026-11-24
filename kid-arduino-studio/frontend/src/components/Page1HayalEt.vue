@@ -159,11 +159,11 @@
       v-if="isGenerating"
       class="fixed inset-0 z-50 bg-slate-900/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5 select-none animate-in fade-in duration-150"
     >
-      <div class="bg-white rounded-[32px] border-[3px] border-slate-900 shadow-[0_14px_0_rgba(15,23,42,0.35)] max-w-xl w-full overflow-hidden flex flex-col">
-        <!-- Üst Başlık ve Canlı Süre Sayacı -->
-        <div class="px-5 py-4 bg-gradient-to-r from-[#38bdf8] via-[#818cf8] to-[#c084fc] border-b-[3px] border-slate-900 flex items-center justify-between gap-3">
+      <div class="bg-white rounded-[32px] border-[3px] border-slate-900 shadow-[0_14px_0_rgba(15,23,42,0.35)] max-w-3xl w-full max-h-[88vh] overflow-hidden flex flex-col">
+        <!-- Üst Başlık, Canlı Süre Sayacı ve Kapat/Durdur Butonu -->
+        <div class="px-5 py-3.5 bg-gradient-to-r from-[#38bdf8] via-[#818cf8] to-[#c084fc] border-b-[3px] border-slate-900 flex items-center justify-between gap-3 shrink-0">
           <div class="flex items-center gap-3">
-            <div class="w-12 h-12 rounded-2xl bg-[#fef08a] border-2 border-slate-900 shadow-[0_3px_0_#0f172a] flex items-center justify-center text-3xl animate-bounce">
+            <div class="w-11 h-11 rounded-2xl bg-[#fef08a] border-2 border-slate-900 shadow-[0_3px_0_#0f172a] flex items-center justify-center text-2xl animate-bounce">
               🤖
             </div>
             <div>
@@ -181,15 +181,27 @@
             </div>
           </div>
 
-          <!-- Geçen Süre Rozeti -->
-          <div class="px-3 py-1.5 rounded-2xl bg-white border-2 border-slate-900 shadow-[0_2px_0_#0f172a] flex flex-col items-center shrink-0">
-            <span class="text-[9px] font-black text-slate-500 uppercase tracking-wider">SÜRE</span>
-            <span class="text-sm font-black text-slate-900 font-mono">{{ elapsedSeconds }}sn</span>
+          <div class="flex items-center gap-2">
+            <!-- Geçen Süre Rozeti -->
+            <div class="px-3 py-1 rounded-2xl bg-white border-2 border-slate-900 shadow-[0_2px_0_#0f172a] flex flex-col items-center shrink-0">
+              <span class="text-[9px] font-black text-slate-500 uppercase tracking-wider">SÜRE</span>
+              <span class="text-xs sm:text-sm font-black text-slate-900 font-mono">{{ elapsedSeconds }}sn</span>
+            </div>
+
+            <!-- Üst Kırmızı Kare Kapat / İptal Et Butonu -->
+            <button
+              type="button"
+              @click="$emit('cancel-generate')"
+              class="w-9 h-9 rounded-2xl bg-rose-500 hover:bg-rose-600 active:translate-y-0.5 text-white font-black text-base flex items-center justify-center border-2 border-slate-900 shadow-[0_2px_0_#9f1239] cursor-pointer transition shrink-0"
+              title="Tasarımı İptal Et ve Kapat"
+            >
+              ✕
+            </button>
           </div>
         </div>
 
-        <!-- Orta Kısım: Canlı İlerleme Çubuğu ve Aşamalar -->
-        <div class="p-5 flex flex-col gap-4 bg-slate-50">
+        <!-- Orta Kısım: Kaydırılabilir Gövde (Taşmaları önleyen flex-1 + overflow-y-auto) -->
+        <div class="flex-1 overflow-y-auto p-4 sm:p-5 flex flex-col gap-3.5 bg-slate-50 min-h-0">
           <!-- Kullanıcının İstemi Özeti & Proje Adı -->
           <div class="px-3.5 py-2.5 rounded-2xl bg-white border-2 border-slate-900/20 text-xs font-bold text-slate-700 flex flex-col gap-1">
             <div class="flex items-start gap-2">
@@ -202,117 +214,170 @@
             </div>
           </div>
 
-          <!-- CANLI TESPİT EDİLEN ELEKTRONİK KOMPONENTLER (Analiz edildikçe yeşillenir!) -->
-          <div class="p-3.5 rounded-2xl bg-white border-2 border-slate-900/20 flex flex-col gap-2">
-            <div class="flex items-center justify-between gap-2">
-              <span class="text-xs font-black text-slate-900 flex items-center gap-1.5">
-                <span class="text-base">⚡</span>
-                <span>Analiz Edilen Elektronik Komponentler:</span>
-              </span>
-              <span
-                v-if="activeComponents.length > 0"
-                class="px-2 py-0.5 rounded-full bg-emerald-100 border border-emerald-500 text-[10px] font-black text-emerald-950 flex items-center gap-1 animate-in fade-in"
-              >
-                <span>{{ activeComponents.length }} Parça Doğrulandı</span>
-                <span>✓</span>
-              </span>
-            </div>
+          <!-- 2 Sütunlu Dengeli Izgara: Sol Komponentler | Sağ Aşamalar & İlerleme -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+            <!-- SOL SÜTUN: CANLI TESPİT EDİLEN ELEKTRONİK KOMPONENTLER (Taşmayı önleyen max-h-48 iç kaydırma) -->
+            <div class="p-3.5 rounded-2xl bg-white border-2 border-slate-900/20 flex flex-col gap-2">
+              <div class="flex items-center justify-between gap-2">
+                <span class="text-xs font-black text-slate-900 flex items-center gap-1.5">
+                  <span class="text-base">⚡</span>
+                  <span>Komponentler:</span>
+                </span>
+                <span
+                  v-if="activeComponents.length > 0"
+                  class="px-2 py-0.5 rounded-full bg-emerald-100 border border-emerald-500 text-[10px] font-black text-emerald-950 flex items-center gap-1 animate-in fade-in"
+                >
+                  <span>{{ activeComponents.length }} Parça</span>
+                  <span>✓</span>
+                </span>
+              </div>
 
-            <!-- Parçaların Canlı Yeşillenen Rozetleri -->
-            <div v-if="activeComponents.length > 0" class="flex flex-wrap items-center gap-2 pt-0.5">
+              <!-- Parçaların Canlı Yeşillenen Rozetleri (Sınırlandırılmış iç kaydırma alanı) -->
               <div
-                v-for="comp in activeComponents"
-                :key="comp.id"
-                class="px-3 py-1.5 rounded-xl bg-emerald-100 hover:bg-emerald-200 border-2 border-emerald-600 text-emerald-950 text-xs font-black flex items-center gap-1.5 shadow-[0_2px_0_#059669] animate-in zoom-in-95 duration-200 transition-all select-none"
+                v-if="activeComponents.length > 0"
+                class="max-h-44 overflow-y-auto pr-1 flex flex-wrap items-center gap-2 content-start"
               >
-                <span class="text-base">{{ comp.icon }}</span>
-                <span>{{ comp.label }}</span>
-                <span class="w-4 h-4 rounded-full bg-emerald-600 text-white text-[10px] flex items-center justify-center font-bold">✓</span>
+                <div
+                  v-for="comp in activeComponents"
+                  :key="comp.id"
+                  class="px-2.5 py-1.5 rounded-xl bg-emerald-100 hover:bg-emerald-200 border-2 border-emerald-600 text-emerald-950 text-xs font-black flex items-center gap-1.5 shadow-[0_2px_0_#059669] animate-in zoom-in-95 duration-200 transition-all select-none"
+                >
+                  <span class="text-sm">{{ comp.icon }}</span>
+                  <span class="truncate max-w-[140px]">{{ comp.label }}</span>
+                  <span class="w-3.5 h-3.5 rounded-full bg-emerald-600 text-white text-[9px] flex items-center justify-center font-bold">✓</span>
+                </div>
+              </div>
+              <!-- Henüz parça gelmediyse canlı tarama animasyonu -->
+              <div v-else class="flex items-center gap-2 text-xs font-bold text-slate-500 py-4 justify-center">
+                <span class="animate-spin text-base">🔍</span>
+                <span>Gerekli parçalar taranıyor...</span>
               </div>
             </div>
-            <!-- Henüz parça gelmediyse canlı tarama animasyonu -->
-            <div v-else class="flex items-center gap-2 text-xs font-bold text-slate-500 py-1">
-              <span class="animate-spin text-sm">🔍</span>
-              <span>Projen için ihtiyaç duyulan sensörler, motorlar ve dirençler taranıyor...</span>
-            </div>
-          </div>
 
-          <!-- Animasyonlu İlerleme Çubuğu -->
-          <div class="w-full flex flex-col gap-1.5">
-            <div class="flex items-center justify-between text-xs font-black text-slate-800">
-              <span>{{ currentProgressStage.title }}</span>
-              <span class="text-sky-700 font-mono">%{{ progressPercent }}</span>
-            </div>
-            <div class="w-full h-4 rounded-full bg-slate-200 border-2 border-slate-900 overflow-hidden p-0.5">
-              <div
-                class="h-full rounded-full bg-gradient-to-r from-[#38bdf8] via-[#4ade80] to-[#facc15] transition-all duration-300"
-                :style="{ width: `${progressPercent}%` }"
-              ></div>
-            </div>
-          </div>
-
-          <!-- 5 Adımlı Canlı Yapay Zeka İşlem Listesi -->
-          <div class="flex flex-col gap-2">
-            <div
-              v-for="(stage, idx) in progressStages"
-              :key="stage.id"
-              :class="[
-                'px-3.5 py-2.5 rounded-2xl border-2 flex items-center justify-between gap-3 transition-all duration-300',
-                idx < activeStageIndex
-                  ? 'bg-emerald-50 border-emerald-500 text-emerald-950'
-                  : idx === activeStageIndex
-                  ? 'bg-[#fef08a] border-slate-900 text-slate-950 shadow-[0_3px_0_#0f172a] scale-[1.01]'
-                  : 'bg-white/60 border-slate-200 text-slate-400'
-              ]"
-            >
-              <div class="flex items-center gap-2.5 min-w-0">
-                <span class="text-lg shrink-0">
-                  <template v-if="idx < activeStageIndex">✅</template>
-                  <template v-else-if="idx === activeStageIndex">
-                    <span class="inline-block animate-spin">⚙️</span>
-                  </template>
-                  <template v-else>{{ stage.icon }}</template>
-                </span>
-                <div class="min-w-0">
-                  <div class="text-xs font-black truncate">{{ stage.title }}</div>
-                  <div class="text-[10px] font-bold truncate opacity-85">{{ stage.subtitle }}</div>
+            <!-- SAĞ SÜTUN: İLERLEME ÇUBUĞU VE 5 AŞAMALI İŞLEM LİSTESİ -->
+            <div class="flex flex-col gap-2">
+              <!-- Animasyonlu İlerleme Çubuğu -->
+              <div class="w-full flex flex-col gap-1">
+                <div class="flex items-center justify-between text-xs font-black text-slate-800">
+                  <span class="truncate">{{ currentProgressStage.title }}</span>
+                  <span class="text-sky-700 font-mono shrink-0">%{{ progressPercent }}</span>
+                </div>
+                <div class="w-full h-3.5 rounded-full bg-slate-200 border-2 border-slate-900 overflow-hidden p-0.5">
+                  <div
+                    class="h-full rounded-full bg-gradient-to-r from-[#38bdf8] via-[#4ade80] to-[#facc15] transition-all duration-300"
+                    :style="{ width: `${progressPercent}%` }"
+                  ></div>
                 </div>
               </div>
 
-              <span
-                v-if="idx < activeStageIndex"
-                class="px-2 py-0.5 rounded-lg bg-emerald-500 text-white text-[9px] font-black shrink-0"
-              >
-                Tamam ✓
-              </span>
-              <span
-                v-else-if="idx === activeStageIndex"
-                class="px-2 py-0.5 rounded-lg bg-slate-900 text-amber-300 text-[9px] font-black shrink-0 animate-pulse"
-              >
-                İşleniyor...
-              </span>
+              <!-- 5 Adımlı Canlı Yapay Zeka İşlem Listesi (Kompakt kartlar) -->
+              <div class="flex flex-col gap-1.5">
+                <div
+                  v-for="(stage, idx) in progressStages"
+                  :key="stage.id"
+                  :class="[
+                    'px-2.5 py-1.5 rounded-xl border-2 flex items-center justify-between gap-2 transition-all duration-300',
+                    idx < activeStageIndex
+                      ? 'bg-emerald-50 border-emerald-500 text-emerald-950'
+                      : idx === activeStageIndex
+                      ? 'bg-[#fef08a] border-slate-900 text-slate-950 shadow-[0_2px_0_#0f172a] scale-[1.01]'
+                      : 'bg-white/60 border-slate-200 text-slate-400'
+                  ]"
+                >
+                  <div class="flex items-center gap-2 min-w-0">
+                    <span class="text-sm shrink-0">
+                      <template v-if="idx < activeStageIndex">✅</template>
+                      <template v-else-if="idx === activeStageIndex">
+                        <span class="inline-block animate-spin">⚙️</span>
+                      </template>
+                      <template v-else>{{ stage.icon }}</template>
+                    </span>
+                    <div class="min-w-0">
+                      <div class="text-[11px] font-black truncate leading-tight">{{ stage.title }}</div>
+                    </div>
+                  </div>
+
+                  <span
+                    v-if="idx < activeStageIndex"
+                    class="px-1.5 py-0.2 rounded-md bg-emerald-500 text-white text-[8px] font-black shrink-0"
+                  >
+                    Tamam ✓
+                  </span>
+                  <span
+                    v-else-if="idx === activeStageIndex"
+                    class="px-1.5 py-0.2 rounded-md bg-slate-900 text-amber-300 text-[8px] font-black shrink-0 animate-pulse"
+                  >
+                    İşleniyor...
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
 
-          <!-- Eğlenceli Elektronik İpucu Kartı (20 Çocuk Dostu Benzetme & Sıradaki Bilgi Butonu) -->
-          <div class="p-3.5 rounded-2xl bg-gradient-to-r from-sky-100 via-emerald-50 to-indigo-100 border-2 border-slate-900 flex flex-col gap-2">
-            <div class="flex items-center justify-between gap-2">
+          <!-- ALT BİLGİ: Eğlenceli Elektronik İpucu Kartı (12sn Çocuk Okuma Süresi, Duraklat/Oynat & İleri/Geri Kontrolleri) -->
+          <div class="p-3.5 rounded-2xl bg-gradient-to-r from-sky-50 via-emerald-50 to-indigo-50 border-2 border-slate-900 shadow-[0_3px_0_#0f172a] flex flex-col gap-2">
+            <div class="flex items-center justify-between gap-2 flex-wrap">
               <div class="flex items-center gap-1.5 text-xs font-black text-slate-900">
                 <span class="text-base">{{ currentFunFact.icon }}</span>
                 <span>Biliyor muydun? — <strong>{{ currentFunFact.title }}</strong></span>
+                <span class="text-[10px] font-bold text-slate-500">
+                  ({{ (funFactIndex % funFactsTotal) + 1 }}/{{ funFactsTotal }})
+                </span>
               </div>
-              <button
-                type="button"
-                @click="nextFunFact"
-                class="px-2.5 py-0.5 rounded-lg bg-white hover:bg-slate-100 active:translate-y-0.5 border border-slate-900 text-[10px] font-black text-slate-900 shadow-2xs cursor-pointer shrink-0 transition"
-              >
-                🔄 Sıradaki Bilgi
-              </button>
+
+              <!-- Çocuk Okuma Kontrolleri: Geri, Duraklat/Devam, İleri -->
+              <div class="flex items-center gap-1 shrink-0">
+                <button
+                  type="button"
+                  @click="prevFunFact"
+                  class="w-7 h-7 rounded-lg bg-white hover:bg-slate-100 active:translate-y-0.5 border border-slate-900 text-xs font-black text-slate-800 shadow-2xs cursor-pointer flex items-center justify-center transition"
+                  title="Önceki Bilgi"
+                >
+                  ◀
+                </button>
+                <button
+                  type="button"
+                  @click="toggleFunFactPause"
+                  :class="[
+                    'px-2 py-1 rounded-lg border border-slate-900 text-[10px] font-black cursor-pointer shadow-2xs transition flex items-center gap-1',
+                    isFunFactPaused ? 'bg-amber-300 text-slate-950 font-black' : 'bg-white hover:bg-slate-100 text-slate-700'
+                  ]"
+                  :title="isFunFactPaused ? 'Okumaya Devam Et' : 'Okumayı Duraklat'"
+                >
+                  <span>{{ isFunFactPaused ? '▶️ Devam' : '⏸️ Duraklat' }}</span>
+                </button>
+                <button
+                  type="button"
+                  @click="nextFunFact"
+                  class="w-7 h-7 rounded-lg bg-white hover:bg-slate-100 active:translate-y-0.5 border border-slate-900 text-xs font-black text-slate-800 shadow-2xs cursor-pointer flex items-center justify-center transition"
+                  title="Sonraki Bilgi"
+                >
+                  ▶
+                </button>
+              </div>
             </div>
-            <div class="text-[11px] font-bold text-slate-800 leading-snug">
+
+            <div class="text-xs sm:text-sm font-bold text-slate-800 leading-relaxed bg-white/70 p-2.5 rounded-xl border border-slate-900/10">
               {{ currentFunFact.fact }}
             </div>
           </div>
+        </div>
+
+        <!-- Alt Durum & İptal Et / Durdur Butonu Çubuğu (Sabit Footer) -->
+        <div class="px-5 py-3 bg-white border-t-[3px] border-slate-900 flex items-center justify-between gap-3 shrink-0">
+          <div class="text-xs font-bold text-slate-600 flex items-center gap-1.5 truncate">
+            <span class="animate-pulse text-sm">💡</span>
+            <span class="truncate">Fikrini değiştirmek istersen tasarımı istediğin an durdurabilirsin.</span>
+          </div>
+
+          <button
+            type="button"
+            @click="$emit('cancel-generate')"
+            class="px-4 py-2 rounded-2xl bg-rose-100 hover:bg-rose-200 active:translate-y-0.5 text-rose-950 font-black text-xs sm:text-sm border-2 border-rose-600 shadow-[0_2px_0_#e11d48] cursor-pointer transition flex items-center gap-1.5 shrink-0"
+          >
+            <span>🛑</span>
+            <span>Tasarımı Durdur</span>
+          </button>
         </div>
       </div>
     </div>
@@ -363,6 +428,7 @@ const emit = defineEmits<{
   (e: 'generate', prompt: string): void;
   (e: 'open-inventory'): void;
   (e: 'open-ideas'): void;
+  (e: 'cancel-generate'): void;
 }>();
 
 const promptText = ref('');
@@ -622,6 +688,9 @@ const progressPercent = computed(() => {
   return Math.min(97, 92 + Math.floor((s - 20) / 8));
 });
 
+const funFactsTotal = computed(() => FUN_FACTS.length);
+const isFunFactPaused = ref(false);
+
 const currentFunFact = computed(() => {
   return FUN_FACTS[funFactIndex.value % FUN_FACTS.length] || FUN_FACTS[0]!;
 });
@@ -630,12 +699,24 @@ function nextFunFact() {
   funFactIndex.value = (funFactIndex.value + 1) % FUN_FACTS.length;
 }
 
+function prevFunFact() {
+  funFactIndex.value = (funFactIndex.value - 1 + FUN_FACTS.length) % FUN_FACTS.length;
+}
+
+function toggleFunFactPause() {
+  isFunFactPaused.value = !isFunFactPaused.value;
+}
+
 function startFunFactCycle() {
   stopFunFactCycle();
+  isFunFactPaused.value = false;
   funFactIndex.value = Math.floor(Math.random() * FUN_FACTS.length);
+  // Çocukların rahat okuyabilmesi için geçiş süresi 12 saniyeye çıkarıldı
   funFactInterval = setInterval(() => {
-    nextFunFact();
-  }, 5000);
+    if (!isFunFactPaused.value) {
+      nextFunFact();
+    }
+  }, 12000);
 }
 
 function stopFunFactCycle() {

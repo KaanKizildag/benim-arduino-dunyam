@@ -36,6 +36,7 @@
         @open-inventory="isInventoryOpen = true"
         @open-ideas="isIdeasOpen = true"
         @generate="handleGenerateProject"
+        @cancel-generate="handleCancelGenerate"
       />
 
       <!-- SAYFA 2: DEVREYİ KUR (Breadboard ve Arduino Uno Bağlantı Kılavuzu) -->
@@ -133,6 +134,7 @@
       :streamData="streamData"
       @close="isRevisionOpen = false"
       @revise="handleReviseProject"
+      @cancel="handleCancelGenerate"
     />
 
     <!-- C) AI ASİSTAN MODELİ MODALI -->
@@ -295,15 +297,64 @@ const selectedInventory = ref<string[]>([
   'BUZZER'
 ]);
 
-// Seçilen AI modeli tarayıcıda saklanır; sayfa yenilenince tekrar Ollama'ya dönmez
+// Seçilen AI modeli tarayıcıda saklanır; sayfa yenilenince tekrar sıfırlanmaz
 const SELECTED_MODEL_STORAGE_KEY = 'kid_arduino_selected_model';
 
 function loadSavedModel(): string {
   try {
-    return localStorage.getItem(SELECTED_MODEL_STORAGE_KEY) || 'ollama/qwen2.5-coder:1.5b';
+    return localStorage.getItem(SELECTED_MODEL_STORAGE_KEY) || 'gemini/gemini-2.5-flash';
   } catch {
-    return 'ollama/qwen2.5-coder:1.5b';
+    return 'gemini/gemini-2.5-flash';
   }
+}
+
+/**
+ * Seçili modele uygun API anahtarını kalıcı depolamadan getirir.
+ */
+function getApiKeyForModel(modelName: string): string | undefined {
+  try {
+    if (modelName.includes('gemini')) {
+      return (
+        localStorage.getItem('kid_arduino_gemini_key') ||
+        localStorage.getItem('kid_arduino_api_key') ||
+        undefined
+      );
+    }
+    if (modelName.includes('gpt')) {
+      return (
+        localStorage.getItem('kid_arduino_openai_key') ||
+        localStorage.getItem('kid_arduino_api_key') ||
+        undefined
+      );
+    }
+    if (modelName.includes('claude')) {
+      return (
+        localStorage.getItem('kid_arduino_anthropic_key') ||
+        localStorage.getItem('kid_arduino_api_key') ||
+        undefined
+      );
+    }
+    return localStorage.getItem('kid_arduino_api_key') || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+const currentAbortController = ref<AbortController | null>(null);
+
+function handleCancelGenerate() {
+  if (currentAbortController.value) {
+    try {
+      currentAbortController.value.abort();
+    } catch {
+      // ignore
+    }
+    currentAbortController.value = null;
+  }
+  isGenerating.value = false;
+  isGeneratingLogic.value = false;
+  isRevising.value = false;
+  streamData.value = null;
 }
 
 const selectedModel = ref(loadSavedModel());
@@ -544,11 +595,14 @@ async function handleGenerateProject(prompt: string) {
     progressPercent: 12
   };
 
+  currentAbortController.value = new AbortController();
+
   try {
-    const apiKey = localStorage.getItem('kid_arduino_api_key') || undefined;
+    const apiKey = getApiKeyForModel(selectedModel.value);
     const res = await fetch('/api/generate-stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      signal: currentAbortController.value.signal,
       body: JSON.stringify({
         prompt,
         inventory: selectedInventory.value,
@@ -672,6 +726,10 @@ async function handleGenerateProject(prompt: string) {
     }
     currentStep.value = 2;
   } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      // Kullanıcı işlemi bilerek iptal etti / durdurdu
+      return;
+    }
     await fetchAILogs();
     currentProject.value = createEmptyProject();
     currentStep.value = 1;
@@ -680,6 +738,7 @@ async function handleGenerateProject(prompt: string) {
         ? `Yapay zeka servisine ulaşılamadı: ${err.message}`
         : 'Yapay zeka servisinden yanıt alınamadı.';
   } finally {
+    currentAbortController.value = null;
     isGenerating.value = false;
     isGeneratingLogic.value = false;
   }
@@ -704,11 +763,14 @@ async function handleReviseProject(revisionPrompt: string) {
     progressPercent: 15
   };
 
+  currentAbortController.value = new AbortController();
+
   try {
-    const apiKey = localStorage.getItem('kid_arduino_api_key') || undefined;
+    const apiKey = getApiKeyForModel(selectedModel.value);
     const res = await fetch('/api/revise-stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      signal: currentAbortController.value.signal,
       body: JSON.stringify({
         current_project: currentProject.value,
         revision_prompt: revisionPrompt,
@@ -833,12 +895,16 @@ async function handleReviseProject(revisionPrompt: string) {
       origin: { y: 0.6 }
     });
   } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      return;
+    }
     await fetchAILogs();
     aiErrorMessage.value =
       err instanceof Error
         ? `Revizyon servisine ulaşılamadı: ${err.message}`
         : 'Revizyon işleminde bir hata oluştu.';
   } finally {
+    currentAbortController.value = null;
     isRevising.value = false;
   }
 }

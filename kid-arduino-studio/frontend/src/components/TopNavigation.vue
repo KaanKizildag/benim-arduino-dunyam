@@ -126,16 +126,15 @@
           <span class="hidden lg:inline text-[11px]">{{ autoSave ? 'Oto-Kayıt: Açık' : 'Oto-Kayıt: Kapalı' }}</span>
         </button>
 
-        <!-- 2. AI Modeli Butonu (YALNIZCA ADMİN USER GÖRÜR!) -->
+        <!-- 2. AI Modeli & Admin Paneli Butonu (Dev Mode / Admin) -->
         <button
-          v-if="isAdmin"
           type="button"
           @click="$emit('open-ai-model')"
           class="px-2.5 py-1.5 sm:py-2 rounded-2xl bg-[#bae6fd] hover:bg-[#7dd3fc] border-2 border-slate-900 shadow-[0_3px_0_#0f172a] active:translate-y-0.5 active:shadow-none text-slate-900 text-xs font-black transition flex items-center gap-1.5 cursor-pointer"
-          title="Admin: Yapay Zeka Modeli Seçimi"
+          title="Yapay Zeka Modeli & Token Yönetimi (Admin / Dev Paneli)"
         >
           <span class="text-sm">🤖</span>
-          <span class="hidden md:inline">AI Modeli</span>
+          <span class="hidden md:inline">AI Paneli</span>
         </button>
 
         <!-- 3. Admin (AI İstek & Cevap Logları) Butonu (YALNIZCA ADMİN USER GÖRÜR!) -->
