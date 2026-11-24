@@ -15,7 +15,9 @@ import {
   type NetlistComponent,
   type PlacedComponent,
   type AllocatedPin,
-  type ElectricalNet
+  type ElectricalNet,
+  type BreadboardType,
+  BREADBOARD_CONFIGS
 } from './types';
 import {
   computeOffBoardCardMetrics,
@@ -55,15 +57,15 @@ export function isLowerHalfRow(row: string): boolean {
   return r === 'F' || r === 'G' || r === 'H' || r === 'I' || r === 'J';
 }
 
-export function getStripKey(col: number, row: string): string {
-  if (col < 1 || col > BREADBOARD_GEOMETRY.maxCols) return `offboard:${col}:${row}`;
+export function getStripKey(col: number, row: string, maxCols: number = BREADBOARD_GEOMETRY.maxCols): string {
+  if (col < 1 || col > maxCols) return `offboard:${col}:${row}`;
   if (isUpperHalfRow(row)) return `${col}:upper`;
   if (isLowerHalfRow(row)) return `${col}:lower`;
   return `rail:${row}`;
 }
 
-export function getHoleCoords(col: number, row: string): { x: number; y: number } {
-  const clampedCol = Math.max(1, Math.min(BREADBOARD_GEOMETRY.maxCols, col));
+export function getHoleCoords(col: number, row: string, maxCols: number = BREADBOARD_GEOMETRY.maxCols): { x: number; y: number } {
+  const clampedCol = Math.max(1, Math.min(maxCols, col));
   const x = BREADBOARD_GEOMETRY.startX + (clampedCol - 1) * BREADBOARD_GEOMETRY.colPitch;
 
   let y = BREADBOARD_GEOMETRY.rowY.A;
@@ -127,6 +129,10 @@ export const OFF_BOARD_PIN_DEFS: Record<string, { label: string; pins: string[] 
 };
 
 export class BreadboardAllocator {
+  public breadboardType: BreadboardType = 'half';
+  public maxCols: number = BREADBOARD_CONFIGS.half.maxCols;
+  public breadboardWidth: number = BREADBOARD_CONFIGS.half.width;
+
   private currentCol = 4;
   private currentHalf: 'upper' | 'lower' = 'upper';
   private dockColX = 0;
@@ -137,21 +143,59 @@ export class BreadboardAllocator {
   private internalSharedNodes: Array<{ col: number; half: 'upper' | 'lower'; components: string[]; label: string }> = [];
   private errors: string[] = [];
   private warnings: string[] = [];
+  private hasOverflowed = false;
+
+  constructor(preferredType: BreadboardType = 'half') {
+    this.breadboardType = preferredType;
+    this.maxCols = BREADBOARD_CONFIGS[preferredType].maxCols;
+    this.breadboardWidth = BREADBOARD_CONFIGS[preferredType].width;
+  }
 
   public allocate(
     netlist: CircuitNetlist,
-    nets: ElectricalNet[] = []
+    nets: ElectricalNet[] = [],
+    allowAutoExpand: boolean = true
   ): {
     components: PlacedComponent[];
     allocatedPins: Record<string, AllocatedPin>;
     internalSharedNodes: Array<{ col: number; half: 'upper' | 'lower'; components: string[]; label: string }>;
     errors: string[];
     warnings: string[];
+    breadboardType: BreadboardType;
+    breadboardWidth: number;
+    maxCols: number;
   } {
+    this.runAllocation(netlist, nets);
+
+    // Eğer 30 sütunluk standart breadboard'a sığmadıysa ve autoExpand açıksa,
+    // hata vermek yerine devreyi otomatik olarak 60 sütunlu Büyük Breadboard ile çiz!
+    if (this.hasOverflowed && allowAutoExpand && this.breadboardType === 'half') {
+      this.breadboardType = 'full';
+      this.maxCols = BREADBOARD_CONFIGS.full.maxCols;
+      this.breadboardWidth = BREADBOARD_CONFIGS.full.width;
+      this.runAllocation(netlist, nets);
+      this.warnings.push(
+        "Devre karmaşıklığı nedeniyle 30 sütunluk standart breadboard'a sığmadı; hata vermek yerine otomatik olarak 60 sütunlu Büyük Breadboard kullanılarak yerleşim tamamlandı."
+      );
+    }
+
+    return {
+      components: this.placedComponents,
+      allocatedPins: this.allocatedPins,
+      internalSharedNodes: this.internalSharedNodes,
+      errors: this.errors,
+      warnings: this.warnings,
+      breadboardType: this.breadboardType,
+      breadboardWidth: this.breadboardWidth,
+      maxCols: this.maxCols
+    };
+  }
+
+  private runAllocation(netlist: CircuitNetlist, nets: ElectricalNet[]): void {
     this.currentCol = 4;
     this.currentHalf = 'upper';
     this.dockColX =
-      SCENE_LAYOUT.bb.x + SCENE_LAYOUT.bb.width + SCENE_LAYOUT.bb.cardPad + SCENE_LAYOUT.dockGapX;
+      SCENE_LAYOUT.bb.x + this.breadboardWidth + SCENE_LAYOUT.bb.cardPad + SCENE_LAYOUT.dockGapX;
     this.dockCursorY = SCENE_LAYOUT.dockStartY;
     this.dockColMaxWidth = 0;
     this.placedComponents = [];
@@ -159,6 +203,7 @@ export class BreadboardAllocator {
     this.internalSharedNodes = [];
     this.errors = [];
     this.warnings = [];
+    this.hasOverflowed = false;
 
     const components = [...(netlist.components || [])];
     const processedComponentIds = new Set<string>();
@@ -187,14 +232,6 @@ export class BreadboardAllocator {
         processedComponentIds.add(comp.id);
       }
     }
-
-    return {
-      components: this.placedComponents,
-      allocatedPins: this.allocatedPins,
-      internalSharedNodes: this.internalSharedNodes,
-      errors: this.errors,
-      warnings: this.warnings
-    };
   }
 
   public isOffBoardComponent(type: string): boolean {
@@ -223,7 +260,7 @@ export class BreadboardAllocator {
    * Mevcut yarıda yeterli sütun var mı kontrol eder; üst yarı dolduysa alt yarıya (F–J) geçer.
    */
   private ensureSpace(spanCols: number, labelForError: string): boolean {
-    if (this.currentCol + spanCols <= BREADBOARD_GEOMETRY.maxCols) {
+    if (this.currentCol + spanCols <= this.maxCols) {
       return true;
     }
 
@@ -233,13 +270,16 @@ export class BreadboardAllocator {
       this.warnings.push(
         `Breadboard üst yarı (A–E) dolduğu için '${labelForError}' ve sonraki bileşenler alt yarıya (F–J) yerleştirildi.`
       );
-      if (this.currentCol + spanCols <= BREADBOARD_GEOMETRY.maxCols) {
+      if (this.currentCol + spanCols <= this.maxCols) {
         return true;
       }
     }
 
+    this.hasOverflowed = true;
     this.errors.push(
-      `Breadboard kapasitesi aşıldı: '${labelForError}' bileşeni için breadboard üzerinde boş sütun kalmadı (1..30 üst ve alt yarı dolu).`
+      this.breadboardType === 'full'
+        ? `Büyük breadboard kapasitesi aşıldı: '${labelForError}' bileşeni için büyük breadboard üzerinde boş sütun kalmadı (1..60 üst ve alt yarı dolu).`
+        : `Breadboard kapasitesi aşıldı: '${labelForError}' bileşeni için breadboard üzerinde boş sütun kalmadı (1..30 üst ve alt yarı dolu).`
     );
     return false;
   }
@@ -435,8 +475,8 @@ export class BreadboardAllocator {
     leftPinName: string,
     rightPinName: string
   ): void {
-    const leftCoords = getHoleCoords(leftCol, row);
-    const rightCoords = getHoleCoords(rightCol, row);
+    const leftCoords = getHoleCoords(leftCol, row, this.maxCols);
+    const rightCoords = getHoleCoords(rightCol, row, this.maxCols);
 
     const rPins: Record<string, AllocatedPin> = {
       [leftPinName]: {
@@ -483,8 +523,8 @@ export class BreadboardAllocator {
     cathodeCol: number,
     row: string
   ): void {
-    const anodeCoords = getHoleCoords(anodeCol, row);
-    const cathodeCoords = getHoleCoords(cathodeCol, row);
+    const anodeCoords = getHoleCoords(anodeCol, row, this.maxCols);
+    const cathodeCoords = getHoleCoords(cathodeCol, row, this.maxCols);
     const isAnodeLeft = anodeCol < cathodeCol;
     const leftPinX = Math.min(anodeCoords.x, cathodeCoords.x);
 
@@ -535,8 +575,8 @@ export class BreadboardAllocator {
     leftPinName: string,
     rightPinName: string
   ): void {
-    const pLeft = getHoleCoords(leftCol, row);
-    const pRight = getHoleCoords(rightCol, row);
+    const pLeft = getHoleCoords(leftCol, row, this.maxCols);
+    const pRight = getHoleCoords(rightCol, row, this.maxCols);
     const pins: Record<string, AllocatedPin> = {
       [leftPinName]: {
         componentId: comp.id,
@@ -632,9 +672,9 @@ export class BreadboardAllocator {
         if (!this.ensureSpace(2, comp.label || comp.id)) return;
         const col = this.currentCol;
         const row = this.getComponentRow();
-        const pGnd = getHoleCoords(col, row);
-        const pSig = getHoleCoords(col + 1, row);
-        const pVcc = getHoleCoords(col + 2, row);
+        const pGnd = getHoleCoords(col, row, this.maxCols);
+        const pSig = getHoleCoords(col + 1, row, this.maxCols);
+        const pVcc = getHoleCoords(col + 2, row, this.maxCols);
 
         const pins: Record<string, AllocatedPin> = {
           GND: {

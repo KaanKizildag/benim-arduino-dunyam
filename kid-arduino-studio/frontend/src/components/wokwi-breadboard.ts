@@ -1,7 +1,8 @@
 /**
- * Custom Web Component for Breadboard implementing Wokwi .pinInfo API.
- * Provides standard 30-column half-size breadboard with metallic holes, power rails,
- * and visual internal conductivity indicators.
+ * Custom Web Components for Breadboards implementing Wokwi .pinInfo API.
+ * - WokwiBreadboardHalfElement: Standard 30-column half-size breadboard (352x206 px)
+ * - WokwiBreadboardElement: Standard 60-column full-size breadboard (638x206 px)
+ * Provides metallic holes, power rails, and visual internal conductivity indicators.
  */
 
 export interface BreadboardPin {
@@ -10,9 +11,12 @@ export interface BreadboardPin {
   y: number;
 }
 
-export class WokwiBreadboardHalfElement extends HTMLElement {
+export class BaseBreadboardElement extends HTMLElement {
   public pinInfo: BreadboardPin[] = [];
-  private shadow: ShadowRoot;
+  protected shadow: ShadowRoot;
+  protected cols: number = 30;
+  protected width: number = 352;
+  protected height: number = 206;
 
   static get observedAttributes() {
     return ['highlighted-columns', 'highlighted-rails'];
@@ -21,6 +25,9 @@ export class WokwiBreadboardHalfElement extends HTMLElement {
   constructor() {
     super();
     this.shadow = this.attachShadow({ mode: 'open' });
+  }
+
+  connectedCallback() {
     this.generatePinInfo();
     this.render();
   }
@@ -29,11 +36,11 @@ export class WokwiBreadboardHalfElement extends HTMLElement {
     this.render();
   }
 
-  private generatePinInfo() {
+  protected generatePinInfo() {
     const pins: BreadboardPin[] = [];
     const startX = 38;
     const colPitch = 9.5;
-    const cols = 30;
+    const cols = this.cols;
 
     const rowYMap: Record<string, number> = {
       a: 48,
@@ -48,7 +55,7 @@ export class WokwiBreadboardHalfElement extends HTMLElement {
       j: 156,
     };
 
-    // Terminal holes: 1a..30j
+    // Terminal holes: 1a..Nj
     for (let col = 1; col <= cols; col++) {
       const cx = startX + (col - 1) * colPitch;
       for (const [row, cy] of Object.entries(rowYMap)) {
@@ -67,24 +74,25 @@ export class WokwiBreadboardHalfElement extends HTMLElement {
     }
 
     // Generic power rail names pointing to representative holes
-    pins.push({ name: 'top-+', x: startX + 14 * colPitch, y: 16 });
-    pins.push({ name: 'top--', x: startX + 14 * colPitch, y: 28 });
-    pins.push({ name: 'bottom-+', x: startX + 14 * colPitch, y: 176 });
-    pins.push({ name: 'bottom--', x: startX + 14 * colPitch, y: 188 });
-    pins.push({ name: 'power-+', x: startX + 14 * colPitch, y: 16 });
-    pins.push({ name: 'power--', x: startX + 14 * colPitch, y: 28 });
-    pins.push({ name: '5V', x: startX + 14 * colPitch, y: 16 });
-    pins.push({ name: 'GND', x: startX + 14 * colPitch, y: 28 });
+    const midCol = Math.floor(cols / 2);
+    pins.push({ name: 'top-+', x: startX + midCol * colPitch, y: 16 });
+    pins.push({ name: 'top--', x: startX + midCol * colPitch, y: 28 });
+    pins.push({ name: 'bottom-+', x: startX + midCol * colPitch, y: 176 });
+    pins.push({ name: 'bottom--', x: startX + midCol * colPitch, y: 188 });
+    pins.push({ name: 'power-+', x: startX + midCol * colPitch, y: 16 });
+    pins.push({ name: 'power--', x: startX + midCol * colPitch, y: 28 });
+    pins.push({ name: '5V', x: startX + midCol * colPitch, y: 16 });
+    pins.push({ name: 'GND', x: startX + midCol * colPitch, y: 28 });
 
     this.pinInfo = pins;
   }
 
-  private render() {
-    const width = 352;
-    const height = 206;
+  protected render() {
+    const width = this.width;
+    const height = this.height;
     const startX = 38;
     const colPitch = 9.5;
-    const cols = 30;
+    const cols = this.cols;
 
     const rawCols = this.getAttribute('highlighted-columns') || '';
     const activeCols = rawCols.split(',').map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
@@ -108,25 +116,26 @@ export class WokwiBreadboardHalfElement extends HTMLElement {
     }
 
     // 2. Power Rail Glow Strips
+    const railWidth = width - 48;
     let railGlowSvg = '';
     if (highlightTopPlus) {
       railGlowSvg += `
-        <rect x="24" y="12" width="304" height="8" rx="4" fill="#ef4444" fill-opacity="0.25" stroke="#ef4444" stroke-width="1" />
+        <rect x="24" y="12" width="${railWidth}" height="8" rx="4" fill="#ef4444" fill-opacity="0.25" stroke="#ef4444" stroke-width="1" />
       `;
     }
     if (highlightTopMinus) {
       railGlowSvg += `
-        <rect x="24" y="24" width="304" height="8" rx="4" fill="#3b82f6" fill-opacity="0.25" stroke="#3b82f6" stroke-width="1" />
+        <rect x="24" y="24" width="${railWidth}" height="8" rx="4" fill="#3b82f6" fill-opacity="0.25" stroke="#3b82f6" stroke-width="1" />
       `;
     }
     if (highlightBottomPlus) {
       railGlowSvg += `
-        <rect x="24" y="172" width="304" height="8" rx="4" fill="#ef4444" fill-opacity="0.28" stroke="#ef4444" stroke-width="1.2" />
+        <rect x="24" y="172" width="${railWidth}" height="8" rx="4" fill="#ef4444" fill-opacity="0.28" stroke="#ef4444" stroke-width="1.2" />
       `;
     }
     if (highlightBottomMinus) {
       railGlowSvg += `
-        <rect x="24" y="184" width="304" height="8" rx="4" fill="#3b82f6" fill-opacity="0.28" stroke="#3b82f6" stroke-width="1.2" />
+        <rect x="24" y="184" width="${railWidth}" height="8" rx="4" fill="#3b82f6" fill-opacity="0.28" stroke="#3b82f6" stroke-width="1.2" />
       `;
     }
 
@@ -176,6 +185,9 @@ export class WokwiBreadboardHalfElement extends HTMLElement {
       }
     }
 
+    const lineEndX = width - 22;
+    const rightLabelX = width - 23;
+
     this.shadow.innerHTML = `
       <style>
         :host {
@@ -202,20 +214,20 @@ export class WokwiBreadboardHalfElement extends HTMLElement {
         ${railGlowSvg}
 
         <!-- Top Power Rail Lines -->
-        <line x1="28" y1="16" x2="330" y2="16" stroke="#ef4444" stroke-width="1.2" stroke-dasharray="2 3" opacity="0.5" />
+        <line x1="28" y1="16" x2="${lineEndX}" y2="16" stroke="#ef4444" stroke-width="1.2" stroke-dasharray="2 3" opacity="0.5" />
         <line x1="20" y1="16" x2="25" y2="16" stroke="#ef4444" stroke-width="2" />
         <text x="13" y="19.5" font-size="10" font-weight="900" fill="#ef4444" text-anchor="middle">+</text>
 
-        <line x1="28" y1="28" x2="330" y2="28" stroke="#3b82f6" stroke-width="1.2" stroke-dasharray="2 3" opacity="0.5" />
+        <line x1="28" y1="28" x2="${lineEndX}" y2="28" stroke="#3b82f6" stroke-width="1.2" stroke-dasharray="2 3" opacity="0.5" />
         <line x1="20" y1="28" x2="25" y2="28" stroke="#3b82f6" stroke-width="2" />
         <text x="13" y="30.5" font-size="12" font-weight="900" fill="#3b82f6" text-anchor="middle">-</text>
 
         <!-- Bottom Power Rail Lines -->
-        <line x1="28" y1="176" x2="330" y2="176" stroke="#ef4444" stroke-width="1.2" stroke-dasharray="2 3" opacity="0.5" />
+        <line x1="28" y1="176" x2="${lineEndX}" y2="176" stroke="#ef4444" stroke-width="1.2" stroke-dasharray="2 3" opacity="0.5" />
         <line x1="20" y1="176" x2="25" y2="176" stroke="#ef4444" stroke-width="2" />
         <text x="13" y="179.5" font-size="10" font-weight="900" fill="#ef4444" text-anchor="middle">+</text>
 
-        <line x1="28" y1="188" x2="330" y2="188" stroke="#3b82f6" stroke-width="1.2" stroke-dasharray="2 3" opacity="0.5" />
+        <line x1="28" y1="188" x2="${lineEndX}" y2="188" stroke="#3b82f6" stroke-width="1.2" stroke-dasharray="2 3" opacity="0.5" />
         <line x1="20" y1="188" x2="25" y2="188" stroke="#3b82f6" stroke-width="2" />
         <text x="13" y="190.5" font-size="12" font-weight="900" fill="#3b82f6" text-anchor="middle">-</text>
 
@@ -229,11 +241,11 @@ export class WokwiBreadboardHalfElement extends HTMLElement {
           <text x="23" y="69.5">C</text>
           <text x="23" y="79">D</text>
           <text x="23" y="88.5">E</text>
-          <text x="329" y="50.5">A</text>
-          <text x="329" y="60">B</text>
-          <text x="329" y="69.5">C</text>
-          <text x="329" y="79">D</text>
-          <text x="329" y="88.5">E</text>
+          <text x="${rightLabelX}" y="50.5">A</text>
+          <text x="${rightLabelX}" y="60">B</text>
+          <text x="${rightLabelX}" y="69.5">C</text>
+          <text x="${rightLabelX}" y="79">D</text>
+          <text x="${rightLabelX}" y="88.5">E</text>
 
           <!-- Row Letters (F, G, H, I, J) -->
           <text x="23" y="120.5">F</text>
@@ -241,11 +253,11 @@ export class WokwiBreadboardHalfElement extends HTMLElement {
           <text x="23" y="139.5">H</text>
           <text x="23" y="149">I</text>
           <text x="23" y="158.5">J</text>
-          <text x="329" y="120.5">F</text>
-          <text x="329" y="130">G</text>
-          <text x="329" y="139.5">H</text>
-          <text x="329" y="149">I</text>
-          <text x="329" y="158.5">J</text>
+          <text x="${rightLabelX}" y="120.5">F</text>
+          <text x="${rightLabelX}" y="130">G</text>
+          <text x="${rightLabelX}" y="139.5">H</text>
+          <text x="${rightLabelX}" y="149">I</text>
+          <text x="${rightLabelX}" y="158.5">J</text>
         </g>
 
         <!-- Column Numbers -->
@@ -261,7 +273,29 @@ export class WokwiBreadboardHalfElement extends HTMLElement {
   }
 }
 
-export class WokwiBreadboardElement extends WokwiBreadboardHalfElement {}
+/**
+ * 30 Sütunluk Standart Yarım Boy Breadboard
+ */
+export class WokwiBreadboardHalfElement extends BaseBreadboardElement {
+  constructor() {
+    super();
+    this.cols = 30;
+    this.width = 352;
+    this.height = 206;
+  }
+}
+
+/**
+ * 60 Sütunluk Büyük Tam Boy Breadboard
+ */
+export class WokwiBreadboardElement extends BaseBreadboardElement {
+  constructor() {
+    super();
+    this.cols = 60;
+    this.width = 638;
+    this.height = 206;
+  }
+}
 
 // Register both names if not already defined
 if (!customElements.get('wokwi-breadboard-half')) {

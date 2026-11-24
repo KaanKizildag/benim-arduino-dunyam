@@ -201,10 +201,40 @@ export function verifyAllScenarios(): void {
   );
   console.log('  ✅ Negatif Test 1 (Desteklenmeyen Bileşen Tipi Raporlama) BAŞARILI');
 
-  // Negatif Test 2: Breadboard kapasite aşımı (>60 sütunluk aşırı büyük devre)
+  // Pozitif Test: 14 Dirençli Karmaşık Devre (30 sütun yetmediğinde hata vermek yerine otomatik 60 sütunluk Büyük Breadboard'a geçiş)
+  const autoExpandComponents = [];
+  const autoExpandConnections = [];
+  for (let i = 1; i <= 14; i++) {
+    autoExpandComponents.push({
+      id: `r${i}`,
+      type: 'wokwi-resistor',
+      props: { value: '220' },
+      label: `Direnç ${i}`
+    });
+    autoExpandConnections.push({ from: 'uno.D13', to: `r${i}.1` });
+    autoExpandConnections.push({ from: `r${i}.2`, to: 'GND' });
+  }
+  const autoExpandRes = compileNetlistToBreadboard({
+    board: 'arduino-uno',
+    components: autoExpandComponents,
+    connections: autoExpandConnections
+  });
+  console.log('  [AutoExpand errors]:', autoExpandRes.errors);
+  console.log('  [AutoExpand warnings]:', autoExpandRes.warnings);
+  assertCondition(
+    autoExpandRes.breadboardType === 'full',
+    'Karmaşık devrede otomatik olarak Büyük Breadboard (60 Sütun) seçilmeliydi!'
+  );
+  assertCondition(
+    autoExpandRes.errors.length === 0,
+    'Büyük breadboard sayesinde kapasite hatası alınmadan yerleşim tamamlanmalıydı!'
+  );
+  console.log('  ✅ Otomatik Büyük Breadboard (Full 60 Sütun) Geçiş Testi BAŞARILI');
+
+  // Negatif Test 2: Büyük Breadboard Kapasite Aşımı (>120 sütunluk aşırı devasa devre)
   const hugeComponents = [];
   const hugeConnections = [];
-  for (let i = 1; i <= 14; i++) {
+  for (let i = 1; i <= 28; i++) {
     hugeComponents.push({
       id: `r${i}`,
       type: 'wokwi-resistor',
@@ -220,10 +250,10 @@ export function verifyAllScenarios(): void {
     connections: hugeConnections
   });
   assertCondition(
-    overflowRes.errors.some(e => e.includes('Breadboard kapasitesi aşıldı')),
-    'Breadboard kapasite aşımı hatası yakalanmalıydı!'
+    overflowRes.errors.some(e => e.includes('Büyük breadboard kapasitesi aşıldı') || e.includes('Breadboard kapasitesi aşıldı')),
+    'Büyük breadboard kapasite aşımı hatası yakalanmalıydı!'
   );
-  console.log('  ✅ Negatif Test 2 (Breadboard Kapasite Aşımı Hatası) BAŞARILI');
+  console.log('  ✅ Negatif Test 2 (Büyük Breadboard Kapasite Aşımı Hatası) BAŞARILI');
 
   console.log('\n==============================================================');
   console.log(` TÜM TESTLER BAŞARIYLA GEÇTİ! (${passedCount}/${Object.keys(ALL_TEST_SCENARIOS).length} senaryo + 2 negatif test)`);

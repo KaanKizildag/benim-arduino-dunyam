@@ -1073,6 +1073,43 @@ def validate_normalized_project(proj: ProjeTasarimi) -> List[str]:
     return errors
 
 
+def build_token_safe_circuit_repair_prompt(
+    errors: List[str],
+    current_output: str,
+    user_prompt: str,
+    inventory: Optional[List[str]] = None
+) -> str:
+    """
+    Token korumalı ve hedef odaklı devre onarım promptu:
+    Gereksiz token tüketimini önlemek için hatalı çıktının sadece gerekli bölümlerini kırpar
+    ve modele tam olarak hangi bağlantıların ve komponentlerin hatalı olduğunu bildirir.
+    Maksimum token tasarrufu sağlar.
+    """
+    err_bullets = "\n".join(f"- {e}" for e in errors[:8])
+    truncated_output = (current_output or "").strip()
+    if len(truncated_output) > 1800:
+        truncated_output = truncated_output[:1800] + "\n... [kalan JSON kırpıldı]"
+
+    inv_str = f"\nENVANTER:\n{json.dumps(inventory, ensure_ascii=False)}" if inventory else ""
+
+    return f"""DİKKAT: Önceki ürettiğin devre ve kod çıktısında aşağıdaki bağlantı/komponent hataları tespit edildi:
+{err_bullets}
+
+KULLANICI PROJE İSTEĞİ:
+"{user_prompt}"{inv_str}
+
+HATALI ÇIKTI ÖZETİ:
+{truncated_output}
+
+GÖREV (TOKEN KORUMALI DÜZELTME):
+Lütfen projeyi baştan üretmeden, SADECE yukarıdaki bağlantı/komponent hatalarını ve pin uyumsuzluklarını düzelterek geçerli bir JSON nesnesi üret:
+- Devre şemasında (netlist.components) tanımlanan her bileşenin en az 2 pini doğru yerlere bağlanmalı (boşta bacak kalmamalı).
+- Aktif parçalar (LED, Servo, Buzzer, Sensör) mutlaka Arduino'nun ilgili sinyal pinine (uno.D* veya uno.A*) bağlanmalı.
+- Kısa devre yapılmamalı (5V ile GND veya aynı parçanın iki ucu birleştirilemez).
+- arduino_kodu içindeki pinler devredeki uno.* pinleriyle %100 birebir uyuşmalı.
+Sadece geçerli JSON nesnesi döndür."""
+
+
 def build_repair_prompt(
     raw_output: str,
     errors: List[str],
@@ -1923,6 +1960,159 @@ def validate_one_shot_topology_and_code(
     return blocking_errors, report
 
 
+def repair_circuit_with_llm(
+    current_text: str,
+    prompt: str,
+    inventory: List[str],
+    chosen_model: str,
+    provider_used: str,
+    ollama_url: str = "http://127.0.0.1:11434",
+    api_key: Optional[str] = None,
+    max_attempts: int = 2,
+    progress_callback: Optional[Callable[[int, int, List[str]], None]] = None
+) -> Tuple[Optional[Dict[str, Any]], str, List[str], List[str], bool]:
+    """
+    Token korumalı AI Devre Onarım Döngüsü:
+    Modelin ilk çıktısındaki bileşen, pin, kısa devre ve kod uyumsuzluğu hatalarını inceler.
+    Hata varsa modeli en fazla `max_attempts` kez arayarak hataların düzeltilmesini sağlar.
+    Token tasarrufu için prompt kırpılır ve num_predict/max_tokens sınırlandırılır.
+
+    Dönüş:
+    (norm_data, raw_code, blocking_errors, warnings, was_repaired)
+    """
+    attempt = 0
+    was_repaired = False
+    all_warnings: List[str] = []
+    latest_text = current_text
+    last_blocking_errors: List[str] = []
+    last_norm_data: Optional[Dict[str, Any]] = None
+    last_raw_code: str = ""
+
+    while True:
+        parse_errors: List[str] = []
+        parsed = None
+        try:
+            cleaned = clean_llm_json_response(latest_text)
+            parsed = json.loads(cleaned)
+            if not isinstance(parsed, dict) or not isinstance(parsed.get("netlist"), dict):
+                parse_errors.append("AI yanıtında geçerli bir 'netlist' nesnesi bulunamadı.")
+        except Exception as e:
+            parse_errors.append(f"JSON ayrıştırma hatası: {e}")
+
+        norm_data: Optional[Dict[str, Any]] = None
+        raw_code = ""
+        blocking_errors: List[str] = []
+
+        if parsed and isinstance(parsed, dict) and not parse_errors:
+            raw_code = sanitize_arduino_identifiers(str(parsed.get("arduino_kodu") or "").strip())
+            if not raw_code:
+                parse_errors.append("AI yanıtında 'arduino_kodu' alanı eksik veya boş.")
+
+            norm_data, norm_warnings = normalize_project_dict(parsed)
+            all_warnings.extend(norm_warnings)
+
+            # 1) Kodda/istemde kullanılıp netlist'te unutulan bileşenleri tamamla
+            completed_netlist, actuator_notes = ensure_code_actuators_in_netlist(
+                netlist_dict=norm_data["netlist"],
+                code=raw_code,
+                prompt=prompt
+            )
+            # 2) 2 bacaklı LDR gerilim bölücü dirençleri tamamla
+            completed_netlist, topo_notes = auto_complete_electrical_topology(completed_netlist)
+            norm_data["netlist"] = completed_netlist
+            all_warnings.extend(actuator_notes + topo_notes)
+
+            try:
+                netlist_obj = CircuitNetlist(**norm_data["netlist"])
+                crit_errors, _ = validate_one_shot_topology_and_code(
+                    netlist=netlist_obj,
+                    akis=None,
+                    code=raw_code
+                )
+                # Akış diyagramı eksik uyarısını bu aşamada blocking_errors'dan filtrele (akış henüz oluşturulmadı)
+                filtered_crit = [e for e in crit_errors if "akış diyagramı" not in e.lower() and "akis_" not in e.lower()]
+                blocking_errors.extend(filtered_crit)
+            except Exception as e:
+                blocking_errors.append(f"Netlist şema hatası: {e}")
+        else:
+            blocking_errors.extend(parse_errors)
+
+        last_blocking_errors = blocking_errors
+        last_norm_data = norm_data
+        last_raw_code = raw_code
+
+        # Eğer hiç bloklayan devre/komponent hatası kalmadıysa onarım tamam!
+        if not blocking_errors and norm_data is not None and raw_code:
+            return norm_data, raw_code, [], all_warnings, was_repaired
+
+        # Eğer hata varsa ve henüz onarım hakkımız varsa (Token Korumalı Sınır):
+        if attempt < max_attempts:
+            attempt += 1
+            print(f"[Circuit Repair AI] Bağlantı/bileşen hataları tespit edildi ({len(blocking_errors)} adet), onarım denemesi {attempt}/{max_attempts}: {blocking_errors}")
+            if progress_callback:
+                progress_callback(attempt, max_attempts, blocking_errors)
+
+            repair_prompt = build_token_safe_circuit_repair_prompt(
+                errors=blocking_errors,
+                current_output=latest_text,
+                user_prompt=prompt,
+                inventory=inventory
+            )
+
+            repaired_text: Optional[str] = None
+            if provider_used == "ollama":
+                clean_model = chosen_model.replace("ollama/", "")
+                payload = {
+                    "model": clean_model,
+                    "system": ONE_SHOT_SYSTEM_PROMPT,
+                    "prompt": repair_prompt,
+                    "stream": False,
+                    "options": {
+                        "temperature": 0.1,
+                        "num_predict": 1200
+                    }
+                }
+                if not any(k in clean_model.lower() for k in ("deepseek-r1", "qwq", "r1")):
+                    payload["format"] = "json"
+                try:
+                    res = httpx.post(f"{ollama_url}/api/generate", json=payload, timeout=90.0)
+                    if res.status_code == 200:
+                        repaired_text = res.json().get("response", "")
+                except Exception as e:
+                    print(f"[Circuit Repair AI] Ollama repair çağrısı hatası: {e}")
+            else:
+                try:
+                    from litellm import completion
+                    resp = completion(
+                        model=chosen_model,
+                        messages=[
+                            {"role": "system", "content": ONE_SHOT_SYSTEM_PROMPT},
+                            {"role": "user", "content": repair_prompt}
+                        ],
+                        response_format={"type": "json_object"},
+                        api_key=api_key,
+                        temperature=0.1,
+                        max_tokens=1500
+                    )
+                    repaired_text = resp.choices[0].message.content
+                except Exception as e:
+                    print(f"[Circuit Repair AI] Cloud AI repair çağrısı hatası: {e}")
+
+            if repaired_text and repaired_text.strip():
+                latest_text = repaired_text
+                was_repaired = True
+                continue
+            else:
+                # LLM'den yanıt alınamadıysa daha fazla token harcamadan dur
+                break
+        else:
+            # Token koruma sınırı doldu
+            print(f"[Circuit Repair AI] Token koruma sınırı doldu ({max_attempts} deneme yapıldı). Sonuçlar finalize ediliyor.")
+            break
+
+    return last_norm_data, last_raw_code, last_blocking_errors, all_warnings, was_repaired
+
+
 def generate_full_project_one_shot(
     prompt: str,
     inventory: List[str],
@@ -2032,34 +2222,23 @@ Yukarıdaki isteğe göre SADECE istenen parçaları içeren `netlist` (componen
         raise RuntimeError(msg)
 
     try:
-        cleaned = clean_llm_json_response(raw_text)
-        parsed = json.loads(cleaned)
-        if not isinstance(parsed, dict):
-            raise ValueError("AI çıktısı geçerli bir JSON nesnesi değil.")
-
-        if not isinstance(parsed.get("netlist"), dict):
-            raise ValueError("AI yanıtında 'netlist' alanı eksik.")
-        # Değişken adlarındaki Türkçe harfler avr-gcc'de derleme hatası verir (örn. ESİK_DEGER)
-        raw_code = sanitize_arduino_identifiers(str(parsed.get("arduino_kodu") or "").strip())
-        if not raw_code:
-            raise ValueError("AI yanıtında 'arduino_kodu' alanı eksik veya boş.")
-
-        norm_data, norm_warnings = normalize_project_dict(parsed)
-
-        # 1) Kodda/istemde kullanılıp netlist'te unutulan bileşenleri (örn. Servo, 2. LDR) tamamla
-        completed_netlist, actuator_notes = ensure_code_actuators_in_netlist(
-            netlist_dict=norm_data["netlist"],
-            code=raw_code,
-            prompt=prompt
+        # Token korumalı AI Devre Onarım Döngüsü (Bağlantı/komponent hatalarında modele gidip düzelttirme):
+        norm_data, raw_code, circuit_errors, circuit_warnings, was_repaired = repair_circuit_with_llm(
+            current_text=raw_text,
+            prompt=prompt,
+            inventory=inventory,
+            chosen_model=chosen_model,
+            provider_used=provider_used,
+            ollama_url=ollama_url,
+            api_key=api_key,
+            max_attempts=2
         )
-        # 2) 2 bacaklı LDR gerilim bölücü 10kΩ dirençleri unutulmuşsa otomatik tamamla
-        completed_netlist, topo_notes = auto_complete_electrical_topology(completed_netlist)
-        norm_data["netlist"] = completed_netlist
-        norm_warnings.extend(actuator_notes + topo_notes)
+        if not norm_data or not raw_code:
+            raise ValueError(" | ".join(circuit_errors) or "AI yanıtı geçerli devre ve koda dönüştürülemedi.")
 
         netlist_obj = CircuitNetlist(**norm_data["netlist"])
 
-        # 3) Kesinleşmiş netlist ve son Arduino kodundan ayrı, odaklanmış çağrıyla AkisDiyagrami üret
+        # Kesinleşmiş netlist ve son Arduino kodundan odaklanmış çağrıyla AkisDiyagrami üret
         flow_obj, flow_warnings, flow_status = generate_flow_from_code(
             prompt=prompt,
             netlist=netlist_obj,
@@ -2070,14 +2249,13 @@ Yukarıdaki isteğe göre SADECE istenen parçaları içeren `netlist` (componen
             api_key=api_key,
             clean_json_fn=clean_llm_json_response
         )
-        norm_warnings.extend(flow_warnings)
 
         blocking_errors, report = validate_one_shot_topology_and_code(
             netlist=netlist_obj,
             akis=flow_obj,
             code=raw_code
         )
-        if flow_status == "REPAIRED":
+        if was_repaired or flow_status == "REPAIRED":
             report.auto_repaired = True
         if flow_warnings:
             report.warnings.extend(flow_warnings)
@@ -2085,17 +2263,18 @@ Yukarıdaki isteğe göre SADECE istenen parçaları içeren `netlist` (componen
             raise ValueError(" | ".join(blocking_errors))
 
         steps = build_baglanti_adimlari_from_netlist(netlist_obj)
+        norm_warnings = circuit_warnings
         project = ProjeTasarimi(
-            proje_adi=str(parsed.get("proje_adi") or "").strip() or (prompt.strip()[:42] or "Arduino Projem"),
-            karsilama_mesaji=str(parsed.get("karsilama_mesaji") or "").strip() or "Devren, akış şeman ve Arduino kodun hazır!",
+            proje_adi=(prompt.strip()[:42] or "Arduino Projem"),
+            karsilama_mesaji="Devren, akış şeman ve Arduino kodun hazır!",
             gerekli_parcalar=norm_data.get("gerekli_parcalar") or ["ARDUINO_UNO", "BREADBOARD"],
             netlist=netlist_obj,
             baglanti_adimlari=steps,
             akis_adimlari=None,
             akis_diyagrami=flow_obj,
             arduino_kodu=raw_code,
-            guvenlik_notu=str(parsed.get("guvenlik_notu") or "").strip() or "Parçaları breadboard pinlerine dikkatlice yerleştir.",
-            uyarilar=norm_warnings + list(report.warnings),
+            guvenlik_notu="Parçaları breadboard pinlerine dikkatlice yerleştir.",
+            uyarilar=circuit_warnings + list(report.warnings),
             verification=report
         )
 
@@ -2110,7 +2289,7 @@ Yukarıdaki isteğe göre SADECE istenen parçaları içeren `netlist` (componen
             user_prompt=user_prompt,
             raw_response=raw_text,
             processed_output=project.model_dump(by_alias=True),
-            notes=list(report.checks) + norm_warnings + list(report.warnings)
+            notes=list(report.checks) + circuit_warnings + list(report.warnings)
         )
         return project
     except Exception as e:
@@ -2460,36 +2639,40 @@ Yukarıdaki isteğe göre SADECE istenen parçaları içeren `netlist` (componen
         yield format_sse({
             "type": "validating",
             "message": "Kablolama, akış adımları ve Arduino C++ kodu doğrulanıyor...",
-            "progressPercent": 96
+            "progressPercent": 94
         })
 
-        cleaned = clean_llm_json_response(accumulated_text)
-        parsed = json.loads(cleaned)
-        if not isinstance(parsed, dict):
-            raise ValueError("AI çıktısı geçerli bir JSON nesnesi değil.")
-        if not isinstance(parsed.get("netlist"), dict):
-            raise ValueError("AI yanıtında 'netlist' alanı eksik.")
-        # Değişken adlarındaki Türkçe harfler avr-gcc'de derleme hatası verir (örn. ESİK_DEGER)
-        raw_code = sanitize_arduino_identifiers(str(parsed.get("arduino_kodu") or "").strip())
-        if not raw_code:
-            raise ValueError("AI yanıtında 'arduino_kodu' alanı eksik veya boş.")
+        # Token korumalı AI Devre Onarım Döngüsü (Bağlantı/komponent hatalarında modele gidip düzelttirme):
+        repair_events = []
+        def on_repair_progress(attempt_idx: int, max_att: int, errs: List[str]):
+            repair_events.append({
+                "type": "stage",
+                "stageIndex": 2,
+                "title": f"Devre Bağlantıları Onarılıyor ({attempt_idx}/{max_att})",
+                "subtitle": f"Bileşen bağlantılarındaki {len(errs)} tutarsızlık yapay zekaya iletildi, düzeltiliyor...",
+                "progressPercent": 65 + (attempt_idx * 10)
+            })
 
-        norm_data, norm_warnings = normalize_project_dict(parsed)
-
-        # 1) Kodda/istemde kullanılıp netlist'te unutulan bileşenleri tamamla
-        completed_netlist, actuator_notes = ensure_code_actuators_in_netlist(
-            netlist_dict=norm_data["netlist"],
-            code=raw_code,
-            prompt=prompt
+        norm_data, raw_code, circuit_errors, circuit_warnings, was_repaired = repair_circuit_with_llm(
+            current_text=accumulated_text,
+            prompt=prompt,
+            inventory=inventory,
+            chosen_model=chosen_model,
+            provider_used=provider_used,
+            ollama_url=ollama_url,
+            api_key=api_key,
+            max_attempts=2,
+            progress_callback=on_repair_progress
         )
-        # 2) 2 bacaklı LDR gerilim bölücü 10kΩ dirençleri unutulmuşsa otomatik tamamla
-        completed_netlist, topo_notes = auto_complete_electrical_topology(completed_netlist)
-        norm_data["netlist"] = completed_netlist
-        norm_warnings.extend(actuator_notes + topo_notes)
+        for ev in repair_events:
+            yield format_sse(ev)
+
+        if not norm_data or not raw_code:
+            raise ValueError(" | ".join(circuit_errors) or "AI yanıtı geçerli devre ve koda dönüştürülemedi.")
 
         netlist_obj = CircuitNetlist(**norm_data["netlist"])
 
-        # 3) Kesinleşmiş netlist ve son Arduino kodundan ayrı, odaklanmış çağrıyla AkisDiyagrami üret
+        # Kesinleşmiş netlist ve son Arduino kodundan ayrı, odaklanmış çağrıyla AkisDiyagrami üret
         yield format_sse({
             "type": "stage",
             "stageIndex": 4,
@@ -2507,30 +2690,31 @@ Yukarıdaki isteğe göre SADECE istenen parçaları içeren `netlist` (componen
             api_key=api_key,
             clean_json_fn=clean_llm_json_response
         )
-        norm_warnings.extend(flow_warnings)
+        circuit_warnings.extend(flow_warnings)
 
         blocking_errors, report = validate_one_shot_topology_and_code(
             netlist=netlist_obj,
             akis=flow_obj,
             code=raw_code
         )
-        if flow_status == "REPAIRED":
+        if was_repaired or flow_status == "REPAIRED":
             report.auto_repaired = True
         if blocking_errors:
             raise ValueError(" | ".join(blocking_errors))
 
         steps = build_baglanti_adimlari_from_netlist(netlist_obj)
+        norm_warnings = circuit_warnings
         project = ProjeTasarimi(
-            proje_adi=str(parsed.get("proje_adi") or "").strip() or (prompt.strip()[:42] or "Arduino Projem"),
-            karsilama_mesaji=str(parsed.get("karsilama_mesaji") or "").strip() or "Devren, akış şeman ve Arduino kodun hazır!",
+            proje_adi=(prompt.strip()[:42] or "Arduino Projem"),
+            karsilama_mesaji="Devren, akış şeman ve Arduino kodun hazır!",
             gerekli_parcalar=norm_data.get("gerekli_parcalar") or ["ARDUINO_UNO", "BREADBOARD"],
             netlist=netlist_obj,
             baglanti_adimlari=steps,
             akis_adimlari=None,
             akis_diyagrami=flow_obj,
             arduino_kodu=raw_code,
-            guvenlik_notu=str(parsed.get("guvenlik_notu") or "").strip() or "Parçaları breadboard pinlerine dikkatlice yerleştir.",
-            uyarilar=norm_warnings + list(report.warnings),
+            guvenlik_notu="Parçaları breadboard pinlerine dikkatlice yerleştir.",
+            uyarilar=circuit_warnings + list(report.warnings),
             verification=report
         )
 
@@ -2545,7 +2729,7 @@ Yukarıdaki isteğe göre SADECE istenen parçaları içeren `netlist` (componen
             user_prompt=user_prompt,
             raw_response=accumulated_text,
             processed_output=project.model_dump(by_alias=True),
-            notes=list(report.checks) + norm_warnings + list(report.warnings)
+            notes=list(report.checks) + circuit_warnings + list(report.warnings)
         )
 
         yield format_sse({

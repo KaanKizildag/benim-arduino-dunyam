@@ -206,7 +206,10 @@ export function validateNetlist(netlist: CircuitNetlist): ValidationReport {
 /**
  * Bir breadboard delik ismini ("5C", "14E", "6J", "bn.5", "bp.1") fiziksel iletken şerit düğümüne çevirir.
  */
-function holeNameToStripNode(holeName?: string): { node: string | null; error?: string } {
+function holeNameToStripNode(
+  holeName?: string,
+  maxCols: number = BREADBOARD_GEOMETRY.maxCols
+): { node: string | null; error?: string } {
   if (!holeName) return { node: null };
   const h = holeName.trim();
 
@@ -215,10 +218,10 @@ function holeNameToStripNode(holeName?: string): { node: string | null; error?: 
   if (railMatch) {
     const prefix = railMatch[1].toLowerCase();
     const col = parseInt(railMatch[2], 10);
-    if (col < 1 || col > BREADBOARD_GEOMETRY.maxCols) {
+    if (col < 1 || col > maxCols) {
       return {
         node: prefix === 'bn' ? 'bb:rail:gnd' : 'bb:rail:5v',
-        error: `Geçersiz güç rayı sütunu: '${h}' (Sütun 1..${BREADBOARD_GEOMETRY.maxCols} aralığında olmalı).`
+        error: `Geçersiz güç rayı sütunu: '${h}' (Sütun 1..${maxCols} aralığında olmalı).`
       };
     }
     return { node: prefix === 'bn' ? 'bb:rail:gnd' : 'bb:rail:5v' };
@@ -232,13 +235,13 @@ function holeNameToStripNode(holeName?: string): { node: string | null; error?: 
   if (termMatch) {
     const col = parseInt(termMatch[1], 10);
     const row = termMatch[2].toUpperCase();
-    if (col < 1 || col > BREADBOARD_GEOMETRY.maxCols) {
+    if (col < 1 || col > maxCols) {
       return {
         node: null,
-        error: `Delik sütunu sınır dışında: '${h}' (1..${BREADBOARD_GEOMETRY.maxCols} olmalı).`
+        error: `Delik sütunu sınır dışında: '${h}' (1..${maxCols} olmalı).`
       };
     }
-    const stripKey = getStripKey(col, row);
+    const stripKey = getStripKey(col, row, maxCols);
     return { node: `bb:strip:${stripKey}` };
   }
 
@@ -253,7 +256,8 @@ export function validateCompiledLayout(
   netlist: CircuitNetlist,
   nets: ElectricalNet[],
   components: PlacedComponent[],
-  wires: RoutedWire[]
+  wires: RoutedWire[],
+  maxCols: number = BREADBOARD_GEOMETRY.maxCols
 ): string[] {
   const errors: string[] = [];
   const uf = new LayoutUnionFind();
@@ -273,7 +277,7 @@ export function validateCompiledLayout(
     if (comp.isBreadboardMounted) {
       if (
         comp.startCol < 1 ||
-        comp.endCol > BREADBOARD_GEOMETRY.maxCols ||
+        comp.endCol > maxCols ||
         comp.startCol > comp.endCol
       ) {
         errors.push(
@@ -286,7 +290,7 @@ export function validateCompiledLayout(
       for (const [pinName, pin] of Object.entries(comp.pins)) {
         const fullPinKey = `${comp.id}.${pinName}`;
 
-        if (pin.col < 1 || pin.col > BREADBOARD_GEOMETRY.maxCols) {
+        if (pin.col < 1 || pin.col > maxCols) {
           errors.push(
             `Sütun sınır hatası: '${fullPinKey}' bacağı geçersiz sütunda (${pin.col}).`
           );
@@ -302,7 +306,7 @@ export function validateCompiledLayout(
         }
 
         // Aynı bileşenin iki bacağı aynı sütun şeridinde mi?
-        const sKey = getStripKey(pin.col, pin.row);
+        const sKey = getStripKey(pin.col, pin.row, maxCols);
         if (compStrips.has(sKey)) {
           errors.push(
             `Fiziksel Kısa Devre: '${comp.id}' bileşeninin iki bacağı aynı breadboard şeridine (${sKey}) takılmış!`
@@ -333,7 +337,7 @@ export function validateCompiledLayout(
   // 2. Kabloların elektriksel bağlantılarını Union-Find'a ekle
   function resolveWireEndpointNode(ep: RoutedWire['from']): string {
     if (ep.holeName) {
-      const { node, error } = holeNameToStripNode(ep.holeName);
+      const { node, error } = holeNameToStripNode(ep.holeName, maxCols);
       if (error) errors.push(error);
       if (node) return node;
     }

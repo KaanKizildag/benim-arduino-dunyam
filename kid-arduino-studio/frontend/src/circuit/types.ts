@@ -62,6 +62,33 @@ export interface PlacedComponent {
   pins: Record<string, AllocatedPin>;
 }
 
+export type BreadboardType = 'half' | 'full';
+
+export interface BreadboardConfig {
+  type: BreadboardType;
+  maxCols: number;
+  width: number;
+  height: number;
+  label: string;
+}
+
+export const BREADBOARD_CONFIGS: Record<BreadboardType, BreadboardConfig> = {
+  half: {
+    type: 'half',
+    maxCols: 30,
+    width: 344,
+    height: 204,
+    label: 'Standart Breadboard (30 Sütun)'
+  },
+  full: {
+    type: 'full',
+    maxCols: 60,
+    width: 638,
+    height: 204,
+    label: 'Büyük Breadboard (60 Sütun)'
+  }
+};
+
 export interface SceneBounds {
   minX: number;
   minY: number;
@@ -115,4 +142,7 @@ export interface AutoLayoutResult {
   highlightedRails: string;
   errors: string[];
   warnings: string[];
+  breadboardType?: BreadboardType;
+  breadboardWidth?: number;
+  breadboardCols?: number;
 }

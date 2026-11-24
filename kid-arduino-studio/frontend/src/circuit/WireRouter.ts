@@ -69,16 +69,22 @@ const UNO_PINS: Record<string, { x: number; y: number }> = {
 
 export class WireRouter {
   private offsets: RouterOffsets;
+  private maxCols: number = BREADBOARD_GEOMETRY.maxCols;
 
-  constructor(offsets: RouterOffsets) {
+  constructor(offsets: RouterOffsets, maxCols: number = BREADBOARD_GEOMETRY.maxCols) {
     this.offsets = offsets;
+    this.maxCols = maxCols;
   }
 
   public route(
     netlist: CircuitNetlist,
     allocatedPins: Record<string, AllocatedPin>,
-    providedNets?: ElectricalNet[]
+    providedNets?: ElectricalNet[],
+    maxCols?: number
   ): RoutedWire[] {
+    if (typeof maxCols === 'number') {
+      this.maxCols = maxCols;
+    }
     const wires: RoutedWire[] = [];
     const nets = providedNets ?? normalizeNetlist(netlist).nets;
 
@@ -95,7 +101,7 @@ export class WireRouter {
     const usedBreadboardHoles = new Set<string>();
 
     for (const p of Object.values(allocatedPins)) {
-      if (p.col >= 1 && p.col <= BREADBOARD_GEOMETRY.maxCols && p.holeName) {
+      if (p.col >= 1 && p.col <= this.maxCols && p.holeName) {
         usedBreadboardHoles.add(p.holeName.toUpperCase());
       }
     }
@@ -150,7 +156,7 @@ export class WireRouter {
         .filter((item): item is { key: string; pin: AllocatedPin } => Boolean(item.pin));
 
       const bbPins = resolvedPins.filter(
-        item => item.pin.col >= 1 && item.pin.col <= BREADBOARD_GEOMETRY.maxCols && item.pin.row !== 'offboard'
+        item => item.pin.col >= 1 && item.pin.col <= this.maxCols && item.pin.row !== 'offboard'
       );
       const offBoardPins = resolvedPins.filter(
         item => item.pin.col === 0 || item.pin.row === 'offboard'
@@ -465,10 +471,10 @@ export class WireRouter {
   }
 
   /**
-   * Güç rayı üzerinde 1..30 aralığında boş bir sütun seçer (Asla 0 döndürmez).
+   * Güç rayı üzerinde 1..maxCols aralığında boş bir sütun seçer (Asla 0 döndürmez).
    */
   private pickFreeRailCol(preferredCol: number, usedCols: Set<number>): number {
-    const maxCols = BREADBOARD_GEOMETRY.maxCols;
+    const maxCols = this.maxCols;
 
     if (preferredCol >= 1 && preferredCol <= maxCols && !usedCols.has(preferredCol)) {
       usedCols.add(preferredCol);
@@ -490,7 +496,7 @@ export class WireRouter {
       }
     }
 
-    // Off-board bileşenler (preferredCol === 0) için sağ uçtan (30'dan geriye) boş sütun tahsis et
+    // Off-board bileşenler (preferredCol === 0) için sağ uçtan geriye boş sütun tahsis et
     for (let c = maxCols; c >= 2; c--) {
       if (!usedCols.has(c)) {
         usedCols.add(c);
@@ -521,7 +527,7 @@ export class WireRouter {
   }
 
   private getBreadboardHolePos(col: number, row: string): { x: number; y: number } {
-    const local = getHoleCoords(col, row);
+    const local = getHoleCoords(col, row, this.maxCols);
     return {
       x: this.offsets.bb.x + local.x,
       y: this.offsets.bb.y + local.y

@@ -332,16 +332,18 @@
           class="absolute z-10 p-[8px] rounded-2xl bg-slate-800/45 border border-slate-700/70 shadow-lg"
           :style="{
             left: `${SCENE_LAYOUT.bb.x - SCENE_LAYOUT.bb.cardPad}px`,
-            top: `${SCENE_LAYOUT.bb.y - SCENE_LAYOUT.bb.cardPad}px`
+            top: `${SCENE_LAYOUT.bb.y - SCENE_LAYOUT.bb.cardPad}px`,
+            width: `${(layoutResult.breadboardWidth || SCENE_LAYOUT.bb.width) + SCENE_LAYOUT.bb.cardPad * 2}px`
           }"
         >
           <!-- Sıfır Paddingli İç Kutu: Orijini Tam (448, 108) -->
           <div class="relative">
-            <wokwi-breadboard-half
+            <component
+              :is="layoutResult.breadboardType === 'full' ? 'wokwi-breadboard' : 'wokwi-breadboard-half'"
               id="comp-breadboard"
               :highlighted-columns="highlightedColsStr"
               :highlighted-rails="layoutResult.highlightedRails"
-            ></wokwi-breadboard-half>
+            ></component>
 
             <!-- BREADBOARD ÜZERİNE TAKILAN PARÇALAR -->
             <div
@@ -366,7 +368,7 @@
           </div>
 
           <div class="text-[10px] font-black text-center text-amber-300 mt-1.5 pointer-events-none">
-            🟨 Breadboard (Aynı Sütundaki A-B-C-D-E Pinleri İçeriden Birbirine Bağlıdır)
+            {{ layoutResult.breadboardType === 'full' ? '🟨 Büyük Breadboard (60 Sütun - İç İletken Hatlar A-E ve F-J)' : '🟨 Breadboard (30 Sütun - İç İletken Hatlar A-E ve F-J)' }}
           </div>
         </div>
 

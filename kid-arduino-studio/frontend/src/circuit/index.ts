@@ -34,7 +34,8 @@ export const DEFAULT_ROUTER_OFFSETS: RouterOffsets = {
 function computeSceneBounds(
   components: PlacedComponent[],
   wires: RoutedWire[],
-  offsets: RouterOffsets
+  offsets: RouterOffsets,
+  breadboardWidth: number = SCENE_LAYOUT.bb.width
 ): SceneBounds {
   const unoPad = SCENE_LAYOUT.uno.cardPad;
   const bbPad = SCENE_LAYOUT.bb.cardPad;
@@ -55,10 +56,10 @@ function computeSceneBounds(
     }
   };
 
-  // Breadboard kartı
+  // Breadboard kartı (dinamik genişlik: half = 344px, full = 638px)
   includePoint(offsets.bb.x - bbPad, offsets.bb.y - bbPad);
   includePoint(
-    offsets.bb.x + SCENE_LAYOUT.bb.width + bbPad,
+    offsets.bb.x + breadboardWidth + bbPad,
     offsets.bb.y + SCENE_LAYOUT.bb.height + bbPad + SCENE_LAYOUT.bb.captionHeight
   );
 
@@ -124,15 +125,16 @@ export function compileNetlistToBreadboard(
   applyLabelStaggering(allocation.components);
 
   // 4. Net Tabanlı Kablo ve Şerit Yönlendirmesi (WireRouter)
-  const router = new WireRouter(offsets);
-  const wires = router.route(netlist, allocation.allocatedPins, nets);
+  const router = new WireRouter(offsets, allocation.maxCols);
+  const wires = router.route(netlist, allocation.allocatedPins, nets, allocation.maxCols);
 
   // 5. Son Fiziksel Yerleşim ve Elektriksel Bütünlük Doğrulaması
   const layoutErrors = validateCompiledLayout(
     netlist,
     nets,
     allocation.components,
-    wires
+    wires,
+    allocation.maxCols
   );
 
   // 6. Aktif Sütunlar ve Raylar
@@ -140,7 +142,7 @@ export function compileNetlistToBreadboard(
   for (const comp of allocation.components) {
     if (comp.isBreadboardMounted) {
       for (const pin of Object.values(comp.pins)) {
-        if (pin.col >= 1 && pin.col <= 30) {
+        if (pin.col >= 1 && pin.col <= allocation.maxCols) {
           highlightedCols.add(pin.col);
         }
       }
@@ -163,7 +165,7 @@ export function compileNetlistToBreadboard(
     ...allocation.warnings
   ];
 
-  const bounds = computeSceneBounds(allocation.components, wires, offsets);
+  const bounds = computeSceneBounds(allocation.components, wires, offsets, allocation.breadboardWidth);
 
   return {
     netlist,
@@ -174,6 +176,9 @@ export function compileNetlistToBreadboard(
     highlightedColumns: Array.from(highlightedCols).sort((a, b) => a - b),
     highlightedRails: 'bp.+,bp.-',
     errors: allErrors,
-    warnings: allWarnings
+    warnings: allWarnings,
+    breadboardType: allocation.breadboardType,
+    breadboardWidth: allocation.breadboardWidth,
+    breadboardCols: allocation.maxCols
   };
 }
