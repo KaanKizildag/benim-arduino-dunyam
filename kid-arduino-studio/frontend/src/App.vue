@@ -179,48 +179,112 @@
       </div>
     </div>
 
-    <!-- F) AI Yanıt Hatası Modalı (Fallback / Otomatik Render Yapılmaz!) -->
+    <!-- F) AI Yanıt / Güvenlik / Proje Uygunluk Uyarısı Modalı -->
     <div
       v-if="aiErrorMessage"
-      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs"
+      class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/75 backdrop-blur-xs select-none animate-in fade-in duration-150"
       @click.self="aiErrorMessage = null"
     >
-      <div class="bg-white border-[3px] border-slate-900 rounded-[32px] p-6 sm:p-7 max-w-md w-full shadow-[0_12px_0_rgba(15,23,42,0.3)] flex flex-col items-center text-center">
-        <div class="w-16 h-16 rounded-2xl bg-rose-100 border-2 border-slate-900 flex items-center justify-center text-4xl mb-3 shadow-xs">
-          ⚠️
-        </div>
-        <h3 class="text-xl font-black text-slate-900 mb-1.5">
-          Yapay Zekadan Yanıt Alınamadı
-        </h3>
-        <p class="text-xs text-rose-700 bg-rose-50 border-2 border-rose-300 rounded-2xl p-3.5 font-bold mb-4 leading-relaxed w-full text-left break-words">
-          {{ aiErrorMessage }}
-        </p>
-        <p class="text-[11px] text-slate-600 font-bold mb-5 leading-relaxed">
-          Hatalı veya rastgele devre çizilmemesi için işlem durduruldu. AI modelini kontrol edebilir veya Admin AI Log ekranından detayı inceleyebilirsin.
-        </p>
-        <div class="w-full flex flex-col sm:flex-row gap-2">
+      <div class="bg-white border-[3px] border-slate-900 rounded-[32px] p-5 sm:p-7 max-w-lg w-full shadow-[0_14px_0_rgba(15,23,42,0.35)] flex flex-col items-center text-center">
+        
+        <!-- DURUM 1: GÜVENLİK FİLTRESİ (Zararlı / Bomba / Silah) -->
+        <template v-if="isSafetyViolation">
+          <div class="w-16 h-16 rounded-2xl bg-rose-100 border-2 border-slate-900 flex items-center justify-center text-3xl mb-3 shadow-[0_3px_0_#9f1239] animate-bounce">
+            🛡️
+          </div>
+          <h3 class="text-lg sm:text-xl font-black text-rose-950 mb-1">
+            Güvenlik Filtresi Uyarısı
+          </h3>
+          <p class="text-xs text-rose-950 bg-rose-50 border-2 border-rose-300 rounded-2xl p-4 font-bold mb-4 leading-relaxed w-full text-left whitespace-pre-line">
+            {{ aiErrorMessage }}
+          </p>
           <button
             type="button"
-            @click="aiErrorMessage = null; openAdminLogsModal()"
-            class="flex-1 py-3 px-4 rounded-2xl bg-slate-900 hover:bg-slate-800 border-2 border-slate-900 text-amber-300 font-black text-xs transition cursor-pointer"
+            @click="aiErrorMessage = null; currentStep = 1"
+            class="w-full py-3.5 px-6 rounded-2xl bg-[#4ade80] hover:bg-[#22c55e] border-2 border-slate-900 text-slate-950 font-black text-sm shadow-[0_4px_0_#15803d] active:translate-y-0.5 active:shadow-none cursor-pointer transition flex items-center justify-center gap-2"
           >
-            🛠️ Admin AI Loglarını Gör
+            <span>Anladım, Güvenli Bir Proje Yapalım! 🚀</span>
           </button>
+        </template>
+
+        <!-- DURUM 2: PROJE DIŞI SORU (Hava durumu, sağlık, günlük sohbet) -->
+        <template v-else-if="isOffTopicPrompt">
+          <div class="w-16 h-16 rounded-2xl bg-amber-100 border-2 border-slate-900 flex items-center justify-center text-3xl mb-3 shadow-[0_3px_0_#ca8a04] animate-bounce">
+            💡
+          </div>
+          <h3 class="text-lg sm:text-xl font-black text-slate-900 mb-1">
+            Arduino Proje Fikri Gerekli
+          </h3>
+          <p class="text-xs text-slate-800 bg-amber-50 border-2 border-amber-300 rounded-2xl p-4 font-bold mb-3.5 leading-relaxed w-full text-left whitespace-pre-line">
+            {{ aiErrorMessage }}
+          </p>
+
+          <!-- Popüler Proje Fikirleri Hızlı Seçim Butonları -->
+          <div class="w-full flex flex-col gap-1.5 mb-4 text-left">
+            <span class="text-[11px] font-black text-slate-600">İstersen bu harika projelerden birini deneyebilirsin:</span>
+            <div class="flex flex-col gap-1.5">
+              <button
+                v-for="sug in sampleSuggestedPrompts"
+                :key="sug"
+                type="button"
+                @click="applySuggestedPrompt(sug)"
+                class="w-full px-3 py-2 rounded-xl bg-white hover:bg-[#fef08a] border-2 border-slate-900 text-xs font-black text-slate-800 cursor-pointer shadow-2xs text-left active:translate-y-0.5 transition flex items-center gap-2"
+              >
+                <span>⚡</span>
+                <span class="truncate">{{ sug }}</span>
+                <span class="ml-auto text-[10px] text-sky-700 shrink-0 font-bold">Dene ➔</span>
+              </button>
+            </div>
+          </div>
+
           <button
             type="button"
-            @click="aiErrorMessage = null; isAIModelOpen = true"
-            class="flex-1 py-3 px-4 rounded-2xl bg-amber-200 hover:bg-amber-300 border-2 border-slate-900 text-slate-950 font-black text-xs transition cursor-pointer"
+            @click="aiErrorMessage = null; currentStep = 1"
+            class="w-full py-3 px-6 rounded-2xl bg-gradient-to-r from-[#38bdf8] to-[#0284c7] hover:from-[#7dd3fc] hover:to-[#0369a1] border-2 border-slate-900 text-slate-950 font-black text-xs sm:text-sm shadow-[0_3px_0_#0f172a] active:translate-y-0.5 active:shadow-none cursor-pointer transition"
           >
-            🤖 AI Modelini Değiştir
+            Yeni Bir Fikir Yazacağım ✏️
           </button>
-        </div>
-        <button
-          type="button"
-          @click="aiErrorMessage = null"
-          class="mt-2.5 w-full py-2.5 rounded-2xl bg-slate-100 hover:bg-slate-200 border-2 border-slate-900 text-slate-800 font-black text-xs transition cursor-pointer"
-        >
-          Kapat
-        </button>
+        </template>
+
+        <!-- DURUM 3: TEKNİK YAPAY ZEKA HATASI -->
+        <template v-else>
+          <div class="w-16 h-16 rounded-2xl bg-rose-100 border-2 border-slate-900 flex items-center justify-center text-4xl mb-3 shadow-xs">
+            ⚠️
+          </div>
+          <h3 class="text-xl font-black text-slate-900 mb-1.5">
+            Yapay Zekadan Yanıt Alınamadı
+          </h3>
+          <p class="text-xs text-rose-700 bg-rose-50 border-2 border-rose-300 rounded-2xl p-3.5 font-bold mb-4 leading-relaxed w-full text-left break-words">
+            {{ aiErrorMessage }}
+          </p>
+          <p class="text-[11px] text-slate-600 font-bold mb-5 leading-relaxed">
+            Hatalı veya rastgele devre çizilmemesi için işlem durduruldu. AI modelini kontrol edebilir veya Admin AI Log ekranından detayı inceleyebilirsin.
+          </p>
+          <div class="w-full flex flex-col sm:flex-row gap-2">
+            <button
+              type="button"
+              @click="aiErrorMessage = null; openAdminLogsModal()"
+              class="flex-1 py-3 px-4 rounded-2xl bg-slate-900 hover:bg-slate-800 border-2 border-slate-900 text-amber-300 font-black text-xs transition cursor-pointer"
+            >
+              🛠️ Admin AI Loglarını Gör
+            </button>
+            <button
+              type="button"
+              @click="aiErrorMessage = null; isAIModelOpen = true"
+              class="flex-1 py-3 px-4 rounded-2xl bg-amber-200 hover:bg-amber-300 border-2 border-slate-900 text-slate-950 font-black text-xs transition cursor-pointer"
+            >
+              🤖 AI Modelini Değiştir
+            </button>
+          </div>
+          <button
+            type="button"
+            @click="aiErrorMessage = null"
+            class="mt-2.5 w-full py-2.5 rounded-2xl bg-slate-100 hover:bg-slate-200 border-2 border-slate-900 text-slate-800 font-black text-xs transition cursor-pointer"
+          >
+            Kapat
+          </button>
+        </template>
+
       </div>
     </div>
 
@@ -376,6 +440,37 @@ const isUploading = ref(false);
 const uploadResult = ref<UploadResult | null>(null);
 const aiErrorMessage = ref<string | null>(null);
 const streamData = ref<AIStreamProgress | null>(null);
+
+// Güvenlik ve Proje Uygunluk Filtresi Bildirimleri
+const isSafetyViolation = computed(() => {
+  return Boolean(
+    aiErrorMessage.value?.includes('Güvenlik Filtresi Uyarısı') ||
+    aiErrorMessage.value?.includes('🛡️')
+  );
+});
+
+const isOffTopicPrompt = computed(() => {
+  return Boolean(
+    aiErrorMessage.value?.includes('Proje Fikri Gerekli') ||
+    aiErrorMessage.value?.includes('Sağlık Sorusu') ||
+    aiErrorMessage.value?.includes('Arduino Proje Fikri') ||
+    aiErrorMessage.value?.includes('💡') ||
+    aiErrorMessage.value?.includes('🌤️')
+  );
+});
+
+const sampleSuggestedPrompts = [
+  'Karanlıkta otomatik yanan gece lambası devresi (LDR ile)',
+  'Mesafe 10 cm altına inince ses çıkaran park sensörü devresi',
+  'Hırsız algılayan hareket alarmlı devre (PIR sensörü ve LED)',
+  'Sıcaklık ve nem gösteren mini hava istasyonu devresi'
+];
+
+function applySuggestedPrompt(prompt: string) {
+  aiErrorMessage.value = null;
+  currentStep.value = 1;
+  void handleGenerateProject(prompt);
+}
 
 const isAdmin = ref(localStorage.getItem('kid_arduino_is_admin') === 'true');
 const autoSave = ref(localStorage.getItem('kid_arduino_auto_save') !== 'false');

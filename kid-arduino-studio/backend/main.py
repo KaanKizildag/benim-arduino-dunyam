@@ -5,6 +5,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
+
+os.environ["LITELLM_LOCAL_MODEL_COST_MAP"] = "True"
 import litellm
 
 # Yeni nesil modellerin (Gemini 3.x vb.) desteklemediği parametreleri (ör. temperature) sessizce düşür
@@ -18,6 +20,7 @@ from schemas import (
     SavedProjectEntry,
     AILogEntry,
 )
+from prompt_filter import validate_project_prompt
 from ai_service import (
     generate_full_project_one_shot,
     generate_full_project_stream,
@@ -159,6 +162,11 @@ def generate_wiring_endpoint(req: GenerateRequest):
     if not req.prompt.strip():
         raise HTTPException(status_code=400, detail="Lütfen bir proje fikri yazın!")
 
+    # Prompt Güvenlik ve Proje Uygunluğu Denetimi
+    prompt_val = validate_project_prompt(req.prompt)
+    if not prompt_val.is_valid:
+        raise HTTPException(status_code=400, detail=prompt_val.user_message)
+
     inventory = list(req.inventory) if req.inventory else ["ARDUINO_UNO", "BREADBOARD", "LED_RED", "RESISTOR_220"]
     if "ARDUINO_UNO" not in inventory:
         inventory.append("ARDUINO_UNO")
@@ -230,6 +238,10 @@ def generate_project(req: GenerateRequest):
     """
     if not req.prompt.strip():
         raise HTTPException(status_code=400, detail="Lütfen bir proje fikri yazın!")
+
+    prompt_val = validate_project_prompt(req.prompt)
+    if not prompt_val.is_valid:
+        raise HTTPException(status_code=400, detail=prompt_val.user_message)
     
     inventory = list(req.inventory) if req.inventory else ["ARDUINO_UNO", "BREADBOARD", "LED_RED", "RESISTOR_220"]
     if "ARDUINO_UNO" not in inventory:
@@ -263,6 +275,10 @@ def generate_project_stream_endpoint(req: GenerateRequest):
     """
     if not req.prompt.strip():
         raise HTTPException(status_code=400, detail="Lütfen bir proje fikri yazın!")
+
+    prompt_val = validate_project_prompt(req.prompt)
+    if not prompt_val.is_valid:
+        raise HTTPException(status_code=400, detail=prompt_val.user_message)
 
     inventory = list(req.inventory) if req.inventory else ["ARDUINO_UNO", "BREADBOARD", "LED_RED", "RESISTOR_220"]
     if "ARDUINO_UNO" not in inventory:
@@ -298,6 +314,10 @@ def revise_project_stream_endpoint(req: ReviseProjectRequest):
     """
     if not req.revision_prompt.strip():
         raise HTTPException(status_code=400, detail="Lütfen yapılmasını istediğin değişikliği yazın!")
+
+    prompt_val = validate_project_prompt(req.revision_prompt)
+    if not prompt_val.is_valid:
+        raise HTTPException(status_code=400, detail=prompt_val.user_message)
 
     inventory = list(req.inventory) if req.inventory else ["ARDUINO_UNO", "BREADBOARD", "LED_RED", "RESISTOR_220"]
     if "ARDUINO_UNO" not in inventory:

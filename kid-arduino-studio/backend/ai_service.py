@@ -6,6 +6,9 @@ import uuid
 from typing import List, Optional, Dict, Any, Set, Tuple, Callable, Generator
 import httpx
 from dotenv import load_dotenv
+
+# LiteLLM'in internete erişmeye çalışıp beklemesini önlemek için yerel maliyet haritasını kullan
+os.environ["LITELLM_LOCAL_MODEL_COST_MAP"] = "True"
 import litellm
 
 # Yeni nesil modeller (Gemini 3.8 vb.) temperature/top_p parametresi gönderildiğinde hata vermesin
@@ -33,6 +36,7 @@ from flow_service import (
     build_deterministic_flow_from_code,
     generate_flow_from_code,
 )
+from prompt_filter import validate_project_prompt
 
 load_dotenv()
 
@@ -2126,6 +2130,11 @@ def generate_full_project_one_shot(
     tek bir LLM çağrısında alır, birbiriyle doğrular ve döner.
     Yanıt alınamazsa veya doğrulama başarısız olursa HİÇBİR ŞEY SENTETİK ÜRETMEZ, doğrudan hata fırlatır.
     """
+    # 0. Prompt Güvenlik ve Proje Uygunluğu Denetimi
+    val = validate_project_prompt(prompt)
+    if not val.is_valid:
+        raise RuntimeError(val.user_message)
+
     models_info = get_all_available_models(ollama_url)
     chosen_model = model if model != "default" and model is not None else models_info["default_model"]
 
@@ -2418,6 +2427,20 @@ def generate_full_project_stream(
     Yapay zekanın ürettiği bileşenleri, kabloları, akış adımlarını ve C++ kodunu
     canlı olarak istemciye (frontend) akar.
     """
+    def format_sse(data: Dict[str, Any]) -> str:
+        return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+    # 0. Prompt Güvenlik ve Proje Uygunluğu Denetimi (Ön Filtreleme)
+    val = validate_project_prompt(prompt)
+    if not val.is_valid:
+        yield format_sse({
+            "type": "error",
+            "error_type": val.filter_type,
+            "message": val.user_message,
+            "suggestions": val.suggested_prompts
+        })
+        return
+
     models_info = get_all_available_models(ollama_url)
     chosen_model = model if model != "default" and model is not None else models_info["default_model"]
 
@@ -2425,9 +2448,6 @@ def generate_full_project_stream(
     # (ONE_SHOT_SYSTEM_PROMPT da "JSON'a akis_adimlari ekleme" diyor).
     user_prompt = f"""KULLANICI PROJE İSTEĞİ: "{prompt}"
 Yukarıdaki isteğe göre SADECE istenen parçaları içeren `netlist` (components + connections) ve aynı pinleri kullanan `arduino_kodu` alanlarını içeren tek bir geçerli JSON nesnesi üret. Sadece JSON döndür."""
-
-    def format_sse(data: Dict[str, Any]) -> str:
-        return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
 
     yield format_sse({
         "type": "stage",
@@ -2774,6 +2794,20 @@ def generate_revised_project_stream(
     Mevcut devreyi ve kodu kullanıcının revizyon isteğine göre günceller ve
     canlı olarak istemciye (frontend) akar.
     """
+    def format_sse(data: Dict[str, Any]) -> str:
+        return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+    # 0. Revizyon Prompt Güvenlik ve Uygunluk Denetimi
+    val = validate_project_prompt(revision_prompt)
+    if not val.is_valid:
+        yield format_sse({
+            "type": "error",
+            "error_type": val.filter_type,
+            "message": val.user_message,
+            "suggestions": val.suggested_prompts
+        })
+        return
+
     models_info = get_all_available_models(ollama_url)
     chosen_model = model if model != "default" and model is not None else models_info["default_model"]
 
@@ -3202,6 +3236,11 @@ def generate_wiring_only(
     1. AI Çağrısı: Çocuğun hayalinden YALNIZCA kablolama (components + connections) üretir.
     Yapay zekadan yanıt alınamazsa veya geçersiz çıktı dönerse HATA fırlatır (asla sahte/fallback devre üretmez).
     """
+    # 0. Prompt Güvenlik ve Uygunluk Denetimi
+    val = validate_project_prompt(prompt)
+    if not val.is_valid:
+        raise RuntimeError(val.user_message)
+
     models_info = get_all_available_models(ollama_url)
     chosen_model = model if model != "default" and model is not None else models_info["default_model"]
 
