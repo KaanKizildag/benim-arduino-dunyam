@@ -4,4 +4,6 @@ node_modules/
 dist/
 backend/ai_logs.json
 backend/saved_projects.json
+backend/*.db
+backend/uploads/
 .env

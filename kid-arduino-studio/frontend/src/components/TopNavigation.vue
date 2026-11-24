@@ -2,7 +2,7 @@
   <header class="bg-[#7dd3fc] px-3 sm:px-6 py-2.5 sm:py-3 border-b-[3px] border-slate-900 select-none shrink-0 shadow-xs">
     <div class="w-full flex flex-wrap items-center justify-between gap-3">
       
-      <!-- Sol: 'Benim Arduino Dünyam' Çizgi Film Logosu & Profil Avatarı (Referans Görsel) -->
+      <!-- Sol: 'Benim Arduino Dünyam' Çizgi Film Logosu & Kullanıcı Durumu -->
       <div class="flex items-center gap-2.5">
         <div
           class="flex items-center gap-2 cursor-pointer group"
@@ -33,24 +33,52 @@
           </div>
         </div>
 
-        <!-- Referans Görseldeki Yuvarlak Çocuk Avatarı & Admin Modu Geçişi -->
-        <button
-          type="button"
-          @click="$emit('toggle-admin')"
-          class="relative w-8 h-8 rounded-full bg-slate-200 hover:bg-slate-300 border-2 border-slate-900 shadow-xs flex items-center justify-center text-sm font-black text-slate-700 cursor-pointer transition active:scale-95"
-          :title="isAdmin ? 'Admin Modu Açık (Çocuk Moduna Geçmek İçin Tıkla)' : 'Çocuk Modu (Admin Moduna Geçmek İçin Tıkla)'"
-        >
-          <span>{{ isAdmin ? '👑' : '👦' }}</span>
-          <span
-            v-if="isAdmin"
-            class="absolute -bottom-1 -right-1 px-1 py-0.1 bg-indigo-600 text-white text-[8px] font-black rounded-full border border-slate-900"
+        <!-- Kullanıcı Rolü & Profil Rozeti -->
+        <div class="flex items-center gap-1.5">
+          <button
+            v-if="isAuthenticated"
+            type="button"
+            @click="$emit('open-login')"
+            class="px-2.5 py-1 rounded-2xl bg-white hover:bg-slate-50 border-2 border-slate-900 shadow-[0_2px_0_#0f172a] flex items-center gap-1.5 cursor-pointer transition active:scale-95"
+            :title="`${roleLabel}: ${currentUser?.full_name || currentUser?.username} (Değiştirmek için tıkla)`"
           >
-            AD
-          </span>
-        </button>
+            <span class="text-base">{{ roleBadgeIcon }}</span>
+            <div class="text-left hidden sm:block leading-tight">
+              <div class="text-[11px] font-black text-slate-900 truncate max-w-[110px]">
+                {{ currentUser?.full_name || currentUser?.username }}
+              </div>
+              <div class="text-[9px] font-bold text-slate-500">
+                {{ roleLabel }}
+              </div>
+            </div>
+          </button>
+
+          <!-- Çıkış Butonu (Giriş yapılmışsa) -->
+          <button
+            v-if="isAuthenticated"
+            type="button"
+            @click="handleLogout"
+            class="w-7 h-7 rounded-xl bg-slate-200 hover:bg-rose-200 border-2 border-slate-900 flex items-center justify-center text-xs font-black text-slate-700 cursor-pointer transition active:scale-95"
+            title="Güvenli Çıkış Yap"
+          >
+            🚪
+          </button>
+
+          <!-- Giriş Yap Butonu (Misafir ise) -->
+          <button
+            v-else
+            type="button"
+            @click="$emit('open-login')"
+            class="px-2.5 py-1.5 rounded-2xl bg-[#fde047] hover:bg-[#facc15] border-2 border-slate-900 shadow-[0_2px_0_#ca8a04] flex items-center gap-1 text-xs font-black text-slate-900 cursor-pointer transition active:scale-95"
+            title="Okul / Öğrenci / Öğretmen Girişi"
+          >
+            <span>🔑</span>
+            <span>Giriş Yap</span>
+          </button>
+        </div>
       </div>
 
-      <!-- Orta: 4 Ayrı Ekran Sekmeleri (Referans Görsel 2'deki Sarı 3D Buton Stili) -->
+      <!-- Orta: 4 Ayrı Ekran Sekmeleri -->
       <nav class="flex items-center gap-1 sm:gap-2 overflow-x-auto py-0.5 max-w-full">
         <button
           v-for="step in steps"
@@ -68,8 +96,45 @@
         </button>
       </nav>
 
-      <!-- Sağ: Projelerim, Fikirler, Malzeme Çantam, (Admin ise AI Modeli & Loglar), Otomatik Kayıt ve Çarpı Butonu -->
+      <!-- Sağ: Role Göre Modallar, Projelerim, Fikirler, Malzeme Çantam vb. -->
       <div class="flex items-center gap-1.5 sm:gap-2 flex-wrap justify-end">
+        
+        <!-- ROL BUTONU: Okul Müdürü Paneli -->
+        <button
+          v-if="isMudur || authIsAdmin"
+          type="button"
+          @click="$emit('open-mudur')"
+          class="px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-2xl bg-[#38bdf8] hover:bg-[#0284c7] hover:text-white border-2 border-slate-900 shadow-[0_3px_0_#0369a1] active:translate-y-0.5 active:shadow-none text-slate-900 text-xs font-black transition flex items-center gap-1.5 cursor-pointer"
+          title="Okul Müdürü Yönetim Paneli"
+        >
+          <span class="text-sm">🏫</span>
+          <span class="hidden sm:inline">Müdür Paneli</span>
+        </button>
+
+        <!-- ROL BUTONU: Öğretmen Sınıf & Onay Masası -->
+        <button
+          v-if="isTeacher || authIsAdmin"
+          type="button"
+          @click="$emit('open-teacher')"
+          class="px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-2xl bg-[#4ade80] hover:bg-[#22c55e] border-2 border-slate-900 shadow-[0_3px_0_#15803d] active:translate-y-0.5 active:shadow-none text-slate-900 text-xs font-black transition flex items-center gap-1.5 cursor-pointer"
+          title="Öğretmen Sınıfım & Devre Onay Paneli"
+        >
+          <span class="text-sm">👩‍🏫</span>
+          <span class="hidden sm:inline">Sınıfım & Onay</span>
+        </button>
+
+        <!-- ROL BUTONU: Veli Portfolyosu -->
+        <button
+          v-if="isParent || authIsAdmin"
+          type="button"
+          @click="$emit('open-parent')"
+          class="px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-2xl bg-[#f472b6] hover:bg-[#ec4899] hover:text-white border-2 border-slate-900 shadow-[0_3px_0_#be185d] active:translate-y-0.5 active:shadow-none text-slate-900 text-xs font-black transition flex items-center gap-1.5 cursor-pointer"
+          title="Veli Portfolyosu & Mahremiyet"
+        >
+          <span class="text-sm">👨‍👩‍👧</span>
+          <span class="hidden sm:inline">Portfolyo</span>
+        </button>
+
         <!-- 0. Projelerim Butonu -->
         <button
           type="button"
@@ -87,7 +152,7 @@
           </span>
         </button>
 
-        <!-- 0-B. Proje Fikirleri Butonu (YENİ!) -->
+        <!-- 0-B. Proje Fikirleri Butonu -->
         <button
           type="button"
           @click="$emit('open-ideas')"
@@ -126,20 +191,21 @@
           <span class="hidden lg:inline text-[11px]">{{ autoSave ? 'Oto-Kayıt: Açık' : 'Oto-Kayıt: Kapalı' }}</span>
         </button>
 
-        <!-- 2. AI Modeli & Admin Paneli Butonu (Dev Mode / Admin) -->
+        <!-- 2. AI Modeli & Admin Paneli Butonu (Yalnızca Admin veya Dev) -->
         <button
+          v-if="authIsAdmin || isDevAdmin"
           type="button"
           @click="$emit('open-ai-model')"
           class="px-2.5 py-1.5 sm:py-2 rounded-2xl bg-[#bae6fd] hover:bg-[#7dd3fc] border-2 border-slate-900 shadow-[0_3px_0_#0f172a] active:translate-y-0.5 active:shadow-none text-slate-900 text-xs font-black transition flex items-center gap-1.5 cursor-pointer"
-          title="Yapay Zeka Modeli & Token Yönetimi (Admin / Dev Paneli)"
+          title="Yapay Zeka Modeli & Token Yönetimi (Admin Paneli)"
         >
           <span class="text-sm">🤖</span>
           <span class="hidden md:inline">AI Paneli</span>
         </button>
 
-        <!-- 3. Admin (AI İstek & Cevap Logları) Butonu (YALNIZCA ADMİN USER GÖRÜR!) -->
+        <!-- 3. Admin (AI İstek & Cevap Logları) Butonu -->
         <button
-          v-if="isAdmin"
+          v-if="authIsAdmin || isDevAdmin"
           type="button"
           @click="$emit('open-admin-logs')"
           class="px-2.5 py-1.5 sm:py-2 rounded-2xl bg-slate-900 hover:bg-slate-800 border-2 border-slate-900 shadow-[0_3px_0_#334155] active:translate-y-0.5 active:shadow-none text-amber-300 text-xs font-black transition flex items-center gap-1.5 cursor-pointer"
@@ -171,7 +237,9 @@
 </template>
 
 <script setup lang="ts">
-defineProps<{
+import { useAuth } from '../composables/useAuth';
+
+const props = defineProps<{
   currentStep: number;
   inventoryCount: number;
   projectsCount?: number;
@@ -181,7 +249,7 @@ defineProps<{
   autoSave?: boolean;
 }>();
 
-defineEmits<{
+const emit = defineEmits<{
   (e: 'go-step', stepNum: number): void;
   (e: 'open-projects'): void;
   (e: 'open-ideas'): void;
@@ -189,10 +257,32 @@ defineEmits<{
   (e: 'open-ai-model'): void;
   (e: 'open-admin-logs'): void;
   (e: 'open-settings'): void;
+  (e: 'open-login'): void;
+  (e: 'open-mudur'): void;
+  (e: 'open-teacher'): void;
+  (e: 'open-parent'): void;
   (e: 'toggle-auto-save'): void;
   (e: 'toggle-admin'): void;
   (e: 'reset-or-close'): void;
 }>();
+
+const {
+  currentUser,
+  isAuthenticated,
+  isAdmin: authIsAdmin,
+  isMudur,
+  isTeacher,
+  isParent,
+  roleLabel,
+  roleBadgeIcon,
+  logout
+} = useAuth();
+
+const isDevAdmin = props.isAdmin;
+
+function handleLogout() {
+  logout();
+}
 
 const steps = [
   { num: 1, title: 'Hayal Et' },

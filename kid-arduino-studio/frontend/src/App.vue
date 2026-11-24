@@ -17,6 +17,10 @@
       @open-ai-model="isAIModelOpen = true"
       @open-admin-logs="openAdminLogsModal"
       @open-settings="isSettingsOpen = true"
+      @open-login="isLoginOpen = true"
+      @open-mudur="isMudurOpen = true"
+      @open-teacher="isTeacherOpen = true"
+      @open-parent="isParentOpen = true"
       @toggle-auto-save="toggleAutoSave"
       @toggle-admin="toggleAdmin"
       @reset-or-close="handleResetProject"
@@ -151,6 +155,25 @@
       :code="currentProject.arduino_kodu"
       :projectName="currentProject.proje_adi"
       @close="isCodeModalOpen = false"
+    />
+
+    <!-- GÜVENLİK VE ROL MODALLARI -->
+    <LoginModal
+      :isOpen="isLoginOpen"
+      @close="isLoginOpen = false"
+      @login-success="onLoginSuccess"
+    />
+    <MudurDashboardModal
+      :isOpen="isMudurOpen"
+      @close="isMudurOpen = false"
+    />
+    <OgretmenClassroomModal
+      :isOpen="isTeacherOpen"
+      @close="isTeacherOpen = false"
+    />
+    <VeliPortfolyoModal
+      :isOpen="isParentOpen"
+      @close="isParentOpen = false"
     />
 
     <!-- E) Yükleme Başarı ve Kutlama Modalı -->
@@ -315,6 +338,11 @@ import Page4Calistir from './components/Page4Calistir.vue';
 import CodePeekModal from './components/CodePeekModal.vue';
 import ProjeFikirleriModal from './components/ProjeFikirleriModal.vue';
 import AIRevisionModal from './components/AIRevisionModal.vue';
+import LoginModal from './components/LoginModal.vue';
+import MudurDashboardModal from './components/MudurDashboardModal.vue';
+import OgretmenClassroomModal from './components/OgretmenClassroomModal.vue';
+import VeliPortfolyoModal from './components/VeliPortfolyoModal.vue';
+import { useAuth } from './composables/useAuth';
 
 // Örnek proje içermeyen başlangıç durumu
 function createEmptyProject(): ProjeTasarimi {
@@ -434,6 +462,16 @@ const isRevising = ref(false);
 const isAIModelOpen = ref(false);
 const isSettingsOpen = ref(false);
 const isCodeModalOpen = ref(false);
+const isLoginOpen = ref(false);
+const isMudurOpen = ref(false);
+const isTeacherOpen = ref(false);
+const isParentOpen = ref(false);
+
+const { getAuthHeaders } = useAuth();
+
+async function onLoginSuccess() {
+  await fetchSavedProjects();
+}
 const isGenerating = ref(false);
 const isGeneratingLogic = ref(false);
 const isUploading = ref(false);
@@ -555,7 +593,9 @@ async function openAdminLogsModal() {
 
 async function fetchSavedProjects() {
   try {
-    const res = await fetch('/api/projects');
+    const res = await fetch('/api/projects', {
+      headers: getAuthHeaders()
+    });
     if (res.ok) {
       const data: SavedProjectEntry[] = await res.json();
       savedProjects.value = data.filter(p => !p.is_preset);
@@ -587,7 +627,7 @@ async function saveCurrentProjectToHistory(promptStr?: string, badgeStr = 'AI Ta
   try {
     const res = await fetch('/api/projects', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify({
         prompt: promptStr || currentPromptText.value || currentProject.value.proje_adi,
         badge: badgeStr,
@@ -619,7 +659,10 @@ async function saveCurrentProjectToHistory(promptStr?: string, badgeStr = 'AI Ta
 
 async function handleDeleteSavedProject(projectId: string) {
   try {
-    await fetch(`/api/projects/${projectId}`, { method: 'DELETE' });
+    await fetch(`/api/projects/${projectId}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
   } catch {
     // ignore
   }
@@ -696,7 +739,7 @@ async function handleGenerateProject(prompt: string) {
     const apiKey = getApiKeyForModel(selectedModel.value);
     const res = await fetch('/api/generate-stream', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       signal: currentAbortController.value.signal,
       body: JSON.stringify({
         prompt,
@@ -864,7 +907,7 @@ async function handleReviseProject(revisionPrompt: string) {
     const apiKey = getApiKeyForModel(selectedModel.value);
     const res = await fetch('/api/revise-stream', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       signal: currentAbortController.value.signal,
       body: JSON.stringify({
         current_project: currentProject.value,

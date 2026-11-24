@@ -1,6 +1,8 @@
 import os
-from typing import List, Optional
-from fastapi import FastAPI, HTTPException
+import uuid
+from datetime import datetime
+from typing import List, Optional, Dict, Any
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -41,13 +43,23 @@ from arduino_service import (
     stream_serial_port_events,
 )
 
+from database import init_db, get_db_connection
+from auth_service import get_current_user_optional
+from rbac_api import router as rbac_router
+
 load_dotenv()
+
+# Veritabanını ve ilk seed verilerini başlat
+init_db()
 
 app = FastAPI(
     title="Kid Arduino Studio Backend",
     description="Çocuklar İçin AI Destekli Görsel Arduino Stüdyosu API",
     version="1.2.0"
 )
+
+# RBAC ve Yönetim Yönlendiricisini Ekle
+app.include_router(rbac_router)
 
 # CORS yapılandırması
 app.add_middleware(
@@ -211,14 +223,46 @@ def list_saved_projects_endpoint():
 
 
 @app.post("/api/projects", response_model=SavedProjectEntry)
-def save_project_endpoint(req: SaveProjectRequest):
-    """Yeni kurgulanan bir projeyi Projelerim menüsüne kaydeder."""
-    return save_project_entry(
+def save_project_endpoint(
+    req: SaveProjectRequest,
+    current_user: Optional[Dict[str, Any]] = Depends(get_current_user_optional)
+):
+    """Yeni kurgulanan bir projeyi Projelerim menüsüne ve SQLite veritabanına kaydeder."""
+    entry = save_project_entry(
         project=req.project,
         prompt=req.prompt or "",
         project_id=req.id,
         badge=req.badge or "AI Tasarımım ✨"
     )
+
+    # Kullanıcı giriş yaptıysa SQLite ilişkisel tablosuna da kaydet
+    if current_user:
+        try:
+            with get_db_connection() as conn:
+                cursor = conn.cursor()
+                netlist_str = json.dumps(req.project.netlist.model_dump() if req.project.netlist else {})
+                flow_str = json.dumps(req.project.akis_diyagrami.model_dump() if req.project.akis_diyagrami else {})
+                cursor.execute("""
+                    INSERT OR REPLACE INTO projects (
+                        id, institution_id, student_id, proje_adi, prompt, badge,
+                        netlist_json, arduino_kodu, akis_diyagrami_json, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP);
+                """, (
+                    entry.id,
+                    current_user.get("institution_id"),
+                    current_user["id"],
+                    req.project.proje_adi,
+                    req.prompt or "",
+                    entry.badge,
+                    netlist_str,
+                    req.project.arduino_kodu,
+                    flow_str
+                ))
+                conn.commit()
+        except Exception as e:
+            print(f"[Database Save Error] {e}")
+
+    return entry
 
 
 @app.delete("/api/projects/{project_id}")
@@ -228,8 +272,29 @@ def delete_project_endpoint(project_id: str):
     return {"deleted": deleted, "id": project_id}
 
 
+def check_daily_quota(user_id: str, max_daily: int = 15) -> bool:
+    """Öğrencinin günlük AI tasarım kotasını denetler."""
+    today = datetime.now().strftime("%Y-%m-%d")
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO daily_usage_quotas (id, user_id, usage_date, request_count)
+            VALUES (?, ?, ?, 1)
+            ON CONFLICT(user_id, usage_date) DO UPDATE SET request_count = request_count + 1;
+        """, (str(uuid.uuid4()), user_id, today))
+        cursor.execute("SELECT request_count FROM daily_usage_quotas WHERE user_id = ? AND usage_date = ?;", (user_id, today))
+        row = cursor.fetchone()
+        conn.commit()
+        if row and row[0] > max_daily:
+            return False
+    return True
+
+
 @app.post("/api/generate-project", response_model=ProjeTasarimi)
-def generate_project(req: GenerateRequest):
+def generate_project(
+    req: GenerateRequest,
+    current_user: Optional[Dict[str, Any]] = Depends(get_current_user_optional)
+):
     """
     Tek Sorgu (One-Shot) AI Çağrısı:
     Hem devre kablolamasını (netlist), hem akış diyagramını (akis_adimlari), hem de Arduino C++ kodunu (arduino_kodu)
@@ -238,6 +303,14 @@ def generate_project(req: GenerateRequest):
     """
     if not req.prompt.strip():
         raise HTTPException(status_code=400, detail="Lütfen bir proje fikri yazın!")
+
+    # Öğrenci Kotası Kontrolü (Günde en fazla 15 istek)
+    if current_user and current_user.get("role") == "ogrenci":
+        if not check_daily_quota(current_user["id"], max_daily=15):
+            raise HTTPException(
+                status_code=429,
+                detail="Günlük AI devre üretim kotan doldu (15/15). Lütfen öğretmeninden destek al veya yarın tekrar dene! 🤖"
+            )
 
     prompt_val = validate_project_prompt(req.prompt)
     if not prompt_val.is_valid:
@@ -267,7 +340,10 @@ def generate_project_alias(req: GenerateRequest):
 
 
 @app.post("/api/generate-stream")
-def generate_project_stream_endpoint(req: GenerateRequest):
+def generate_project_stream_endpoint(
+    req: GenerateRequest,
+    current_user: Optional[Dict[str, Any]] = Depends(get_current_user_optional)
+):
     """
     Streaming (Server-Sent Events) AI Çağrısı:
     Yapay zekanın ürettiği bileşenleri, kabloları, akış adımlarını ve C++ kodunu
@@ -275,6 +351,14 @@ def generate_project_stream_endpoint(req: GenerateRequest):
     """
     if not req.prompt.strip():
         raise HTTPException(status_code=400, detail="Lütfen bir proje fikri yazın!")
+
+    # Öğrenci Kotası Kontrolü (Günde en fazla 15 istek)
+    if current_user and current_user.get("role") == "ogrenci":
+        if not check_daily_quota(current_user["id"], max_daily=15):
+            raise HTTPException(
+                status_code=429,
+                detail="Günlük AI devre üretim kotan doldu (15/15). Lütfen öğretmeninden destek al veya yarın tekrar dene! 🤖"
+            )
 
     prompt_val = validate_project_prompt(req.prompt)
     if not prompt_val.is_valid:
