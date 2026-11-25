@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -174,6 +175,123 @@ def validate_arduino_code_syntax(code: str) -> tuple[bool, str]:
     return True, "Kod sözdizimi doğrulamadan geçti."
 
 
+# Sık kullanılan elektronik modül başlıklarının Arduino Library Index'teki paket karşılıkları
+HEADER_TO_LIBRARY_MAP: Dict[str, str] = {
+    # OLED & Ekranlar
+    "Adafruit_GFX.h": "Adafruit GFX Library",
+    "Adafruit_SSD1306.h": "Adafruit SSD1306",
+    "LiquidCrystal_I2C.h": "LiquidCrystal I2C",
+    "LiquidCrystal.h": "LiquidCrystal",
+    "TM1637Display.h": "TM1637",
+    "U8g2lib.h": "U8g2",
+    # Sensörler & Çevre Birimleri
+    "DHT.h": "DHT sensor library",
+    "DHT_U.h": "DHT sensor library",
+    "Adafruit_Sensor.h": "Adafruit Unified Sensor",
+    "IRremote.h": "IRremote",
+    "IRremoteInt.h": "IRremote",
+    "RTClib.h": "RTClib",
+    "MFRC522.h": "MFRC522",
+    "MPU6050.h": "MPU6050_tockn",
+    "NewPing.h": "NewPing",
+    "Keypad.h": "Keypad",
+    # LED & Şeritler
+    "FastLED.h": "FastLED",
+    "Adafruit_NeoPixel.h": "Adafruit NeoPixel",
+    # Motor & Servo
+    "Servo.h": "Servo",
+    "Stepper.h": "Stepper",
+    "AccelStepper.h": "AccelStepper",
+}
+
+
+def get_library_search_paths() -> List[str]:
+    """
+    Sistemdeki kurulu kütüphane yollarını derleyiciye iletmek üzere tespit eder.
+    Standart kullanıcı belgeleri, OneDrive ve proje içi kütüphane klasörlerini kapsar.
+    """
+    paths = []
+    # 1. Standart Belgelerim / Arduino / libraries
+    docs_arduino = os.path.join(os.path.expanduser("~"), "Documents", "Arduino", "libraries")
+    if os.path.isdir(docs_arduino):
+        paths.append(docs_arduino)
+
+    # 2. OneDrive yönlendirmeli Belgelerim
+    for env_var in ("OneDrive", "OneDriveCommercial", "OneDriveConsumer"):
+        od = os.environ.get(env_var)
+        if od:
+            od_libs = os.path.join(od, "Documents", "Arduino", "libraries")
+            if os.path.isdir(od_libs) and od_libs not in paths:
+                paths.append(od_libs)
+
+    # 3. Proje klasörü altındaki backend/libraries (varsa)
+    proj_libs = os.path.join(os.path.dirname(os.path.abspath(__file__)), "libraries")
+    if os.path.isdir(proj_libs) and proj_libs not in paths:
+        paths.append(proj_libs)
+
+    return paths
+
+
+def auto_install_missing_libraries(cli_bin: str, err_text: str) -> List[str]:
+    """
+    Derleme çıktısındaki 'fatal error: X.h: No such file or directory' hatalarını tespit eder
+    ve arduino-cli lib install ile otomatik olarak arka planda kurar.
+    """
+    if not err_text or not cli_bin:
+        return []
+
+    missing = re.findall(r"([A-Za-z0-9_]+)\.h:\s*No such file or directory", err_text, re.IGNORECASE)
+    if not missing:
+        missing = re.findall(r"#include\s*[<\"]([A-Za-z0-9_]+)\.h[>\"]", err_text, re.IGNORECASE)
+
+    unique_headers = list(dict.fromkeys(missing))
+    installed = []
+
+    for header_name in unique_headers:
+        full_header = f"{header_name}.h"
+        # Dahili AVR çekirdeği kütüphanelerini atla
+        if full_header in ("Wire.h", "SPI.h", "SoftwareSerial.h", "EEPROM.h", "avr/io.h", "avr/interrupt.h"):
+            continue
+
+        lib_target = HEADER_TO_LIBRARY_MAP.get(full_header)
+        if not lib_target:
+            # Doğrudan kütüphane haritasında yoksa başlık adının boşluklu halini dene
+            lib_target = header_name.replace("_", " ")
+
+        try:
+            res = subprocess.run(
+                [cli_bin, "lib", "install", lib_target],
+                capture_output=True,
+                text=True,
+                timeout=60
+            )
+            if res.returncode == 0:
+                installed.append(lib_target)
+        except Exception as e:
+            print(f"[Kütüphane Otomatik Kurulum Hatası] {lib_target}: {e}")
+
+    return installed
+
+
+def ensure_starter_kit_libraries(cli_bin: str):
+    """
+    Arka planda Kid Arduino Studio starter kit bileşenlerinin kütüphanelerini doğrular/kurar.
+    """
+    starter_libs = [
+        "Adafruit GFX Library",
+        "Adafruit SSD1306",
+        "LiquidCrystal I2C",
+        "DHT sensor library",
+        "Adafruit Unified Sensor",
+        "IRremote",
+    ]
+    for lib in starter_libs:
+        try:
+            subprocess.run([cli_bin, "lib", "install", lib], capture_output=True, text=True, timeout=40)
+        except Exception:
+            pass
+
+
 def compile_and_upload(code: str, port: Optional[str] = None) -> Dict[str, Any]:
     """
     Verilen Arduino C++ kodunu geçici dizinde derler ve karta yükler.
@@ -215,17 +333,38 @@ def compile_and_upload(code: str, port: Optional[str] = None) -> Dict[str, Any]:
         fqbn = "arduino:avr:uno"
 
         # A. Derleme Aşaması
+        extra_compiler_notes = []
         try:
-            compile_cmd = [cli_bin, "compile", "--fqbn", fqbn, sketch_folder]
+            compile_cmd = [cli_bin, "compile", "--fqbn", fqbn]
+            for lib_dir in get_library_search_paths():
+                compile_cmd.extend(["--libraries", lib_dir])
+            compile_cmd.append(sketch_folder)
+
             comp_res = subprocess.run(
                 compile_cmd,
                 capture_output=True,
                 text=True,
-                timeout=30
+                timeout=35
             )
 
+            # Eksik kütüphane varsa otomatik indir ve derlemeyi bir kez daha dene
             if comp_res.returncode != 0:
-                # Derleme hatası
+                err_text = comp_res.stderr or comp_res.stdout
+                auto_installed = auto_install_missing_libraries(cli_bin, err_text)
+                if auto_installed:
+                    extra_compiler_notes.append(
+                        f"[KÜTÜPHANE] Eksik kütüphane(ler) otomatik olarak kuruldu: {', '.join(auto_installed)} 📦✨"
+                    )
+                    # Yeniden derleme
+                    comp_res = subprocess.run(
+                        compile_cmd,
+                        capture_output=True,
+                        text=True,
+                        timeout=35
+                    )
+
+            if comp_res.returncode != 0:
+                # Derleme hatası devam ediyorsa
                 err_text = comp_res.stderr or comp_res.stdout
                 return {
                     "success": False,
@@ -296,13 +435,17 @@ def compile_and_upload(code: str, port: Optional[str] = None) -> Dict[str, Any]:
             # Windows USB-seri sürücüsünün (CH340/ATmega16U2) avrdude sonrası port handle'ını bırakması için bekle
             time.sleep(1.2)
 
+            final_compiler_out = comp_res.stdout or ""
+            if extra_compiler_notes:
+                final_compiler_out = "\n".join(extra_compiler_notes) + ("\n" + final_compiler_out if final_compiler_out else "")
+
             return {
                 "success": True,
                 "status": "UPLOAD_SUCCESS",
                 "message": "Tebrikler! Kodun başarıyla Arduino Uno kartına yüklendi ve çalışıyor! 🚀🎉",
                 "port": target_port,
                 "simulation": False,
-                "compiler_output": comp_res.stdout,
+                "compiler_output": final_compiler_out,
                 "uploader_output": upload_res.stdout or upload_res.stderr
             }
 

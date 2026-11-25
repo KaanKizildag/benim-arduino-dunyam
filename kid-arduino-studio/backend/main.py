@@ -1,4 +1,7 @@
 import os
+import json
+import subprocess
+import threading
 from typing import List, Optional
 from fastapi import FastAPI, HTTPException, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
@@ -41,6 +44,8 @@ from arduino_service import (
     compile_and_upload,
     stream_serial_port_events,
     websocket_serial_bridge,
+    find_arduino_cli_binary,
+    ensure_starter_kit_libraries,
 )
 
 load_dotenv()
@@ -59,6 +64,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.on_event("startup")
+def on_app_startup():
+    """Sunucu başlarken arka planda temel kit kütüphanelerinin (SSD1306, LCD, DHT vb.) kurulu olduğunu doğrular."""
+    cli = find_arduino_cli_binary()
+    if cli:
+        t = threading.Thread(target=ensure_starter_kit_libraries, args=(cli,), daemon=True)
+        t.start()
 
 DEFAULT_OLLAMA_URL = os.getenv("OLLAMA_API_BASE") or os.getenv("OLLAMA_URL") or "http://127.0.0.1:11434"
 
@@ -382,4 +396,20 @@ def stream_serial_events(port: Optional[str] = "auto", baudrate: int = 9600):
 async def websocket_serial_route(websocket: WebSocket, port: Optional[str] = None, baudrate: int = 9600):
     """Fiziksel donanıma (CH340 / Uno) doğrudan bağlanan gerçek canlı WebSocket köprüsü."""
     await websocket_serial_bridge(websocket, port=port, baudrate=baudrate)
+
+
+@app.get("/api/arduino/libraries")
+def get_libraries_endpoint():
+    """Kurulu Arduino kütüphanelerini listeler."""
+    cli = find_arduino_cli_binary()
+    if not cli:
+        return {"installed": [], "cli_available": False}
+    try:
+        res = subprocess.run([cli, "lib", "list", "--format", "json"], capture_output=True, text=True, timeout=10)
+        if res.returncode == 0 and res.stdout:
+            data = json.loads(res.stdout)
+            return {"installed": data, "cli_available": True}
+    except Exception as e:
+        return {"installed": [], "error": str(e), "cli_available": True}
+    return {"installed": [], "cli_available": True}
 
