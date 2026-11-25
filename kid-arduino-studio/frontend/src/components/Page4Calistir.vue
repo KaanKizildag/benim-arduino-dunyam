@@ -717,47 +717,62 @@ function connectSerialStream() {
     try {
       const loc = window.location;
       const wsProto = loc.protocol === 'https:' ? 'wss:' : 'ws:';
-      const host = loc.port === '5173' ? `${loc.hostname}:8001` : loc.host;
-      const wsUrl = `${wsProto}//${host}/ws/serial?port=${encodeURIComponent(selectedPort.value)}&baudrate=${baudRate.value}`;
+      // Vite proxy (/ws) üzerinden bağlan veya doğrudan 127.0.0.1:8001'i hedefle (IPv6 localhost çakışmasını önler)
+      const wsUrl = loc.port === '5173'
+        ? `${wsProto}//${loc.host}/ws/serial?port=${encodeURIComponent(selectedPort.value)}&baudrate=${baudRate.value}`
+        : `${wsProto}//127.0.0.1:8001/ws/serial?port=${encodeURIComponent(selectedPort.value)}&baudrate=${baudRate.value}`;
 
-      appendSerialLine(`[WEBSOCKET] ${selectedPort.value} (${baudRate.value} baud) bağlantısı açılıyor...`, 'system');
-      activeSocket = new WebSocket(wsUrl);
+      let triedDirect = false;
 
-      activeSocket.onopen = () => {
-        isSocketConnected.value = true;
-        appendSerialLine(`[BAĞLANDI] ${selectedPort.value} canlı WebSocket köprüsü aktif. Arduino'dan gelen gerçek veriler bekleniyor...`, 'system');
-      };
+      const tryConnect = (targetUrl: string) => {
+        appendSerialLine(`[WEBSOCKET] ${selectedPort.value} (${baudRate.value} baud) bağlantısı açılıyor...`, 'system');
+        activeSocket = new WebSocket(targetUrl);
 
-      activeSocket.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (data.type === 'connected') {
-            isSocketConnected.value = true;
-            appendSerialLine(data.text || `[PORT AÇILDI] ${data.port}`, 'system');
-          } else if (data.type === 'data') {
-            appendSerialLine(data.text, 'hardware', undefined, data.timestamp);
-          } else if (data.type === 'error') {
-            isSocketConnected.value = false;
-            appendSerialLine(`[PORT UYARISI] ${data.message || data.text}`, 'system');
+        activeSocket.onopen = () => {
+          isSocketConnected.value = true;
+          appendSerialLine(`[BAĞLANDI] ${selectedPort.value} canlı WebSocket köprüsü aktif. Arduino'dan gelen gerçek veriler bekleniyor...`, 'system');
+        };
+
+        activeSocket.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data.type === 'connected') {
+              isSocketConnected.value = true;
+              appendSerialLine(data.text || `[PORT AÇILDI] ${data.port}`, 'system');
+            } else if (data.type === 'data') {
+              appendSerialLine(data.text, 'hardware', undefined, data.timestamp);
+            } else if (data.type === 'error') {
+              isSocketConnected.value = false;
+              appendSerialLine(`[PORT UYARISI] ${data.message || data.text}`, 'system');
+            }
+          } catch {
+            if (event.data) {
+              appendSerialLine(String(event.data), 'hardware');
+            }
           }
-        } catch {
-          if (event.data) {
-            appendSerialLine(String(event.data), 'hardware');
+        };
+
+        activeSocket.onerror = () => {
+          if (!triedDirect && loc.port === '5173') {
+            triedDirect = true;
+            // Vite proxy üzerinden açılamadıysa doğrudan 127.0.0.1:8001 köprüsünü dene
+            const directUrl = `${wsProto}//127.0.0.1:8001/ws/serial?port=${encodeURIComponent(selectedPort.value)}&baudrate=${baudRate.value}`;
+            tryConnect(directUrl);
+            return;
           }
-        }
+          isSocketConnected.value = false;
+          appendSerialLine(`[PORT BAĞLANTI HATASI] ${selectedPort.value} WebSocket köprüsüne bağlanılamadı. Backend'in 'python -m uvicorn main:app --host 0.0.0.0 --port 8001 --reload' ile çalıştığından emin olun.`, 'system');
+        };
+
+        activeSocket.onclose = (event) => {
+          isSocketConnected.value = false;
+          if (event.code !== 1000 && event.code !== 1005 && !triedDirect) {
+            appendSerialLine(`[PORT KAPANDI] Bağlantı kapandı (Kod: ${event.code}). Tekrar bağlanmak için yukarıdaki "🔌 Portu Aç" butonuna basabilirsiniz.`, 'system');
+          }
+        };
       };
 
-      activeSocket.onerror = () => {
-        isSocketConnected.value = false;
-        appendSerialLine(`[PORT BAĞLANTI HATASI] ${selectedPort.value} WebSocket köprüsüne bağlanılamadı. Backend terminalini yeniden başlattığınızdan (Ctrl+C ve 'python -m uvicorn main:app --port 8001 --reload') emin olun.`, 'system');
-      };
-
-      activeSocket.onclose = (event) => {
-        isSocketConnected.value = false;
-        if (event.code !== 1000 && event.code !== 1005) {
-          appendSerialLine(`[PORT KAPANDI] Bağlantı kapandı (Kod: ${event.code}). Tekrar bağlanmak için yukarıdaki "🔌 Portu Aç" butonuna basabilirsiniz.`, 'system');
-        }
-      };
+      tryConnect(wsUrl);
       return;
     } catch (e) {
       isSocketConnected.value = false;
