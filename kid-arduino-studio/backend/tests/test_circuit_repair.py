@@ -15,7 +15,7 @@ class TestCircuitRepair(unittest.TestCase):
             "Bileşen 'led1' yalnızca 1 pinle bağlanmış.",
             "Direnç 'r1' açıkta kalmış."
         ]
-        long_output = '{"netlist": {"components": []}}' * 100
+        long_output = '{"netlist": {"components": []}}' * 200
         prompt = build_token_safe_circuit_repair_prompt(
             errors=errors,
             current_output=long_output,

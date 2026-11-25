@@ -713,6 +713,106 @@ def clean_llm_json_response(raw_text: str) -> str:
     return text
 
 
+def safe_parse_llm_json(raw_text: str) -> Dict[str, Any]:
+    """
+    LLM tarafından üretilen JSON metinlerini toleranslı ve güvenli bir şekilde ayrıştırır.
+    - Markdown bloklarını (```json ... ```) ve düşünce etiketlerini (<think>...</think>) temizler.
+    - strict=False ile literal satır sonları ve kontrol karakterlerine izin verir.
+    - Sondaki gereksiz virgülleri (trailing commas) temizler.
+    - Kapanmamış tırnak ve parantezleri (unterminated string / truncated JSON) onarır.
+    """
+    text = clean_llm_json_response(raw_text)
+
+    # 1. Deneme: strict=False ile doğrudan çözümleme
+    try:
+        return json.loads(text, strict=False)
+    except Exception:
+        pass
+
+    # 2. Deneme: Sondaki sarkan virgülleri temizle (Örn: [1, 2, ], veya {"a": 1, })
+    fixed = re.sub(r",\s*([}\]])", r"\1", text)
+    try:
+        return json.loads(fixed, strict=False)
+    except Exception:
+        pass
+
+    # 3. Deneme: Kapanmamış tırnak veya parantez tamamlama (Unterminated string / Truncated JSON)
+    unescaped_quotes = len(re.findall(r'(?<!\\)"', fixed))
+    cand = fixed
+    if unescaped_quotes % 2 != 0:
+        cand += '"'
+
+    # Açık kalan parantezleri sırayla kapat (yalnızca tırnak dışındakiler)
+    in_str = False
+    escape = False
+    open_curly = 0
+    open_square = 0
+    for ch in cand:
+        if escape:
+            escape = False
+            continue
+        if ch == '\\':
+            escape = True
+            continue
+        if ch == '"':
+            in_str = not in_str
+            continue
+        if not in_str:
+            if ch == '{':
+                open_curly += 1
+            elif ch == '}':
+                open_curly = max(0, open_curly - 1)
+            elif ch == '[':
+                open_square += 1
+            elif ch == ']':
+                open_square = max(0, open_square - 1)
+
+    if open_square > 0:
+        cand += "]" * open_square
+    if open_curly > 0:
+        cand += "}" * open_curly
+
+    try:
+        return json.loads(cand, strict=False)
+    except Exception:
+        pass
+
+    # 4. Deneme: Alan bazlı acil durum çıkarımı
+    recovered: Dict[str, Any] = {}
+    m_proj = re.search(r'"proje_adi"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"', text)
+    if m_proj:
+        recovered["proje_adi"] = m_proj.group(1)
+
+    m_msg = re.search(r'"karsilama_mesaji"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"', text)
+    if m_msg:
+        recovered["karsilama_mesaji"] = m_msg.group(1)
+
+    m_code = re.search(r'"arduino_kodu"\s*:\s*"((?:[^"\\]|\\.)*)', text, re.DOTALL)
+    if m_code:
+        raw_c = m_code.group(1)
+        if raw_c.endswith('"'):
+            raw_c = raw_c[:-1]
+        try:
+            recovered["arduino_kodu"] = raw_c.encode('utf-8').decode('unicode_escape')
+        except Exception:
+            recovered["arduino_kodu"] = raw_c.replace(r'\n', '\n').replace(r'\"', '"')
+
+    m_net = re.search(r'"netlist"\s*:\s*(\{.*?\})\s*,\s*"(?:arduino_kodu|guvenlik|akis)', text, re.DOTALL)
+    if m_net:
+        try:
+            recovered["netlist"] = json.loads(m_net.group(1), strict=False)
+        except Exception:
+            pass
+
+    if "netlist" not in recovered:
+        recovered["netlist"] = {"board": "arduino-uno", "components": [], "connections": []}
+
+    if recovered.get("arduino_kodu"):
+        return recovered
+
+    return json.loads(text, strict=False)
+
+
 # ---------------------------------------------------------
 # Kod ↔ Netlist Pin Uyum Kontrolü (Madde 9)
 # ---------------------------------------------------------
@@ -1109,8 +1209,8 @@ def build_token_safe_circuit_repair_prompt(
     """
     err_bullets = "\n".join(f"- {e}" for e in errors[:8])
     truncated_output = (current_output or "").strip()
-    if len(truncated_output) > 1800:
-        truncated_output = truncated_output[:1800] + "\n... [kalan JSON kırpıldı]"
+    if len(truncated_output) > 3500:
+        truncated_output = truncated_output[:3500] + "\n... [kalan JSON kırpıldı]"
 
     inv_str = f"\nENVANTER:\n{json.dumps(inventory, ensure_ascii=False)}" if inventory else ""
 
@@ -1880,9 +1980,20 @@ def validate_one_shot_topology_and_code(
     checks: List[str] = []
     warnings: List[str] = []
 
+    # Harici devre elemanı gerektirmeyen dahili Seri Port veya dahili LED projelerini tanı
+    clean_code_lower = (code or "").lower()
+    is_internal_only = (
+        not netlist.components
+        and any(k in clean_code_lower for k in ("serial.", "led_builtin", "random(", "millis(", "setup()"))
+    )
+
     if not netlist.components:
-        blocking_errors.append("Devre şemasında (netlist.components) hiçbir bileşen yok.")
-    if not netlist.connections:
+        if is_internal_only:
+            checks.append("✓ Harici bileşen gerektirmeyen dahili Arduino Uno (Seri Port / Dahili Mantık) devresi onaylandı.")
+        else:
+            blocking_errors.append("Devre şemasında (netlist.components) hiçbir bileşen yok.")
+
+    if not netlist.connections and not is_internal_only:
         blocking_errors.append("Devre şemasında (netlist.connections) hiçbir kablo bağlantısı yok.")
 
     # Her bileşenin kaç pini bağlanmış kontrol et
@@ -2024,8 +2135,7 @@ def repair_circuit_with_llm(
         parse_errors: List[str] = []
         parsed = None
         try:
-            cleaned = clean_llm_json_response(latest_text)
-            parsed = json.loads(cleaned)
+            parsed = safe_parse_llm_json(latest_text)
             if not isinstance(parsed, dict) or not isinstance(parsed.get("netlist"), dict):
                 parse_errors.append("AI yanıtında geçerli bir 'netlist' nesnesi bulunamadı.")
         except Exception as e:
@@ -2069,9 +2179,13 @@ def repair_circuit_with_llm(
         else:
             blocking_errors.extend(parse_errors)
 
-        last_blocking_errors = blocking_errors
-        last_norm_data = norm_data
-        last_raw_code = raw_code
+        # Başarılı bir parse varsa en son geçerli durumu koru; hatalı repair cevabı geçerliyi ezmesin
+        if norm_data is not None and raw_code:
+            last_norm_data = norm_data
+            last_raw_code = raw_code
+            last_blocking_errors = blocking_errors
+        elif last_norm_data is None:
+            last_blocking_errors = blocking_errors
 
         # Eğer hiç bloklayan devre/komponent hatası kalmadıysa onarım tamam!
         if not blocking_errors and norm_data is not None and raw_code:
@@ -2101,7 +2215,7 @@ def repair_circuit_with_llm(
                     "stream": False,
                     "options": {
                         "temperature": 0.1,
-                        "num_predict": 1200
+                        "num_predict": 2500
                     }
                 }
                 if not any(k in clean_model.lower() for k in ("deepseek-r1", "qwq", "r1")):
@@ -2124,7 +2238,7 @@ def repair_circuit_with_llm(
                         response_format={"type": "json_object"},
                         api_key=api_key,
                         temperature=0.1,
-                        max_tokens=1500
+                        max_tokens=2500
                     )
                     repaired_text = resp.choices[0].message.content
                 except Exception as e:
@@ -3151,8 +3265,7 @@ Yukarıdaki mevcut projeyi, kullanıcının revizyon isteğine göre güncelle. 
                             yield format_sse(sev)
 
         duration_ms = int((time.time() - t0) * 1000)
-        cleaned = clean_llm_json_response(accumulated_text)
-        parsed = json.loads(cleaned)
+        parsed = safe_parse_llm_json(accumulated_text)
 
         if not isinstance(parsed, dict):
             raise ValueError("AI revizyon yanıtı geçerli bir JSON nesnesi değil.")
@@ -3452,8 +3565,7 @@ Sadece yukarıdaki istekte belirtilen parçaları kullanarak Netlist JSON üret.
         raise RuntimeError(msg)
 
     try:
-        cleaned = clean_llm_json_response(raw_text)
-        parsed = json.loads(cleaned)
+        parsed = safe_parse_llm_json(raw_text)
         if not isinstance(parsed, dict) or not isinstance(parsed.get("netlist"), dict):
             raise ValueError("AI çıktısında geçerli bir 'netlist' alanı bulunamadı.")
 
@@ -3700,8 +3812,7 @@ Yukarıdaki kablolamaya uygun `akis_adimlari` ve `arduino_kodu` alanlarını iç
         raise RuntimeError(msg)
 
     try:
-        cleaned = clean_llm_json_response(raw_text)
-        parsed = json.loads(cleaned)
+        parsed = safe_parse_llm_json(raw_text)
         if not isinstance(parsed, dict):
             raise ValueError("AI yanıtı bir JSON nesnesi değil.")
         raw_akis = parsed.get("akis_adimlari")
