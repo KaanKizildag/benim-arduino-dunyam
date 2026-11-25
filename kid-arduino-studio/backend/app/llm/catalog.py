@@ -184,11 +184,16 @@ def get_filtered_component_docs(inventory: Optional[List[str]], user_prompt: str
     bileşenleri tespit eder ve sisteme yalnızca bu parçaların pin tanımlarını gönderir.
     Gereksiz 20+ parçayı prompttan çıkararak binlerce token tasarruf ettirir.
     """
+    # En yaygın temel sensör ve eyleyiciler çantada olmasa bile her zaman promptta yer alır
     selected: Set[str] = {
         "wokwi-resistor",
         "wokwi-led",
         "wokwi-pushbutton",
-        "wokwi-buzzer"
+        "wokwi-buzzer",
+        "wokwi-photoresistor",
+        "wokwi-servo",
+        "wokwi-hc-sr04",
+        "wokwi-potentiometer",
     }
 
     inv_tokens = " ".join((inventory or []) + [user_prompt]).lower()

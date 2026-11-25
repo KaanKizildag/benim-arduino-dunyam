@@ -18,6 +18,11 @@ except ImportError:
 
 def find_arduino_cli_binary() -> Optional[str]:
     """Sistemde veya özel yolda arduino-cli olup olmadığını kontrol eder."""
+    # 0. Backend içi yerel binary (backend/bin/arduino-cli.exe)
+    local_bin = os.path.join(os.path.dirname(__file__), "bin", "arduino-cli.exe")
+    if os.path.isfile(local_bin):
+        return local_bin
+
     custom_path = os.getenv("ARDUINO_CLI_PATH", "arduino-cli")
     
     # 1. Custom veya doğrudan komut
@@ -247,7 +252,9 @@ def compile_and_upload(code: str, port: Optional[str] = None) -> Dict[str, Any]:
                 "status": "UPLOAD_SUCCESS",
                 "message": "Tebrikler! Kodun başarıyla Arduino Uno kartına yüklendi ve çalışıyor! 🚀🎉",
                 "port": target_port,
-                "simulation": False
+                "simulation": False,
+                "compiler_output": comp_res.stdout,
+                "uploader_output": upload_res.stdout or upload_res.stderr
             }
 
         except Exception as e:
@@ -256,6 +263,7 @@ def compile_and_upload(code: str, port: Optional[str] = None) -> Dict[str, Any]:
                 "status": "UPLOAD_ERROR",
                 "message": f"Yükleme hatası: {e}",
                 "error": str(e),
+                "compiler_output": comp_res.stdout if 'comp_res' in locals() else "",
                 "can_heal": False
             }
 
@@ -320,3 +328,113 @@ def stream_serial_port_events(port: Optional[str] = None, baudrate: int = 9600):
 def generate_simulated_serial_events(project_type: str = "general"):
     """Geriye dönük uyumluluk için stream_serial_port_events sarmalayıcısı."""
     yield from stream_serial_port_events(port=None)
+
+
+async def websocket_serial_bridge(websocket, port: Optional[str] = None, baudrate: int = 9600):
+    """
+    Doğrudan fiziksel seri porta (ör. COM7 CH340) bağlanan gerçek iki yönlü WebSocket köprüsü.
+    Asla sahte/simüle edilmiş veri uydurmaz. Arduino'dan gelen gerçek baytları anında istemciye iletir.
+    """
+    import asyncio
+    from fastapi import WebSocketDisconnect
+
+    await websocket.accept()
+
+    target_port = port
+    if not target_port or target_port in ("auto", "simulated", "SIMULATED_PORT"):
+        detected = get_connected_ports()
+        real_ports = [p["address"] for p in detected if p["address"] != "SIMULATED_PORT"]
+        target_port = real_ports[0] if real_ports else None
+
+    if not target_port:
+        await websocket.send_json({
+            "type": "error",
+            "message": "Bağlı bir Arduino kartı bulunamadı. Lütfen USB kablosunun takılı olduğundan emin olun."
+        })
+        await websocket.close()
+        return
+
+    if not PYSERIAL_AVAILABLE:
+        await websocket.send_json({
+            "type": "error",
+            "message": "pyserial kütüphanesi kurulu değil."
+        })
+        await websocket.close()
+        return
+
+    ser = None
+    try:
+        ser = serial.Serial(target_port, baudrate=baudrate, timeout=0.1)
+    except Exception as e:
+        await websocket.send_json({
+            "type": "error",
+            "port": target_port,
+            "message": f"Seri port ({target_port}) açılamadı: {e}. Portun başka bir uygulama tarafından kullanılmadığından emin olun."
+        })
+        await websocket.close()
+        return
+
+    await websocket.send_json({
+        "type": "connected",
+        "port": target_port,
+        "baudrate": baudrate,
+        "timestamp": time.strftime("%H:%M:%S"),
+        "text": f"[BAĞLANDI] {target_port} ({baudrate} baud) canlı seri port köprüsü açıldı. Arduino'dan veri bekleniyor..."
+    })
+
+    loop = asyncio.get_running_loop()
+    stop_event = asyncio.Event()
+
+    async def serial_reader():
+        while not stop_event.is_set():
+            try:
+                line = await loop.run_in_executor(None, ser.readline)
+                if line:
+                    decoded = line.decode("utf-8", errors="replace").strip()
+                    if decoded:
+                        await websocket.send_json({
+                            "type": "data",
+                            "timestamp": time.strftime("%H:%M:%S"),
+                            "port": target_port,
+                            "text": decoded
+                        })
+                else:
+                    await asyncio.sleep(0.02)
+            except Exception as ex:
+                if not stop_event.is_set():
+                    try:
+                        await websocket.send_json({
+                            "type": "error",
+                            "port": target_port,
+                            "text": f"[PORT BAĞLANTISI KESİLDİ] {ex}"
+                        })
+                    except Exception:
+                        pass
+                break
+
+    async def ws_receiver():
+        while not stop_event.is_set():
+            try:
+                msg = await websocket.receive_text()
+                if msg and ser.is_open:
+                    await loop.run_in_executor(None, ser.write, (msg + "\n").encode("utf-8"))
+            except (WebSocketDisconnect, Exception):
+                break
+
+    try:
+        reader_task = asyncio.create_task(serial_reader())
+        receiver_task = asyncio.create_task(ws_receiver())
+        done, pending = await asyncio.wait(
+            [reader_task, receiver_task],
+            return_when=asyncio.FIRST_COMPLETED
+        )
+        for task in pending:
+            task.cancel()
+    finally:
+        stop_event.set()
+        if ser and ser.is_open:
+            try:
+                ser.close()
+            except Exception:
+                pass
+

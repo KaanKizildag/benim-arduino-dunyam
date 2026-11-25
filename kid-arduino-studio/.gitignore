@@ -6,5 +6,6 @@ backend/ai_logs.json
 backend/saved_projects.json
 backend/*.db
 backend/uploads/
+backend/bin/
 .pytest_cache/
 .env

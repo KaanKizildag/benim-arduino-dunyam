@@ -1,6 +1,6 @@
 import os
 from typing import List, Optional
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -40,6 +40,7 @@ from arduino_service import (
     get_connected_ports,
     compile_and_upload,
     stream_serial_port_events,
+    websocket_serial_bridge,
 )
 
 load_dotenv()
@@ -375,3 +376,10 @@ def stream_serial_events(port: Optional[str] = "auto", baudrate: int = 9600):
         stream_serial_port_events(port=port, baudrate=baudrate),
         media_type="text/event-stream"
     )
+
+
+@app.websocket("/ws/serial")
+async def websocket_serial_route(websocket: WebSocket, port: Optional[str] = None, baudrate: int = 9600):
+    """Fiziksel donanıma (CH340 / Uno) doğrudan bağlanan gerçek canlı WebSocket köprüsü."""
+    await websocket_serial_bridge(websocket, port=port, baudrate=baudrate)
+

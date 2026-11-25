@@ -75,6 +75,7 @@
       <Page4Calistir
         v-else-if="currentStep === 4"
         :isUploading="isUploading"
+        :uploadResult="uploadResult"
         :availablePorts="availablePorts"
         :arduinoCode="currentProject.arduino_kodu"
         :projectName="currentProject.proje_adi"
@@ -930,6 +931,7 @@ async function handleReviseProject(revisionPrompt: string) {
 
 async function handleUpload(port: string) {
   isUploading.value = true;
+  uploadResult.value = null;
   try {
     const res = await fetch('/api/upload', {
       method: 'POST',
@@ -940,34 +942,22 @@ async function handleUpload(port: string) {
       })
     });
 
-    if (res.ok) {
-      uploadResult.value = await res.json();
-    } else {
-      uploadResult.value = {
-        success: true,
-        status: 'simulated_success',
-        message: 'Arduino Uno kartına kod başarıyla yüklendi ve devre çalıştırıldı! 🎉'
-      };
-    }
+    const data = await res.json();
+    uploadResult.value = data;
 
-    if (uploadResult.value?.success) {
+    if (data.success) {
       confetti({
         particleCount: 120,
         spread: 80,
         origin: { y: 0.6 }
       });
     }
-  } catch {
+  } catch (err: any) {
     uploadResult.value = {
-      success: true,
-      status: 'simulated_success',
-      message: 'Arduino Uno kartına kod başarıyla yüklendi ve devre çalıştırıldı! 🎉'
+      success: false,
+      status: 'SYSTEM_ERROR',
+      message: err?.message || 'Arduino Uno kartına yükleme yapılırken sunucu hatası oluştu.'
     };
-    confetti({
-      particleCount: 120,
-      spread: 80,
-      origin: { y: 0.6 }
-    });
   } finally {
     isUploading.value = false;
   }

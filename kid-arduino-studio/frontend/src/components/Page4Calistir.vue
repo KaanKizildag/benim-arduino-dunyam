@@ -345,10 +345,11 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue';
-import type { PortInfo, CircuitNetlist } from '../types/project';
+import type { PortInfo, CircuitNetlist, UploadResult } from '../types/project';
 
 const props = defineProps<{
   isUploading: boolean;
+  uploadResult?: UploadResult | null;
   availablePorts: PortInfo[];
   arduinoCode: string;
   projectName?: string;
@@ -631,9 +632,15 @@ function onSliderAdjust(channelName: string, newVal: number) {
   appendSerialLine(summary, 'simulated', { ...channelValues.value });
 }
 
+let activeSocket: WebSocket | null = null;
+
 function sendManualSerialLine() {
   const txt = manualInput.value.trim();
   if (!txt) return;
+
+  if (activeSocket && activeSocket.readyState === WebSocket.OPEN) {
+    activeSocket.send(txt);
+  }
   appendSerialLine(`> ${txt}`, 'user');
   manualInput.value = '';
 }
@@ -643,79 +650,24 @@ function clearSerialMonitor() {
 }
 
 function triggerUpload() {
+  if (activeSocket) {
+    activeSocket.close();
+    activeSocket = null;
+  }
+  if (eventSource) {
+    eventSource.close();
+    eventSource = null;
+  }
   statusMessage.value = 'Arduino Uno kartına kod derlenip gönderiliyor...';
-  appendSerialLine(`[DERLEME] "${props.projectName || 'Arduino Projem'}" derleniyor ve karta yükleniyor...`, 'system');
+  appendSerialLine(`[DERLEME & YÜKLEME] "${props.projectName || 'Arduino Projem'}" derleniyor ve ${selectedPort.value} portuna yükleniyor...`, 'system');
   emit('upload', selectedPort.value);
 }
 
-/**
- * Devredeki gerçek parçalara (ör. 2x LDR + Servo, Tek LDR + LED, HC-SR04 + Buzzer vb.)
- * birebir uygun gerçekçi Serial Monitor satırları üretir.
- */
-function startProjectAwareSerialSimulation() {
-  if (simInterval) clearInterval(simInterval);
-
-  const metas = expectedChannels.value;
-  // Başlangıç değerlerini ata
-  for (const m of metas) {
-    const initVal = m.max === 180 ? 90 : m.max === 200 ? 45 : m.max === 1 ? 0 : 480;
-    channelValues.value[m.name] = initVal;
-    channelHistory.value[m.name] = [initVal];
-  }
-
-  appendSerialLine(
-    `Serial.begin(${baudRate.value}) -> "${props.projectName || 'Arduino Uno'}" seri port akışı başladı.`,
-    'system'
-  );
-
-  simInterval = setInterval(() => {
-    if (isPaused.value) return;
-
-    if (metas.length === 0) {
-      // Devrede özel sensör yoksa Arduino kodundaki Serial.print ifadelerini simüle et
-      appendSerialLine('loop() -> Arduino Uno çalışıyor...', 'simulated');
-      return;
-    }
-
-    const stepChannels: Record<string, number> = {};
-    for (const m of metas) {
-      if (m.name === 'SERVO_ACI') continue;
-      if (manualOverrides.value[m.name] !== undefined) {
-        // Kullanıcının slayder ile verdiği değer etrafında küçük titreşim
-        const base = manualOverrides.value[m.name]!;
-        const jitter = m.max > 10 ? Math.round((Math.random() - 0.5) * 8) : 0;
-        stepChannels[m.name] = Math.min(m.max, Math.max(m.min, base + jitter));
-      } else {
-        const prev = channelValues.value[m.name] ?? Math.round((m.min + m.max) / 2);
-        const delta = m.max === 1
-          ? (Math.random() > 0.8 ? 1 - prev : prev)
-          : Math.round((Math.random() - 0.48) * (m.max * 0.12));
-        stepChannels[m.name] = Math.min(m.max, Math.max(m.min, prev + delta));
-      }
-    }
-
-    // Servo motor varsa sensör değerlerine göre hedef açıyı hesapla
-    const hasServo = metas.some(m => m.name === 'SERVO_ACI');
-    if (hasServo) {
-      const ldrMetas = metas.filter(m => m.name.startsWith('LDR'));
-      if (ldrMetas.length >= 2) {
-        const vSol = stepChannels[ldrMetas[0]!.name] ?? 500;
-        const vSag = stepChannels[ldrMetas[1]!.name] ?? 500;
-        stepChannels['SERVO_ACI'] = vSol > vSag + 30 ? 135 : vSag > vSol + 30 ? 45 : 90;
-      } else if (ldrMetas.length === 1) {
-        const v = stepChannels[ldrMetas[0]!.name] ?? 500;
-        stepChannels['SERVO_ACI'] = v > 500 ? 120 : 30;
-      } else {
-        stepChannels['SERVO_ACI'] = manualOverrides.value['SERVO_ACI'] ?? 90;
-      }
-    }
-
-    const parts = Object.entries(stepChannels).map(([k, v]) => `${k}: ${v}`);
-    appendSerialLine(parts.join(' | '), 'simulated', stepChannels);
-  }, 1100);
-}
-
 function connectSerialStream() {
+  if (activeSocket) {
+    activeSocket.close();
+    activeSocket = null;
+  }
   if (eventSource) {
     eventSource.close();
     eventSource = null;
@@ -725,53 +677,102 @@ function connectSerialStream() {
     simInterval = null;
   }
 
-  // Gerçek donanım portu varsa SSE üzerinden pyserial akışını dinle
+  // Gerçek donanım portu (COM* veya /dev/tty*) seçildiyse doğrudan WebSocket köprüsüne bağlan
   if (hasRealHardwarePort.value) {
     try {
-      const url = `/api/serial-events?port=${encodeURIComponent(selectedPort.value)}&baudrate=${baudRate.value}`;
-      eventSource = new EventSource(url);
-      eventSource.onmessage = (ev) => {
+      const loc = window.location;
+      const wsProto = loc.protocol === 'https:' ? 'wss:' : 'ws:';
+      const host = loc.port === '5173' ? `${loc.hostname}:8001` : loc.host;
+      const wsUrl = `${wsProto}//${host}/ws/serial?port=${encodeURIComponent(selectedPort.value)}&baudrate=${baudRate.value}`;
+
+      appendSerialLine(`[WEBSOCKET] ${selectedPort.value} (${baudRate.value} baud) bağlantısı açılıyor...`, 'system');
+      activeSocket = new WebSocket(wsUrl);
+
+      activeSocket.onopen = () => {
+        appendSerialLine(`[BAĞLANDI] ${selectedPort.value} canlı WebSocket köprüsü aktif. Arduino'dan gelen gerçek veriler bekleniyor...`, 'system');
+      };
+
+      activeSocket.onmessage = (event) => {
         try {
-          const data = JSON.parse(ev.data);
-          if (data?.source === 'error') {
-            appendSerialLine(data.text, 'system', undefined, data.timestamp);
-            startProjectAwareSerialSimulation();
-            return;
-          }
-          if (data?.text) {
-            appendSerialLine(
-              data.text,
-              data.source === 'hardware' ? 'hardware' : 'system',
-              data.channels,
-              data.timestamp
-            );
+          const data = JSON.parse(event.data);
+          if (data.type === 'connected') {
+            appendSerialLine(data.text || `[PORT AÇILDI] ${data.port}`, 'system');
+          } else if (data.type === 'data') {
+            appendSerialLine(data.text, 'hardware', undefined, data.timestamp);
+          } else if (data.type === 'error') {
+            appendSerialLine(`[PORT UYARISI] ${data.message || data.text}`, 'system');
           }
         } catch {
-          // ignore
+          if (event.data) {
+            appendSerialLine(String(event.data), 'hardware');
+          }
         }
       };
-      eventSource.onerror = () => {
-        if (eventSource) eventSource.close();
-        startProjectAwareSerialSimulation();
+
+      activeSocket.onerror = () => {
+        appendSerialLine(`[PORT HATASI] ${selectedPort.value} portuna bağlanılamadı. Kablonun takılı olduğundan ve portu başka bir uygulamanın açık tutmadığından emin olun.`, 'system');
+      };
+
+      activeSocket.onclose = () => {
+        // Gerçek port kapandığında sahte veri uydurma, temizce bekle
       };
       return;
-    } catch {
-      // Fallback to project-aware simulation
+    } catch (e) {
+      appendSerialLine(`[HATA] WebSocket başlatılamadı: ${e}`, 'system');
+      return;
     }
   }
 
-  startProjectAwareSerialSimulation();
+  // Donanım portu seçilmediğinde bilgi ver
+  appendSerialLine(`[BİLGİ] Fiziksel Arduino portu seçilmedi (${selectedPort.value}). Gerçek kartınız için yukarıdaki menüden COM portunuzu seçin.`, 'system');
 }
 
 watch([selectedPort, baudRate], () => {
   connectSerialStream();
 });
 
+watch(
+  () => props.isUploading,
+  (newVal, oldVal) => {
+    if (oldVal === true && newVal === false) {
+      // Karta kod yüklendiğinde Arduino yeniden başlar (reboot); 1.5 sn sonra porta tekrar bağlan
+      setTimeout(() => {
+        connectSerialStream();
+      }, 1500);
+    }
+  }
+);
+
+watch(
+  () => props.uploadResult,
+  (res) => {
+    if (!res) return;
+    if (res.success) {
+      appendSerialLine(`[YÜKLEME BAŞARILI] ${res.message}`, 'system');
+      if (res.compiler_output) {
+        appendSerialLine(`[DERLEYİCİ] ${res.compiler_output.trim()}`, 'system');
+      }
+      if (res.uploader_output) {
+        appendSerialLine(`[AVRDUDE] ${res.uploader_output.trim()}`, 'system');
+      }
+    } else {
+      appendSerialLine(`[YÜKLEME BAŞARISIZ] ${res.message}`, 'system');
+      if (res.error) {
+        appendSerialLine(`[HATA AYRINTISI] ${res.error.trim()}`, 'system');
+      }
+      if (res.compiler_output) {
+        appendSerialLine(`[DERLEYİCİ] ${res.compiler_output.trim()}`, 'system');
+      }
+    }
+  }
+);
+
 onMounted(() => {
   connectSerialStream();
 });
 
 onUnmounted(() => {
+  if (activeSocket) activeSocket.close();
   if (eventSource) eventSource.close();
   if (simInterval) clearInterval(simInterval);
 });

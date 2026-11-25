@@ -2301,6 +2301,25 @@ Yukarıdaki isteğe göre SADECE istenen parçaları içeren `netlist` (componen
 
         steps = build_baglanti_adimlari_from_netlist(netlist_obj)
         norm_warnings = circuit_warnings
+
+        # Çantada (Inventory) olmayan parçalar kullanılmışsa devre kurulumunu engelleme, uyarı olarak bildir
+        bag_warnings = []
+        if inventory:
+            from app.llm.catalog import resolve_component_type
+            inv_types = {resolve_component_type(item) for item in inventory}
+            missing_bag_items = []
+            for comp in netlist_obj.components:
+                c_type = resolve_component_type(comp.type)
+                # Standart parçaları (direnç, led) çantada olmasa bile uyarı vermeden kabul et
+                if c_type not in inv_types and c_type not in ("wokwi-resistor", "wokwi-led", "arduino-uno", "breadboard"):
+                    label, icon = get_component_meta(c_type)
+                    if f"{icon} {label}" not in missing_bag_items:
+                        missing_bag_items.append(f"{icon} {label}")
+            if missing_bag_items:
+                bag_warnings.append(
+                    f"🎒 Çanta Hatırlatması: Bu projede çantanda işaretli olmayan ({', '.join(missing_bag_items)}) kullanıldı. Devreyi gerçek hayatta kurmak için bu parçaları temin etmen gerekebilir."
+                )
+
         project = ProjeTasarimi(
             proje_adi=(prompt.strip()[:42] or "Arduino Projem"),
             karsilama_mesaji="Devren, akış şeman ve Arduino kodun hazır!",
@@ -2311,7 +2330,7 @@ Yukarıdaki isteğe göre SADECE istenen parçaları içeren `netlist` (componen
             akis_diyagrami=flow_obj,
             arduino_kodu=raw_code,
             guvenlik_notu="Parçaları breadboard pinlerine dikkatlice yerleştir.",
-            uyarilar=circuit_warnings + list(report.warnings),
+            uyarilar=circuit_warnings + list(report.warnings) + bag_warnings,
             verification=report
         )
 
@@ -2795,6 +2814,25 @@ Yukarıdaki isteğe göre SADECE istenen parçaları içeren `netlist` (componen
 
         steps = build_baglanti_adimlari_from_netlist(netlist_obj)
         norm_warnings = circuit_warnings
+
+        # Çantada (Inventory) olmayan parçalar kullanılmışsa devre kurulumunu engelleme, uyarı olarak bildir
+        bag_warnings = []
+        if inventory:
+            from app.llm.catalog import resolve_component_type
+            inv_types = {resolve_component_type(item) for item in inventory}
+            missing_bag_items = []
+            for comp in netlist_obj.components:
+                c_type = resolve_component_type(comp.type)
+                # Standart parçaları (direnç, led) çantada olmasa bile uyarı vermeden kabul et
+                if c_type not in inv_types and c_type not in ("wokwi-resistor", "wokwi-led", "arduino-uno", "breadboard"):
+                    label, icon = get_component_meta(c_type)
+                    if f"{icon} {label}" not in missing_bag_items:
+                        missing_bag_items.append(f"{icon} {label}")
+            if missing_bag_items:
+                bag_warnings.append(
+                    f"🎒 Çanta Hatırlatması: Bu projede çantanda işaretli olmayan ({', '.join(missing_bag_items)}) kullanıldı. Devreyi gerçek hayatta kurmak için bu parçaları temin etmen gerekebilir."
+                )
+
         project = ProjeTasarimi(
             proje_adi=(prompt.strip()[:42] or "Arduino Projem"),
             karsilama_mesaji="Devren, akış şeman ve Arduino kodun hazır!",
@@ -2805,7 +2843,7 @@ Yukarıdaki isteğe göre SADECE istenen parçaları içeren `netlist` (componen
             akis_diyagrami=flow_obj,
             arduino_kodu=raw_code,
             guvenlik_notu="Parçaları breadboard pinlerine dikkatlice yerleştir.",
-            uyarilar=circuit_warnings + list(report.warnings),
+            uyarilar=circuit_warnings + list(report.warnings) + bag_warnings,
             verification=report
         )
 
