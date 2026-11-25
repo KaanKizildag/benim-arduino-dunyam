@@ -571,8 +571,9 @@ async def websocket_serial_bridge(websocket, port: Optional[str] = None, baudrat
         while not stop_event.is_set():
             try:
                 msg = await websocket.receive_text()
-                if msg and ser.is_open:
-                    await loop.run_in_executor(None, ser.write, (msg + "\n").encode("utf-8"))
+                if msg and ser and ser.is_open:
+                    payload = (msg.strip() + "\r\n").encode("utf-8")
+                    await loop.run_in_executor(None, ser.write, payload)
             except (WebSocketDisconnect, Exception):
                 break
 

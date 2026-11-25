@@ -749,11 +749,14 @@ function connectSerialStream() {
 
       activeSocket.onerror = () => {
         isSocketConnected.value = false;
-        appendSerialLine(`[PORT HATASI] ${selectedPort.value} portuna bağlanılamadı. Kablonun takılı olduğundan ve portu başka bir uygulamanın açık tutmadığından emin olun.`, 'system');
+        appendSerialLine(`[PORT BAĞLANTI HATASI] ${selectedPort.value} WebSocket köprüsüne bağlanılamadı. Backend terminalini yeniden başlattığınızdan (Ctrl+C ve 'python -m uvicorn main:app --port 8001 --reload') emin olun.`, 'system');
       };
 
-      activeSocket.onclose = () => {
+      activeSocket.onclose = (event) => {
         isSocketConnected.value = false;
+        if (event.code !== 1000 && event.code !== 1005) {
+          appendSerialLine(`[PORT KAPANDI] Bağlantı kapandı (Kod: ${event.code}). Tekrar bağlanmak için yukarıdaki "🔌 Portu Aç" butonuna basabilirsiniz.`, 'system');
+        }
       };
       return;
     } catch (e) {
