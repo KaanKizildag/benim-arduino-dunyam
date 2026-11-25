@@ -4,6 +4,7 @@ import shutil
 import subprocess
 import tempfile
 import time
+import threading
 from typing import List, Dict, Any, Optional
 
 from arduino_code_utils import sanitize_arduino_identifiers
@@ -14,6 +15,47 @@ try:
     PYSERIAL_AVAILABLE = True
 except ImportError:
     PYSERIAL_AVAILABLE = False
+
+
+class SerialPortLockManager:
+    """
+    Windows üzerinde COM portlarının çakışmasını ve kilitli kalmasını önleyen merkezi yönetici.
+    Upload öncesinde tüm açık portları anında kapatır ve avrdude için serbest bırakır.
+    """
+    _active_connections: Dict[str, Any] = {}
+    _lock = threading.Lock()
+
+    @classmethod
+    def register(cls, port_name: str, ser_obj: Any):
+        with cls._lock:
+            old = cls._active_connections.get(port_name)
+            if old and hasattr(old, "is_open") and old.is_open:
+                try:
+                    old.close()
+                except Exception:
+                    pass
+            cls._active_connections[port_name] = ser_obj
+
+    @classmethod
+    def unregister(cls, port_name: str):
+        with cls._lock:
+            old = cls._active_connections.pop(port_name, None)
+            if old and hasattr(old, "is_open") and old.is_open:
+                try:
+                    old.close()
+                except Exception:
+                    pass
+
+    @classmethod
+    def close_all(cls):
+        with cls._lock:
+            for p, s in list(cls._active_connections.items()):
+                if s and hasattr(s, "is_open") and s.is_open:
+                    try:
+                        s.close()
+                    except Exception:
+                        pass
+            cls._active_connections.clear()
 
 
 def find_arduino_cli_binary() -> Optional[str]:
@@ -228,6 +270,10 @@ def compile_and_upload(code: str, port: Optional[str] = None) -> Dict[str, Any]:
 
         # C. Karta Yükleme Aşaması
         try:
+            # Yükleme öncesinde tüm açık portları kapat ve Windows driverının serbest kalmasını bekle
+            SerialPortLockManager.close_all()
+            time.sleep(0.5)
+
             upload_cmd = [cli_bin, "upload", "-p", target_port, "--fqbn", fqbn, sketch_folder]
             upload_res = subprocess.run(
                 upload_cmd,
@@ -246,6 +292,9 @@ def compile_and_upload(code: str, port: Optional[str] = None) -> Dict[str, Any]:
                     "port": target_port,
                     "can_heal": False
                 }
+
+            # Windows USB-seri sürücüsünün (CH340/ATmega16U2) avrdude sonrası port handle'ını bırakması için bekle
+            time.sleep(1.2)
 
             return {
                 "success": True,
@@ -270,59 +319,10 @@ def compile_and_upload(code: str, port: Optional[str] = None) -> Dict[str, Any]:
 
 def stream_serial_port_events(port: Optional[str] = None, baudrate: int = 9600):
     """
-    Gerçek bir seri port (COM3, /dev/ttyUSB0 vb.) bağlıysa pyserial üzerinden canlı satırları okur
-    ve içindeki sayısal değerleri (key=value veya tekil sayı) ayrıştırarak SSE olarak yayınlar.
-    Gerçek port bağlı değilse veya açılamazsa bağlantı durumunu bildirir.
+    Geriye dönük uyumluluk için SSE ucu.
+    Port kilitlenmelerini önlemek amacıyla gerçek canlı port akışı /ws/serial WebSocket hattına devredilmiştir.
     """
-    import re as _re
-
-    target_port = port
-    if not target_port or target_port in ("auto", "simulated", "SIMULATED_PORT"):
-        detected = get_connected_ports()
-        real_ports = [p["address"] for p in detected if p["address"] != "SIMULATED_PORT"]
-        target_port = real_ports[0] if real_ports else None
-
-    if target_port and PYSERIAL_AVAILABLE:
-        ser = None
-        try:
-            ser = serial.Serial(target_port, baudrate=baudrate, timeout=1.0)
-            yield f"data: {json.dumps({'timestamp': time.strftime('%H:%M:%S'), 'source': 'hardware', 'port': target_port, 'text': f'[BAĞLANDI] {target_port} ({baudrate} baud) seri port akışı başladı.'}, ensure_ascii=False)}\n\n"
-            while True:
-                raw_line = ser.readline()
-                if raw_line:
-                    line_str = raw_line.decode("utf-8", errors="replace").strip()
-                    if line_str:
-                        # Satırdaki sayısal değerleri ayrıştır (örn: "Isik1: 420, Isik2: 680" veya "512")
-                        channels: Dict[str, float] = {}
-                        for m in _re.finditer(r"([A-Za-z0-9_ğüşıöçĞÜŞİÖÇ]+)\s*[:=]\s*(-?\d+(?:\.\d+)?)", line_str):
-                            channels[m.group(1)] = float(m.group(2))
-                        if not channels:
-                            nums = _re.findall(r"-?\d+(?:\.\d+)?", line_str)
-                            if len(nums) == 1:
-                                channels["Deger"] = float(nums[0])
-                            elif len(nums) > 1:
-                                for idx, n in enumerate(nums[:4], start=1):
-                                    channels[f"Kanal_{idx}"] = float(n)
-                        payload: Dict[str, Any] = {
-                            "timestamp": time.strftime("%H:%M:%S"),
-                            "source": "hardware",
-                            "port": target_port,
-                            "text": line_str,
-                            "channels": channels
-                        }
-                        if channels:
-                            payload["value"] = next(iter(channels.values()))
-                        yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
-                else:
-                    time.sleep(0.05)
-        except Exception as e:
-            yield f"data: {json.dumps({'timestamp': time.strftime('%H:%M:%S'), 'source': 'error', 'port': target_port, 'text': f'[PORT UYARISI] {target_port} okunamadı ({e}). Simülasyon akışına geçiliyor.'}, ensure_ascii=False)}\n\n"
-        finally:
-            if ser and ser.is_open:
-                try:
-                    ser.close()
-                except Exception:
-                    pass
+    yield f"data: {json.dumps({'timestamp': time.strftime('%H:%M:%S'), 'source': 'system', 'port': port or 'auto', 'text': '[BİLGİ] Canlı iki yönlü seri port akışı için /ws/serial WebSocket köprüsü aktiftir.'}, ensure_ascii=False)}\n\n"
 
 
 def generate_simulated_serial_events(project_type: str = "general"):
@@ -362,17 +362,29 @@ async def websocket_serial_bridge(websocket, port: Optional[str] = None, baudrat
         await websocket.close()
         return
 
+    SerialPortLockManager.unregister(target_port)
+    await asyncio.sleep(0.15)
     ser = None
-    try:
-        ser = serial.Serial(target_port, baudrate=baudrate, timeout=0.1)
-    except Exception as e:
+    last_err = None
+    # Upload sonrasında Windows'un COM handle'ını bırakması 1-2 saniye sürebilir; 8 kez dene
+    for attempt in range(8):
+        try:
+            ser = serial.Serial(target_port, baudrate=baudrate, timeout=0.1)
+            break
+        except Exception as e:
+            last_err = e
+            await asyncio.sleep(0.5)
+
+    if not ser or not ser.is_open:
         await websocket.send_json({
             "type": "error",
             "port": target_port,
-            "message": f"Seri port ({target_port}) açılamadı: {e}. Portun başka bir uygulama tarafından kullanılmadığından emin olun."
+            "message": f"Seri port ({target_port}) açılamadı: {last_err}. Portun başka bir uygulama tarafından kullanılmadığından emin olun."
         })
         await websocket.close()
         return
+
+    SerialPortLockManager.register(target_port, ser)
 
     await websocket.send_json({
         "type": "connected",
@@ -432,6 +444,7 @@ async def websocket_serial_bridge(websocket, port: Optional[str] = None, baudrat
             task.cancel()
     finally:
         stop_event.set()
+        SerialPortLockManager.unregister(target_port)
         if ser and ser.is_open:
             try:
                 ser.close()

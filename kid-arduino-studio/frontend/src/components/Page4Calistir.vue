@@ -92,11 +92,18 @@
         <div class="px-4 py-2.5 bg-slate-900 border-b-2 border-slate-800 flex flex-wrap items-center justify-between gap-2">
           <div class="flex items-center gap-2">
             <span
-              class="w-3 h-3 rounded-full border border-slate-950"
-              :class="isPaused ? 'bg-amber-400' : 'bg-emerald-400 animate-pulse shadow-[0_0_8px_#34d399]'"
+              class="w-3 h-3 rounded-full border border-slate-950 transition-colors"
+              :class="!isSocketConnected ? 'bg-slate-600' : isPaused ? 'bg-amber-400' : 'bg-emerald-400 animate-pulse shadow-[0_0_8px_#34d399]'"
+              :title="isSocketConnected ? 'Seri port bağlantısı aktif' : 'Seri port bağlı değil'"
             ></span>
             <span class="text-xs font-black text-white tracking-wide">
               🖥️ SERIAL MONITOR ({{ baudRate }} baud)
+            </span>
+            <span
+              class="px-2 py-0.5 rounded-md text-[10px] font-black tracking-wide"
+              :class="isSocketConnected ? 'bg-emerald-950 border border-emerald-500 text-emerald-300' : 'bg-slate-800 border border-slate-700 text-slate-400'"
+            >
+              {{ isSocketConnected ? 'CANLI BAĞLI' : 'BAĞLI DEĞİL' }}
             </span>
             <span class="px-2 py-0.5 rounded-md bg-slate-800 border border-slate-700 text-[10px] font-bold text-cyan-300">
               {{ serialLines.length }} satır
@@ -105,6 +112,20 @@
 
           <!-- Terminal Kontrolleri -->
           <div class="flex items-center gap-1.5">
+            <!-- Port Aç / Kapat Butonu -->
+            <button
+              type="button"
+              @click="toggleSocketConnection"
+              :class="[
+                'px-2.5 py-1 rounded-lg border text-[10px] font-black cursor-pointer transition flex items-center gap-1 shadow-sm',
+                isSocketConnected
+                  ? 'bg-rose-500/20 hover:bg-rose-500/30 border-rose-400 text-rose-300'
+                  : 'bg-emerald-500/20 hover:bg-emerald-500/30 border-emerald-400 text-emerald-300'
+              ]"
+              :title="isSocketConnected ? 'Seri port bağlantısını kes' : 'Seri porta bağlan'"
+            >
+              <span>{{ isSocketConnected ? '🔴 Portu Kapat' : '🔌 Portu Aç' }}</span>
+            </button>
             <button
               type="button"
               @click="showTimestamps = !showTimestamps"
@@ -389,6 +410,7 @@ const statusMessage = ref('');
 const isPaused = ref(false);
 const autoScroll = ref(true);
 const showTimestamps = ref(true);
+const isSocketConnected = ref(false);
 const manualInput = ref('');
 const terminalScrollRef = ref<HTMLElement | null>(null);
 
@@ -649,11 +671,23 @@ function clearSerialMonitor() {
   serialLines.value = [];
 }
 
+function toggleSocketConnection() {
+  if (isSocketConnected.value && activeSocket) {
+    activeSocket.close();
+    activeSocket = null;
+    isSocketConnected.value = false;
+    appendSerialLine('[BİLGİ] Seri port bağlantısı kullanıcı tarafından kapatıldı.', 'system');
+  } else {
+    connectSerialStream();
+  }
+}
+
 function triggerUpload() {
   if (activeSocket) {
     activeSocket.close();
     activeSocket = null;
   }
+  isSocketConnected.value = false;
   if (eventSource) {
     eventSource.close();
     eventSource = null;
@@ -668,6 +702,7 @@ function connectSerialStream() {
     activeSocket.close();
     activeSocket = null;
   }
+  isSocketConnected.value = false;
   if (eventSource) {
     eventSource.close();
     eventSource = null;
@@ -689,6 +724,7 @@ function connectSerialStream() {
       activeSocket = new WebSocket(wsUrl);
 
       activeSocket.onopen = () => {
+        isSocketConnected.value = true;
         appendSerialLine(`[BAĞLANDI] ${selectedPort.value} canlı WebSocket köprüsü aktif. Arduino'dan gelen gerçek veriler bekleniyor...`, 'system');
       };
 
@@ -696,10 +732,12 @@ function connectSerialStream() {
         try {
           const data = JSON.parse(event.data);
           if (data.type === 'connected') {
+            isSocketConnected.value = true;
             appendSerialLine(data.text || `[PORT AÇILDI] ${data.port}`, 'system');
           } else if (data.type === 'data') {
             appendSerialLine(data.text, 'hardware', undefined, data.timestamp);
           } else if (data.type === 'error') {
+            isSocketConnected.value = false;
             appendSerialLine(`[PORT UYARISI] ${data.message || data.text}`, 'system');
           }
         } catch {
@@ -710,14 +748,16 @@ function connectSerialStream() {
       };
 
       activeSocket.onerror = () => {
+        isSocketConnected.value = false;
         appendSerialLine(`[PORT HATASI] ${selectedPort.value} portuna bağlanılamadı. Kablonun takılı olduğundan ve portu başka bir uygulamanın açık tutmadığından emin olun.`, 'system');
       };
 
       activeSocket.onclose = () => {
-        // Gerçek port kapandığında sahte veri uydurma, temizce bekle
+        isSocketConnected.value = false;
       };
       return;
     } catch (e) {
+      isSocketConnected.value = false;
       appendSerialLine(`[HATA] WebSocket başlatılamadı: ${e}`, 'system');
       return;
     }
@@ -735,10 +775,10 @@ watch(
   () => props.isUploading,
   (newVal, oldVal) => {
     if (oldVal === true && newVal === false) {
-      // Karta kod yüklendiğinde Arduino yeniden başlar (reboot); 1.5 sn sonra porta tekrar bağlan
+      // Karta kod yüklendiğinde Arduino yeniden başlar (reboot); Windows USB-seri sürücüsünün portu bırakması için 2.2 sn sonra bağlan
       setTimeout(() => {
         connectSerialStream();
-      }, 1500);
+      }, 2200);
     }
   }
 );
@@ -772,7 +812,11 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
-  if (activeSocket) activeSocket.close();
+  if (activeSocket) {
+    activeSocket.close();
+    activeSocket = null;
+  }
+  isSocketConnected.value = false;
   if (eventSource) eventSource.close();
   if (simInterval) clearInterval(simInterval);
 });
