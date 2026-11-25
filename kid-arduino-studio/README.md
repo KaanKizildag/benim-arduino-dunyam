@@ -19,22 +19,41 @@ cd kid-arduino-studio
 docker compose up -d --build
 ```
 
-### Seçenek B: Yerelde geliştirme modu
+### Seçenek B: Yerelde Geliştirme Modu (Önerilen)
 
 **1. Backend (Python 3.11+):**
 ```bash
-cd kid-arduino-studio/backend
+cd backend
+
+# A. Sanal ortamı (venv) oluşturun ve aktif edin
+python -m venv .venv
+
+# Windows PowerShell:
+.\.venv\Scripts\Activate.ps1
+# Windows CMD:
+.\.venv\Scripts\activate.bat
+# Linux / macOS:
+source .venv/bin/activate
+
+# B. Gerekli kütüphaneleri yükleyin
 pip install -r requirements.txt
-uvicorn main:app --host 0.0.0.0 --port 8001 --reload
+
+# C. Ortam değişkenleri şablonunu kopyalayın
+copy .env.example .env    # Windows
+# cp .env.example .env    # Linux / macOS
+
+# D. Backend sunucusunu başlatın (Port 8001)
+python -m uvicorn main:app --port 8001 --reload
 ```
 - Backend `http://localhost:8001` adresinde çalışır (API dokümanı: `http://localhost:8001/docs`).
 - Port **8001** olmalıdır; frontend geliştirme sunucusu `/api` isteklerini `127.0.0.1:8001`'e yönlendirir (`frontend/vite.config.ts`).
-- `--reload` sayesinde Python kodu değişince sunucu kendini yeniden başlatır. Bu bayrak olmadan, kod değişikliklerinden sonra sunucuyu elle yeniden başlatmanız gerekir.
-- Not: `python main.py` sunucuyu **başlatmaz**; `uvicorn` komutunu kullanın.
+- `--reload` sayesinde Python kodu değişince sunucu kendini otomatik yeniden başlatır.
+- `python -m uvicorn` kullanımı PATH problemlerini önler.
 
 **2. Frontend (Node.js 18+):**
+Ayrı bir terminal penceresinde:
 ```bash
-cd kid-arduino-studio/frontend
+cd frontend
 npm install
 npm run dev
 ```

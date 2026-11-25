@@ -673,11 +673,19 @@ def generate_flow_from_code(
     clean_json_fn: Callable[[str], str],
 ) -> Tuple[AkisDiyagrami, List[str], str]:
     """
-    Kesinleşmiş netlist ve Arduino kodundan LLM ile akış diyagramı üretir.
-    Doğrulama başarısız olursa hata listesiyle 1 kez retry yapar; yine başarısız olursa
-    koddan deterministik olarak (build_deterministic_flow_from_code) akış üretir.
+    Öncelikle Arduino kodunu deterministik olarak analiz ederek sebep-sonuç akış diyagramını
+    SIFIR TOKEN maliyetiyle ve milisaniyeler içinde üretir.
+    Eğer koddan geçerli bir akış diyagramı çıkarılamazsa, LLM yedek olarak 1 kez çağrılır.
     Dönüş: (akis_diyagrami, warnings, status_label)
     """
+    # 1. ADIM: Token tasarruflu deterministik üretim (0 Token, Anında Yanıt)
+    det_flow = build_deterministic_flow_from_code(netlist, arduino_kodu)
+    if det_flow and len(det_flow.dugumler) >= 2 and len(det_flow.baglantilar) >= 1:
+        errs, warns, valid_obj = validate_flow_diagram(det_flow.model_dump(), netlist, arduino_kodu)
+        if not errs and valid_obj is not None:
+            return valid_obj, warns, "DETERMINISTIC_FAST"
+
+    # 2. ADIM: Yalnızca deterministik çıkarım yetersiz kalırsa tek denemelik LLM çağrısı
     comp_summary = [
         {"id": c.id, "type": c.type, "label": c.label}
         for c in (netlist.components or [])
@@ -687,46 +695,27 @@ def generate_flow_from_code(
         f'KULLANICI İSTEĞİ: "{prompt}"\n'
         f"DEVREDEKİ PARÇALAR: {json.dumps(comp_summary, ensure_ascii=False)}\n"
         f"SON ARDUINO KODU:\n```cpp\n{arduino_kodu}\n```\n"
-        "Bu koddaki setup() ve loop() mantığını birebir yansıtan `dugumler` ve `baglantilar` JSON nesnesini üret. Sadece JSON döndür."
+        "Bu koddaki setup() ve loop() mantığını yansıtan `dugumler` ve `baglantilar` JSON nesnesini üret. Sadece JSON döndür."
     )
 
-    last_errors: List[str] = []
-    for attempt in range(2):
-        uprompt = base_user_prompt
-        if attempt == 1 and last_errors:
-            uprompt = (
-                base_user_prompt
-                + "\n\nÖNCEKİ ÇIKTIDA ŞU HATALAR BULUNDU, DÜZELTEREK TEKRAR ÜRET:\n- "
-                + "\n- ".join(last_errors)
-            )
-
-        raw = _call_llm_for_flow(
-            system_prompt=FLOW_FROM_CODE_SYSTEM_PROMPT,
-            user_prompt=uprompt,
-            chosen_model=chosen_model,
-            provider_used=provider_used,
-            ollama_url=ollama_url,
-            api_key=api_key,
-        )
-        if not raw or not raw.strip():
-            last_errors = ["Modelden akış diyagramı yanıtı alınamadı."]
-            continue
-
+    raw = _call_llm_for_flow(
+        system_prompt=FLOW_FROM_CODE_SYSTEM_PROMPT,
+        user_prompt=base_user_prompt,
+        chosen_model=chosen_model,
+        provider_used=provider_used,
+        ollama_url=ollama_url,
+        api_key=api_key,
+    )
+    if raw and raw.strip():
         try:
             parsed = json.loads(clean_json_fn(raw))
-        except Exception as e:
-            last_errors = [f"JSON parse hatası: {e}"]
-            continue
+            errs, warns, model_obj = validate_flow_diagram(parsed, netlist, arduino_kodu)
+            if not errs and model_obj is not None:
+                return model_obj, warns, "SUCCESS"
+        except Exception:
+            pass
 
-        errs, warns, model_obj = validate_flow_diagram(parsed, netlist, arduino_kodu)
-        if not errs and model_obj is not None:
-            status = "REPAIRED" if attempt == 1 else "SUCCESS"
-            return model_obj, warns, status
-        last_errors = errs
-
-    # 2 deneme de başarısızsa koddan deterministik akış üret (asla generic sabit metin yok!)
-    det_flow = build_deterministic_flow_from_code(netlist, arduino_kodu)
     fallback_note = (
-        "Akış diyagramı LLM yanıtı doğrulanamadığı için Arduino kodundan deterministik olarak türetildi."
+        "Akış diyagramı Arduino kodundan deterministik olarak türetildi."
     )
     return det_flow, [fallback_note], "DETERMINISTIC_FALLBACK"

@@ -110,7 +110,12 @@
 
             <div class="flex items-center justify-between text-[10px] text-slate-400 font-mono">
               <span class="truncate">{{ item.model }}</span>
-              <span>{{ item.duration_ms }} ms • {{ item.timestamp.split(' ')[1] || item.timestamp }}</span>
+              <span>
+                <span v-if="item.total_tokens || item.prompt_tokens" class="text-yellow-400 mr-1.5 font-bold">
+                  🪙{{ item.total_tokens || ((item.prompt_tokens || 0) + (item.completion_tokens || 0)) }}
+                </span>
+                {{ item.duration_ms }} ms • {{ item.timestamp.split(' ')[1] || item.timestamp }}
+              </span>
             </div>
           </button>
         </div>
@@ -142,6 +147,15 @@
               </span>
               <span class="px-2.5 py-1 rounded-xl bg-slate-900 border border-slate-700 text-emerald-300">
                 Durum: {{ activeLog.status }}
+              </span>
+              <span
+                v-if="activeLog.total_tokens || activeLog.prompt_tokens"
+                class="px-2.5 py-1 rounded-xl bg-slate-900 border border-yellow-500/50 text-yellow-300 font-bold"
+              >
+                🪙 {{ activeLog.total_tokens || ((activeLog.prompt_tokens || 0) + (activeLog.completion_tokens || 0)) }} token
+                <span v-if="activeLog.prompt_tokens !== undefined && activeLog.prompt_tokens !== null" class="text-[10px] text-slate-400 font-normal">
+                  ({{ activeLog.prompt_tokens }} in / {{ activeLog.completion_tokens || 0 }} out)
+                </span>
               </span>
             </div>
           </div>

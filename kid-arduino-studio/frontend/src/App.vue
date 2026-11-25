@@ -315,6 +315,8 @@ import Page4Calistir from './components/Page4Calistir.vue';
 import CodePeekModal from './components/CodePeekModal.vue';
 import ProjeFikirleriModal from './components/ProjeFikirleriModal.vue';
 import AIRevisionModal from './components/AIRevisionModal.vue';
+import { api } from './api/client';
+import { useSavedProjects } from './composables/useSavedProjects';
 
 // Örnek proje içermeyen başlangıç durumu
 function createEmptyProject(): ProjeTasarimi {
@@ -349,7 +351,6 @@ const currentStep = ref(1);
 const currentProjectId = ref('');
 const currentProject = ref<ProjeTasarimi>(createEmptyProject());
 const currentPromptText = ref('');
-const savedProjects = ref<SavedProjectEntry[]>([]);
 const aiLogs = ref<AILogEntry[]>([]);
 
 const selectedInventory = ref<string[]>([
@@ -530,10 +531,7 @@ function onSaveAIModel(payload: { model: string; apiKey?: string }) {
 
 async function fetchAILogs() {
   try {
-    const res = await fetch('/api/ai-logs');
-    if (res.ok) {
-      aiLogs.value = await res.json();
-    }
+    aiLogs.value = await api.getAILogs();
   } catch {
     // ignore
   }
@@ -541,11 +539,11 @@ async function fetchAILogs() {
 
 async function handleClearAILogs() {
   try {
-    await fetch('/api/ai-logs', { method: 'DELETE' });
-    aiLogs.value = [];
+    await api.clearAILogs();
   } catch {
-    aiLogs.value = [];
+    // ignore
   }
+  aiLogs.value = [];
 }
 
 async function openAdminLogsModal() {
@@ -553,100 +551,29 @@ async function openAdminLogsModal() {
   isAdminLogsOpen.value = true;
 }
 
-async function fetchSavedProjects() {
-  try {
-    const res = await fetch('/api/projects');
-    if (res.ok) {
-      const data: SavedProjectEntry[] = await res.json();
-      savedProjects.value = data.filter(p => !p.is_preset);
-      localStorage.setItem('kid_arduino_saved_projects', JSON.stringify(savedProjects.value));
-      return;
-    }
-  } catch {
-    // Backend ulaşılamazsa localStorage yedeğinden oku
-  }
-
-  try {
-    const cached = localStorage.getItem('kid_arduino_saved_projects');
-    if (cached) {
-      const parsed: SavedProjectEntry[] = JSON.parse(cached);
-      savedProjects.value = parsed.filter(p => !p.is_preset);
-      return;
-    }
-  } catch {
-    // ignore
-  }
-
-  savedProjects.value = [];
-}
-
-async function saveCurrentProjectToHistory(promptStr?: string, badgeStr = 'AI Tasarımım ✨') {
-  if (!currentProject.value.netlist || currentProject.value.netlist.components.length === 0) {
-    return;
-  }
-  try {
-    const res = await fetch('/api/projects', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        prompt: promptStr || currentPromptText.value || currentProject.value.proje_adi,
-        badge: badgeStr,
-        project: currentProject.value
-      })
-    });
-    if (res.ok) {
-      const savedEntry: SavedProjectEntry = await res.json();
-      currentProjectId.value = savedEntry.id;
-      await fetchSavedProjects();
-      return;
-    }
-  } catch {
-    // Offline fallback
-  }
-
-  const localEntry: SavedProjectEntry = {
-    id: `local_${Date.now()}`,
-    created_at: new Date().toLocaleString('tr-TR'),
-    prompt: promptStr || currentPromptText.value || currentProject.value.proje_adi,
-    is_preset: false,
-    badge: badgeStr,
-    project: JSON.parse(JSON.stringify(currentProject.value))
-  };
-  savedProjects.value = [localEntry, ...savedProjects.value];
-  currentProjectId.value = localEntry.id;
-  localStorage.setItem('kid_arduino_saved_projects', JSON.stringify(savedProjects.value));
-}
-
-async function handleDeleteSavedProject(projectId: string) {
-  try {
-    await fetch(`/api/projects/${projectId}`, { method: 'DELETE' });
-  } catch {
-    // ignore
-  }
-  savedProjects.value = savedProjects.value.filter(p => p.id !== projectId);
-  localStorage.setItem('kid_arduino_saved_projects', JSON.stringify(savedProjects.value));
-}
-
-function handleSelectSavedProject(payload: { entry: SavedProjectEntry; targetStep: number }) {
-  currentProject.value = JSON.parse(JSON.stringify(payload.entry.project));
-  currentProjectId.value = payload.entry.id;
-  currentPromptText.value = payload.entry.prompt || payload.entry.project.proje_adi;
-  isProjectsOpen.value = false;
-  currentStep.value = payload.targetStep;
-}
+const {
+  savedProjects,
+  fetchSavedProjects,
+  saveCurrentProjectToHistory,
+  handleDeleteSavedProject,
+  handleSelectSavedProject,
+} = useSavedProjects(
+  currentProject,
+  currentProjectId,
+  currentPromptText,
+  currentStep,
+  isProjectsOpen
+);
 
 async function fetchModels() {
   try {
-    const res = await fetch('/api/models');
-    if (res.ok) {
-      const data: ModelsResponse = await res.json();
-      availableModels.value = (data.local_models || []).concat(data.cloud_models || []).map(m => m.id);
-      if (
-        data.default_model &&
-        (!selectedModel.value || !availableModels.value.includes(selectedModel.value))
-      ) {
-        selectedModel.value = data.default_model;
-      }
+    const data: ModelsResponse = await api.getModels();
+    availableModels.value = (data.local_models || []).concat(data.cloud_models || []).map(m => m.id);
+    if (
+      data.default_model &&
+      (!selectedModel.value || !availableModels.value.includes(selectedModel.value))
+    ) {
+      selectedModel.value = data.default_model;
     }
   } catch {
     availableModels.value = ['ollama/qwen2.5-coder:1.5b', 'gemini/gemini-2.5-flash', 'gpt-4o-mini', 'claude-3-5-haiku-20241022'];
@@ -655,11 +582,8 @@ async function fetchModels() {
 
 async function fetchPorts() {
   try {
-    const res = await fetch('/api/ports');
-    if (res.ok) {
-      const data = await res.json();
-      availablePorts.value = data.ports || [];
-    }
+    const ports = await api.getPorts();
+    availablePorts.value = ports as any;
   } catch {
     availablePorts.value = [
       { address: 'auto', label: 'Otomatik Port (Simüle)', board_name: 'Arduino Uno', is_arduino: true, source: 'simulated' }

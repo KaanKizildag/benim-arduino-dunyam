@@ -37,6 +37,24 @@ from flow_service import (
     generate_flow_from_code,
 )
 from prompt_filter import validate_project_prompt
+from app.llm.catalog import (
+    build_one_shot_system_prompt,
+    get_filtered_component_docs,
+)
+from app.llm.cache import (
+    get_cached_project,
+    set_cached_project,
+)
+from app.repositories.projects_repo import (
+    get_saved_projects,
+    save_project_entry,
+    delete_saved_project,
+)
+from app.repositories.ai_logs_repo import (
+    get_ai_logs,
+    record_ai_log,
+    clear_ai_logs,
+)
 
 load_dotenv()
 
@@ -1533,10 +1551,17 @@ def record_ai_log(
     user_prompt: str,
     raw_response: str,
     processed_output: Optional[Dict[str, Any]] = None,
-    notes: Optional[List[str]] = None
+    notes: Optional[List[str]] = None,
+    prompt_tokens: Optional[int] = None,
+    completion_tokens: Optional[int] = None,
+    total_tokens: Optional[int] = None
 ) -> AILogEntry:
     """Yapay zekaya gönderilen her isteği ve alınan her cevabı Admin ekranı için kaydeder."""
     _load_ai_logs_from_disk()
+    tot = total_tokens
+    if tot is None and (prompt_tokens is not None or completion_tokens is not None):
+        tot = (prompt_tokens or 0) + (completion_tokens or 0)
+
     entry = AILogEntry(
         id=f"log_{int(time.time() * 1000)}_{uuid.uuid4().hex[:4]}",
         timestamp=time.strftime("%d.%m.%Y %H:%M:%S"),
@@ -1550,7 +1575,10 @@ def record_ai_log(
         user_prompt=user_prompt,
         raw_response=raw_response,
         processed_output=processed_output,
-        notes=notes or []
+        notes=notes or [],
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        total_tokens=tot
     )
     AI_LOGS_MEMORY.insert(0, entry)
     del AI_LOGS_MEMORY[100:]
@@ -2444,8 +2472,50 @@ def generate_full_project_stream(
     models_info = get_all_available_models(ollama_url)
     chosen_model = model if model != "default" and model is not None else models_info["default_model"]
 
+    # 0.5. Token Tasarrufu & Hızlı Yanıt: Önbellek (Cache) Kontrolü
+    cached = get_cached_project(prompt, inventory, chosen_model)
+    if cached:
+        yield format_sse({
+            "type": "stage",
+            "stageIndex": 0,
+            "title": "1. Proje Fikrin Analiz Ediliyor",
+            "subtitle": "Önbellekten anında yüklendi ⚡",
+            "progressPercent": 50
+        })
+        yield format_sse({
+            "type": "stage",
+            "stageIndex": 1,
+            "title": "2. Devre ve Kod Hazır",
+            "subtitle": "Tüm bağlantılar ve kod hazır!",
+            "progressPercent": 100
+        })
+        yield format_sse({
+            "type": "complete",
+            "project": cached,
+            "progressPercent": 100
+        })
+        record_ai_log(
+            stage="Tek Sorgu (One-Shot): Devre + Akış + Kod (Stream)",
+            model=chosen_model,
+            provider="cache",
+            duration_ms=5,
+            status="SUCCESS",
+            user_goal=prompt,
+            system_prompt="(Cache Hit - 0 Tokens)",
+            user_prompt=f"KULLANICI PROJE İSTEĞİ: \"{prompt}\"",
+            raw_response="[CACHED RESULT]",
+            processed_output=cached,
+            notes=["Önbellekten (Cache) 0 token ve 0ms ile yüklendi ⚡"],
+            prompt_tokens=0,
+            completion_tokens=0,
+            total_tokens=0
+        )
+        return
+
+    # Dinamik sistem promptu: yalnızca gereken parçaların pinlerini içerir (%70 token tasarrufu)
+    dynamic_system_prompt = build_one_shot_system_prompt(prompt, inventory)
+
     # Akış diyagramı AI'dan istenmez; aşağıda kesinleşen koddan ayrı bir adımda üretilir
-    # (ONE_SHOT_SYSTEM_PROMPT da "JSON'a akis_adimlari ekleme" diyor).
     user_prompt = f"""KULLANICI PROJE İSTEĞİ: "{prompt}"
 Yukarıdaki isteğe göre SADECE istenen parçaları içeren `netlist` (components + connections) ve aynı pinleri kullanan `arduino_kodu` alanlarını içeren tek bir geçerli JSON nesnesi üret. Sadece JSON döndür."""
 
@@ -2593,7 +2663,7 @@ Yukarıdaki isteğe göre SADECE istenen parçaları içeren `netlist` (componen
 
             ollama_payload: Dict[str, Any] = {
                 "model": clean_model,
-                "system": ONE_SHOT_SYSTEM_PROMPT,
+                "system": dynamic_system_prompt,
                 "prompt": user_prompt,
                 "stream": True,
                 "options": {
@@ -2636,12 +2706,13 @@ Yukarıdaki isteğe göre SADECE istenen parçaları içeren `netlist` (componen
             stream_resp = completion(
                 model=chosen_model,
                 messages=[
-                    {"role": "system", "content": ONE_SHOT_SYSTEM_PROMPT},
+                    {"role": "system", "content": dynamic_system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
                 stream=True,
                 api_key=api_key,
-                temperature=0.2
+                temperature=0.2,
+                max_tokens=2500
             )
             for chunk_obj in stream_resp:
                 if chunk_obj.choices and chunk_obj.choices[0].delta:
@@ -2738,6 +2809,13 @@ Yukarıdaki isteğe göre SADECE istenen parçaları içeren `netlist` (componen
             verification=report
         )
 
+        # Token sayılarını hesapla ve önbelleğe al
+        prompt_tokens_est = max(1, len(dynamic_system_prompt + user_prompt) // 4)
+        comp_tokens_est = max(1, len(accumulated_text) // 4)
+        total_tokens_est = prompt_tokens_est + comp_tokens_est
+
+        set_cached_project(prompt, inventory, chosen_model, project.model_dump(by_alias=True))
+
         record_ai_log(
             stage="Tek Sorgu (One-Shot): Devre + Akış + Kod (Stream)",
             model=chosen_model,
@@ -2745,11 +2823,14 @@ Yukarıdaki isteğe göre SADECE istenen parçaları içeren `netlist` (componen
             duration_ms=duration_ms,
             status="SUCCESS" if report.is_valid else "VALIDATION_WARNING",
             user_goal=prompt,
-            system_prompt=ONE_SHOT_SYSTEM_PROMPT,
+            system_prompt=dynamic_system_prompt,
             user_prompt=user_prompt,
             raw_response=accumulated_text,
             processed_output=project.model_dump(by_alias=True),
-            notes=list(report.checks) + circuit_warnings + list(report.warnings)
+            notes=list(report.checks) + circuit_warnings + list(report.warnings),
+            prompt_tokens=prompt_tokens_est,
+            completion_tokens=comp_tokens_est,
+            total_tokens=total_tokens_est
         )
 
         yield format_sse({
@@ -2761,6 +2842,8 @@ Yukarıdaki isteğe göre SADECE istenen parçaları içeren `netlist` (componen
     except Exception as e:
         duration_ms = int((time.time() - t0) * 1000)
         err_msg = f"Yapay zeka yanıtı doğrulanamadı: {e}"
+        prompt_tokens_est = max(1, len(dynamic_system_prompt + user_prompt) // 4)
+        comp_tokens_est = max(1, len(accumulated_text) // 4) if accumulated_text else 0
         record_ai_log(
             stage="Tek Sorgu (One-Shot): Devre + Akış + Kod (Stream)",
             model=chosen_model,
@@ -2768,11 +2851,14 @@ Yukarıdaki isteğe göre SADECE istenen parçaları içeren `netlist` (componen
             duration_ms=duration_ms,
             status="ERROR",
             user_goal=prompt,
-            system_prompt=ONE_SHOT_SYSTEM_PROMPT,
+            system_prompt=dynamic_system_prompt,
             user_prompt=user_prompt,
             raw_response=accumulated_text,
             processed_output=None,
-            notes=[err_msg]
+            notes=[err_msg],
+            prompt_tokens=prompt_tokens_est,
+            completion_tokens=comp_tokens_est,
+            total_tokens=prompt_tokens_est + comp_tokens_est
         )
         yield format_sse({
             "type": "error",

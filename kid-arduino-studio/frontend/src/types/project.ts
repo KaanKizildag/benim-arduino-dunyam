@@ -137,6 +137,9 @@ export interface AILogEntry {
   raw_response: string;
   processed_output?: Record<string, any> | null;
   notes: string[];
+  prompt_tokens?: number | null;
+  completion_tokens?: number | null;
+  total_tokens?: number | null;
 }
 
 // Geriye dönük uyumluluk takma adı (alias)

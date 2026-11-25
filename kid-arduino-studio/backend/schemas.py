@@ -156,3 +156,6 @@ class AILogEntry(BaseModel):
     raw_response: str = Field(default="", description="Yapay zekadan dönen ham yanıt")
     processed_output: Optional[Dict[str, Any]] = Field(default=None, description="Doğrulanmış ve normalize edilmiş çıktı")
     notes: List[str] = Field(default_factory=list, description="Normalizasyon, filtreleme veya hata notları")
+    prompt_tokens: Optional[int] = Field(default=None, description="Girdi token sayısı")
+    completion_tokens: Optional[int] = Field(default=None, description="Çıktı token sayısı")
+    total_tokens: Optional[int] = Field(default=None, description="Toplam token sayısı")

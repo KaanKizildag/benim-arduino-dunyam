@@ -25,13 +25,14 @@ from ai_service import (
     generate_full_project_one_shot,
     generate_full_project_stream,
     generate_revised_project_stream,
-    generate_wiring_only,
-    generate_logic_and_code_for_wiring,
-    fix_arduino_code,
     get_all_available_models,
+)
+from app.repositories.projects_repo import (
     get_saved_projects,
     save_project_entry,
     delete_saved_project,
+)
+from app.repositories.ai_logs_repo import (
     get_ai_logs,
     clear_ai_logs,
 )
