@@ -144,16 +144,6 @@ def get_connected_ports() -> List[Dict[str, Any]]:
         except Exception as e:
             print(f"[Port Algılama Bilgisi] pyserial taraması: {e}")
 
-    # 3. Eğer hiç port bulunamadıysa çocuk için sanal/simülatör portu ekle
-    if not ports:
-        ports.append({
-            "address": "SIMULATED_PORT",
-            "label": "Sanal Port (Simülasyon Modu)",
-            "board_name": "Arduino Uno (Sanal)",
-            "is_arduino": True,
-            "source": "simulated"
-        })
-
     return ports
 
 
@@ -392,7 +382,7 @@ def compile_and_upload(code: str, port: Optional[str] = None) -> Dict[str, Any]:
 
         # B. Port Belirleme
         target_port = port
-        if not target_port or target_port == "SIMULATED_PORT" or target_port == "auto":
+        if not target_port or target_port == "SIMULATED_PORT" or target_port == "auto" or str(target_port).startswith("webserial"):
             # Otomatik port bul
             detected_ports = get_connected_ports()
             real_ports = [p["address"] for p in detected_ports if p["address"] != "SIMULATED_PORT"]
@@ -484,7 +474,7 @@ async def websocket_serial_bridge(websocket, port: Optional[str] = None, baudrat
     await websocket.accept()
 
     target_port = port
-    if not target_port or target_port in ("auto", "simulated", "SIMULATED_PORT"):
+    if not target_port or target_port in ("auto", "simulated", "SIMULATED_PORT") or str(target_port).startswith("webserial"):
         detected = get_connected_ports()
         real_ports = [p["address"] for p in detected if p["address"] != "SIMULATED_PORT"]
         target_port = real_ports[0] if real_ports else None

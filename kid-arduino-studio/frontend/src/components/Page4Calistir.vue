@@ -33,15 +33,18 @@
         </div>
       </div>
 
-      <!-- Sağ: Port Seçici + Baud Rate + Karta Yükle Butonu -->
+      <!-- Sağ: Port Seçici + Baud Rate + Web Serial Butonu + Karta Yükle Butonu -->
       <div class="flex flex-wrap items-center gap-2">
         <div class="flex items-center gap-1.5 bg-slate-100 p-1.5 rounded-2xl border-2 border-slate-900">
           <select
             v-model="selectedPort"
-            class="px-2.5 py-1.5 rounded-xl border border-slate-900 font-black text-xs bg-white text-slate-900 outline-none cursor-pointer"
+            class="px-2.5 py-1.5 rounded-xl border border-slate-900 font-black text-xs bg-white text-slate-900 outline-none cursor-pointer max-w-[210px] truncate"
+            title="Kullanılacak Arduino Portu"
           >
-            <option value="auto">Otomatik Port</option>
-            <option v-for="p in availablePorts" :key="p.address" :value="p.address">
+            <option v-if="selectablePorts.length === 0" value="" disabled>
+              Bağlı Port Yok (USB Takın)
+            </option>
+            <option v-for="p in selectablePorts" :key="p.address" :value="p.address">
               {{ p.label }}
             </option>
           </select>
@@ -54,6 +57,17 @@
             <option :value="9600">9600 baud</option>
             <option :value="115200">115200 baud</option>
           </select>
+
+          <!-- Web Serial API ile Doğrudan Tarayıcıdan Kart Eşleme Butonu -->
+          <button
+            v-if="isWebSerialSupported"
+            type="button"
+            @click="requestWebSerialPort"
+            class="px-2.5 py-1.5 rounded-xl border border-slate-900 font-black text-xs bg-amber-300 hover:bg-amber-400 text-slate-950 cursor-pointer transition flex items-center gap-1 shadow-sm active:translate-y-0.5"
+            title="Tarayıcıdan Doğrudan USB Arduino Kartını Eşle (Web Serial)"
+          >
+            <span>🔌 Kart Eşle</span>
+          </button>
 
           <button
             type="button"
@@ -404,7 +418,21 @@ interface ChannelMeta {
 
 const COLORS = ['#38bdf8', '#4ade80', '#f59e0b', '#f43f5e', '#a855f7'];
 
-const selectedPort = ref('auto');
+interface SelectablePortItem {
+  address: string;
+  label: string;
+  source: 'backend' | 'webserial';
+  board_name?: string;
+}
+
+const isWebSerialSupported = typeof navigator !== 'undefined' && 'serial' in (navigator as any);
+const pairedWebSerialPorts = ref<any[]>([]);
+const isWebSerialActive = ref(false);
+let webSerialPortInstance: any = null;
+let webSerialReader: ReadableStreamDefaultReader<string> | null = null;
+let keepReadingWebSerial = false;
+
+const selectedPort = ref('');
 const baudRate = ref(9600);
 const statusMessage = ref('');
 const isPaused = ref(false);
@@ -423,16 +451,54 @@ let lineCounter = 1;
 let eventSource: EventSource | null = null;
 let simInterval: ReturnType<typeof setInterval> | null = null;
 
+const selectablePorts = computed<SelectablePortItem[]>(() => {
+  const items: SelectablePortItem[] = [];
+
+  // 1. Kullanıcının tarayıcıda eşlediği Web Serial USB portları
+  pairedWebSerialPorts.value.forEach((port, idx) => {
+    const info = port.getInfo ? port.getInfo() : {};
+    const vid = info.usbVendorId ? `0x${info.usbVendorId.toString(16)}` : '';
+    const pid = info.usbProductId ? `0x${info.usbProductId.toString(16)}` : '';
+    const desc = vid ? `(USB ${vid}:${pid})` : `(Kart ${idx + 1})`;
+    items.push({
+      address: `webserial:${idx}`,
+      label: `🔌 Web Serial ${desc}`,
+      source: 'webserial',
+      board_name: 'Arduino (Web Serial)'
+    });
+  });
+
+  // 2. Backend'in algıladığı gerçek donanım portları (COM1, COM7 vb. - Mock veri hariç)
+  (props.availablePorts || []).forEach(p => {
+    if (p.address && p.address !== 'SIMULATED_PORT' && p.address !== 'auto' && p.source !== 'simulated') {
+      items.push({
+        address: p.address,
+        label: p.label || p.address,
+        source: 'backend',
+        board_name: p.board_name || p.address
+      });
+    }
+  });
+
+  return items;
+});
+
 const hasRealHardwarePort = computed(() => {
-  return (props.availablePorts || []).some(
-    p => p.address !== 'SIMULATED_PORT' && p.address !== 'auto' && p.source !== 'simulated'
-  );
+  return isWebSerialActive.value || selectablePorts.value.length > 0;
 });
 
 const activePortLabel = computed(() => {
-  if (!hasRealHardwarePort.value) return 'Simülasyon Akışı Aktif';
-  const match = props.availablePorts.find(p => p.address === selectedPort.value);
-  return match ? `${match.board_name} (${match.address})` : 'Donanım Portu Hazır';
+  if (isWebSerialActive.value) {
+    return 'Web Serial (Doğrudan USB)';
+  }
+  const match = selectablePorts.value.find(p => p.address === selectedPort.value);
+  if (match) {
+    return match.label;
+  }
+  if (selectablePorts.value.length > 0) {
+    return selectablePorts.value[0].label;
+  }
+  return 'Arduino Bekleniyor...';
 });
 
 /**
@@ -656,11 +722,144 @@ function onSliderAdjust(channelName: string, newVal: number) {
 
 let activeSocket: WebSocket | null = null;
 
-function sendManualSerialLine() {
+async function refreshPairedWebSerialPorts() {
+  if (!isWebSerialSupported) return;
+  try {
+    const ports = await (navigator as any).serial.getPorts();
+    pairedWebSerialPorts.value = ports || [];
+  } catch (e) {
+    console.warn('Web Serial getPorts hatası:', e);
+  }
+}
+
+async function requestWebSerialPort() {
+  if (!isWebSerialSupported) {
+    appendSerialLine('[UYARI] Tarayıcınız Web Serial API desteklemiyor. Google Chrome, Edge veya Brave kullanmanızı öneririz.', 'system');
+    return;
+  }
+  try {
+    const port = await (navigator as any).serial.requestPort();
+    await refreshPairedWebSerialPorts();
+    const idx = pairedWebSerialPorts.value.indexOf(port);
+    const targetAddr = idx >= 0 ? `webserial:${idx}` : 'webserial:0';
+    selectedPort.value = targetAddr;
+    await connectWebSerial(port);
+  } catch (err: any) {
+    if (err?.name !== 'NotFoundError') {
+      appendSerialLine(`[WEB SERIAL HATA] ${err?.message || err}`, 'system');
+    }
+  }
+}
+
+async function connectWebSerial(portToUse?: any) {
+  try {
+    const port = portToUse || webSerialPortInstance || pairedWebSerialPorts.value[0];
+    if (!port) {
+      appendSerialLine('[WEB SERIAL] Bağlanacak kart bulunamadı. "🔌 Kart Eşle" butonuna tıklayın.', 'system');
+      return;
+    }
+
+    await disconnectWebSerial();
+    if (activeSocket) {
+      activeSocket.close();
+      activeSocket = null;
+    }
+
+    await port.open({ baudRate: baudRate.value });
+    webSerialPortInstance = port;
+    isWebSerialActive.value = true;
+    isSocketConnected.value = true;
+
+    const info = port.getInfo ? port.getInfo() : {};
+    const vid = info.usbVendorId ? `0x${info.usbVendorId.toString(16)}` : '';
+    const pid = info.usbProductId ? `0x${info.usbProductId.toString(16)}` : '';
+    const desc = vid ? `(USB ${vid}:${pid})` : '';
+    appendSerialLine(`[WEB SERIAL BAĞLANDI] ${desc} Arduino Uno kartına doğrudan USB bağlantısı kuruldu (${baudRate.value} baud)! 🔌✨`, 'system');
+
+    keepReadingWebSerial = true;
+    void readWebSerialLoop(port);
+  } catch (err: any) {
+    isWebSerialActive.value = false;
+    isSocketConnected.value = false;
+    appendSerialLine(`[WEB SERIAL BAĞLANTI HATASI] ${err?.message || err}. Kart başka bir uygulama tarafından açık tutuluyor olabilir.`, 'system');
+  }
+}
+
+async function readWebSerialLoop(port: any) {
+  let lineBuffer = '';
+  while (port.readable && keepReadingWebSerial) {
+    try {
+      const textDecoder = new TextDecoderStream();
+      const readableStreamClosed = port.readable.pipeTo(textDecoder.writable);
+      const reader = textDecoder.readable.getReader();
+      webSerialReader = reader;
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        if (value) {
+          lineBuffer += value;
+          const lines = lineBuffer.split(/\r?\n/);
+          lineBuffer = lines.pop() || '';
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (trimmed.length > 0) {
+              appendSerialLine(trimmed, 'hardware');
+            }
+          }
+        }
+      }
+      reader.releaseLock();
+      await readableStreamClosed.catch(() => {});
+    } catch (err: any) {
+      if (keepReadingWebSerial) {
+        console.warn('Web Serial okuma hatası:', err);
+      }
+      break;
+    }
+  }
+}
+
+async function disconnectWebSerial() {
+  keepReadingWebSerial = false;
+  if (webSerialReader) {
+    try {
+      await webSerialReader.cancel();
+    } catch {}
+    webSerialReader = null;
+  }
+  if (webSerialPortInstance) {
+    try {
+      await webSerialPortInstance.close();
+    } catch {}
+    webSerialPortInstance = null;
+  }
+  isWebSerialActive.value = false;
+}
+
+async function writeWebSerial(text: string) {
+  if (!webSerialPortInstance || !webSerialPortInstance.writable) return;
+  const encoder = new TextEncoder();
+  const data = encoder.encode(text + '\r\n');
+  const writer = webSerialPortInstance.writable.getWriter();
+  try {
+    await writer.write(data);
+  } finally {
+    writer.releaseLock();
+  }
+}
+
+async function sendManualSerialLine() {
   const txt = manualInput.value.trim();
   if (!txt) return;
 
-  if (activeSocket && activeSocket.readyState === WebSocket.OPEN) {
+  if (isWebSerialActive.value && webSerialPortInstance) {
+    try {
+      await writeWebSerial(txt);
+    } catch (err: any) {
+      appendSerialLine(`[GÖNDERME HATASI] ${err?.message || err}`, 'system');
+    }
+  } else if (activeSocket && activeSocket.readyState === WebSocket.OPEN) {
     activeSocket.send(txt);
   }
   appendSerialLine(`> ${txt}`, 'user');
@@ -671,18 +870,25 @@ function clearSerialMonitor() {
   serialLines.value = [];
 }
 
-function toggleSocketConnection() {
-  if (isSocketConnected.value && activeSocket) {
-    activeSocket.close();
-    activeSocket = null;
+async function toggleSocketConnection() {
+  if (isSocketConnected.value) {
+    if (isWebSerialActive.value) {
+      await disconnectWebSerial();
+    }
+    if (activeSocket) {
+      activeSocket.close();
+      activeSocket = null;
+    }
     isSocketConnected.value = false;
     appendSerialLine('[BİLGİ] Seri port bağlantısı kullanıcı tarafından kapatıldı.', 'system');
   } else {
-    connectSerialStream();
+    await connectChosenSerialStream();
   }
 }
 
-function triggerUpload() {
+async function triggerUpload() {
+  // Yükleme öncesi açık Web Serial ve WebSocket bağlantılarını serbest bırak
+  await disconnectWebSerial();
   if (activeSocket) {
     activeSocket.close();
     activeSocket = null;
@@ -692,101 +898,150 @@ function triggerUpload() {
     eventSource.close();
     eventSource = null;
   }
-  statusMessage.value = 'Arduino Uno kartına kod derlenip gönderiliyor...';
-  appendSerialLine(`[DERLEME & YÜKLEME] "${props.projectName || 'Arduino Projem'}" derleniyor ve ${selectedPort.value} portuna yükleniyor...`, 'system');
-  emit('upload', selectedPort.value);
-}
 
-function connectSerialStream() {
-  if (activeSocket) {
-    activeSocket.close();
-    activeSocket = null;
-  }
-  isSocketConnected.value = false;
-  if (eventSource) {
-    eventSource.close();
-    eventSource = null;
-  }
-  if (simInterval) {
-    clearInterval(simInterval);
-    simInterval = null;
-  }
-
-  // Gerçek donanım portu (COM* veya /dev/tty*) seçildiyse doğrudan WebSocket köprüsüne bağlan
-  if (hasRealHardwarePort.value) {
-    try {
-      const loc = window.location;
-      const wsProto = loc.protocol === 'https:' ? 'wss:' : 'ws:';
-      // Vite proxy (/ws) üzerinden bağlan veya doğrudan 127.0.0.1:8001'i hedefle (IPv6 localhost çakışmasını önler)
-      const wsUrl = loc.port === '5173'
-        ? `${wsProto}//${loc.host}/ws/serial?port=${encodeURIComponent(selectedPort.value)}&baudrate=${baudRate.value}`
-        : `${wsProto}//127.0.0.1:8001/ws/serial?port=${encodeURIComponent(selectedPort.value)}&baudrate=${baudRate.value}`;
-
-      let triedDirect = false;
-
-      const tryConnect = (targetUrl: string) => {
-        appendSerialLine(`[WEBSOCKET] ${selectedPort.value} (${baudRate.value} baud) bağlantısı açılıyor...`, 'system');
-        activeSocket = new WebSocket(targetUrl);
-
-        activeSocket.onopen = () => {
-          isSocketConnected.value = true;
-          appendSerialLine(`[BAĞLANDI] ${selectedPort.value} canlı WebSocket köprüsü aktif. Arduino'dan gelen gerçek veriler bekleniyor...`, 'system');
-        };
-
-        activeSocket.onmessage = (event) => {
-          try {
-            const data = JSON.parse(event.data);
-            if (data.type === 'connected') {
-              isSocketConnected.value = true;
-              appendSerialLine(data.text || `[PORT AÇILDI] ${data.port}`, 'system');
-            } else if (data.type === 'data') {
-              appendSerialLine(data.text, 'hardware', undefined, data.timestamp);
-            } else if (data.type === 'error') {
-              isSocketConnected.value = false;
-              appendSerialLine(`[PORT UYARISI] ${data.message || data.text}`, 'system');
-            }
-          } catch {
-            if (event.data) {
-              appendSerialLine(String(event.data), 'hardware');
-            }
-          }
-        };
-
-        activeSocket.onerror = () => {
-          if (!triedDirect && loc.port === '5173') {
-            triedDirect = true;
-            // Vite proxy üzerinden açılamadıysa doğrudan 127.0.0.1:8001 köprüsünü dene
-            const directUrl = `${wsProto}//127.0.0.1:8001/ws/serial?port=${encodeURIComponent(selectedPort.value)}&baudrate=${baudRate.value}`;
-            tryConnect(directUrl);
-            return;
-          }
-          isSocketConnected.value = false;
-          appendSerialLine(`[PORT BAĞLANTI HATASI] ${selectedPort.value} WebSocket köprüsüne bağlanılamadı. Backend'in 'python -m uvicorn main:app --host 0.0.0.0 --port 8001 --reload' ile çalıştığından emin olun.`, 'system');
-        };
-
-        activeSocket.onclose = (event) => {
-          isSocketConnected.value = false;
-          if (event.code !== 1000 && event.code !== 1005 && !triedDirect) {
-            appendSerialLine(`[PORT KAPANDI] Bağlantı kapandı (Kod: ${event.code}). Tekrar bağlanmak için yukarıdaki "🔌 Portu Aç" butonuna basabilirsiniz.`, 'system');
-          }
-        };
-      };
-
-      tryConnect(wsUrl);
-      return;
-    } catch (e) {
-      isSocketConnected.value = false;
-      appendSerialLine(`[HATA] WebSocket başlatılamadı: ${e}`, 'system');
-      return;
+  let uploadPort = selectedPort.value;
+  // Eğer Web Serial seçildiyse, backend'in gerçek COM portunu hedefle
+  if (uploadPort.startsWith('webserial:')) {
+    const backendReal = (props.availablePorts || []).filter(
+      p => p.address && p.address !== 'SIMULATED_PORT' && p.address !== 'auto' && p.source !== 'simulated'
+    );
+    if (backendReal.length > 0) {
+      uploadPort = backendReal[0].address;
     }
   }
 
-  // Donanım portu seçilmediğinde bilgi ver
-  appendSerialLine(`[BİLGİ] Fiziksel Arduino portu seçilmedi (${selectedPort.value}). Gerçek kartınız için yukarıdaki menüden COM portunuzu seçin.`, 'system');
+  statusMessage.value = 'Arduino Uno kartına kod derlenip gönderiliyor...';
+  appendSerialLine(`[DERLEME & YÜKLEME] "${props.projectName || 'Arduino Projem'}" derleniyor ve ${uploadPort || 'bağlı Arduino'} portuna yükleniyor...`, 'system');
+  emit('upload', uploadPort);
 }
 
+function connectBackendWebSocket(portAddress: string) {
+  if (activeSocket) {
+    activeSocket.close();
+    activeSocket = null;
+  }
+  isSocketConnected.value = false;
+
+  try {
+    const loc = window.location;
+    const wsProto = loc.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = loc.port === '5173'
+      ? `${wsProto}//${loc.host}/ws/serial?port=${encodeURIComponent(portAddress)}&baudrate=${baudRate.value}`
+      : `${wsProto}//127.0.0.1:8001/ws/serial?port=${encodeURIComponent(portAddress)}&baudrate=${baudRate.value}`;
+
+    let triedDirect = false;
+
+    const tryConnect = (targetUrl: string) => {
+      appendSerialLine(`[WEBSOCKET] ${portAddress} (${baudRate.value} baud) bağlantısı açılıyor...`, 'system');
+      activeSocket = new WebSocket(targetUrl);
+
+      activeSocket.onopen = () => {
+        isSocketConnected.value = true;
+        appendSerialLine(`[BAĞLANDI] ${portAddress} canlı WebSocket köprüsü aktif. Arduino'dan gelen gerçek veriler bekleniyor...`, 'system');
+      };
+
+      activeSocket.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'connected') {
+            isSocketConnected.value = true;
+            appendSerialLine(data.text || `[PORT AÇILDI] ${data.port}`, 'system');
+          } else if (data.type === 'data') {
+            appendSerialLine(data.text, 'hardware', undefined, data.timestamp);
+          } else if (data.type === 'error') {
+            isSocketConnected.value = false;
+            appendSerialLine(`[PORT UYARISI] ${data.message || data.text}`, 'system');
+          }
+        } catch {
+          if (event.data) {
+            appendSerialLine(String(event.data), 'hardware');
+          }
+        }
+      };
+
+      activeSocket.onerror = () => {
+        if (!triedDirect && loc.port === '5173') {
+          triedDirect = true;
+          const directUrl = `${wsProto}//127.0.0.1:8001/ws/serial?port=${encodeURIComponent(portAddress)}&baudrate=${baudRate.value}`;
+          tryConnect(directUrl);
+          return;
+        }
+        isSocketConnected.value = false;
+        appendSerialLine(`[PORT BAĞLANTI HATASI] ${portAddress} WebSocket köprüsüne bağlanılamadı. Alternatif olarak "🔌 Kart Eşle" butonuna basarak doğrudan Web Serial bağlantısını kullanabilirsiniz.`, 'system');
+      };
+
+      activeSocket.onclose = (event) => {
+        isSocketConnected.value = false;
+        if (event.code !== 1000 && event.code !== 1005 && !triedDirect) {
+          appendSerialLine(`[PORT KAPANDI] Bağlantı kapandı (Kod: ${event.code}). Tekrar bağlanmak için yukarıdaki "🔌 Portu Aç" butonuna basabilirsiniz.`, 'system');
+        }
+      };
+    };
+
+    tryConnect(wsUrl);
+  } catch (e) {
+    isSocketConnected.value = false;
+    appendSerialLine(`[HATA] WebSocket başlatılamadı: ${e}`, 'system');
+  }
+}
+
+async function connectChosenSerialStream() {
+  if (!selectedPort.value) {
+    if (selectablePorts.value.length === 0) {
+      appendSerialLine('[BİLGİ] Fiziksel Arduino portu bulunamadı. Lütfen USB kablosunu takın veya "🔌 Kart Eşle" butonuna tıklayın.', 'system');
+    }
+    return;
+  }
+
+  await disconnectWebSerial();
+  if (activeSocket) {
+    activeSocket.close();
+    activeSocket = null;
+  }
+  isSocketConnected.value = false;
+
+  if (selectedPort.value.startsWith('webserial:')) {
+    const idx = parseInt(selectedPort.value.split(':')[1] || '0', 10);
+    const targetPort = pairedWebSerialPorts.value[idx] || pairedWebSerialPorts.value[0];
+    if (targetPort) {
+      await connectWebSerial(targetPort);
+    }
+  } else {
+    connectBackendWebSocket(selectedPort.value);
+  }
+}
+
+function onUsbConnect() {
+  appendSerialLine('[USB ALGILANDI] Yeni bir USB seri cihaz takıldı! 🔌', 'system');
+  void refreshPairedWebSerialPorts();
+  emit('refresh-ports');
+}
+
+function onUsbDisconnect(event?: any) {
+  appendSerialLine('[USB ÇIKARILDI] USB cihaz bağlantısı kesildi.', 'system');
+  if (event?.port && webSerialPortInstance === event.port) {
+    void disconnectWebSerial();
+  }
+  void refreshPairedWebSerialPorts();
+  emit('refresh-ports');
+}
+
+watch(
+  selectablePorts,
+  (newPorts) => {
+    if (newPorts.length > 0) {
+      if (!selectedPort.value || !newPorts.some(p => p.address === selectedPort.value)) {
+        selectedPort.value = newPorts[0].address;
+      }
+    } else {
+      selectedPort.value = '';
+    }
+  },
+  { immediate: true }
+);
+
 watch([selectedPort, baudRate], () => {
-  connectSerialStream();
+  void connectChosenSerialStream();
 });
 
 watch(
@@ -795,7 +1050,7 @@ watch(
     if (oldVal === true && newVal === false) {
       // Karta kod yüklendiğinde Arduino yeniden başlar (reboot); Windows USB-seri sürücüsünün portu bırakması için 2.2 sn sonra bağlan
       setTimeout(() => {
-        connectSerialStream();
+        void connectChosenSerialStream();
       }, 2200);
     }
   }
@@ -825,11 +1080,27 @@ watch(
   }
 );
 
-onMounted(() => {
-  connectSerialStream();
+onMounted(async () => {
+  if (isWebSerialSupported) {
+    try {
+      (navigator as any).serial.addEventListener('connect', onUsbConnect);
+      (navigator as any).serial.addEventListener('disconnect', onUsbDisconnect);
+      await refreshPairedWebSerialPorts();
+    } catch (e) {
+      console.warn('Web Serial event listener eklenemedi:', e);
+    }
+  }
+  await connectChosenSerialStream();
 });
 
-onUnmounted(() => {
+onUnmounted(async () => {
+  if (isWebSerialSupported) {
+    try {
+      (navigator as any).serial.removeEventListener('connect', onUsbConnect);
+      (navigator as any).serial.removeEventListener('disconnect', onUsbDisconnect);
+    } catch {}
+  }
+  await disconnectWebSerial();
   if (activeSocket) {
     activeSocket.close();
     activeSocket = null;

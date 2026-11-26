@@ -584,11 +584,9 @@ async function fetchModels() {
 async function fetchPorts() {
   try {
     const ports = await api.getPorts();
-    availablePorts.value = ports as any;
+    availablePorts.value = (ports as any) || [];
   } catch {
-    availablePorts.value = [
-      { address: 'auto', label: 'Otomatik Port (Simüle)', board_name: 'Arduino Uno', is_arduino: true, source: 'simulated' }
-    ];
+    availablePorts.value = [];
   }
 }
 
