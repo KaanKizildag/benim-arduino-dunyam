@@ -173,6 +173,9 @@ export interface UploadResult {
   simulation?: boolean;
   error?: string;
   can_heal?: boolean;
+  hex?: string;
+  compiler_output?: string;
+  uploader_output?: string;
 }
 
 export interface ModelOption {

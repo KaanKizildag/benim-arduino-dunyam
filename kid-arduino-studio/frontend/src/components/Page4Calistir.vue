@@ -381,6 +381,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue';
 import type { PortInfo, CircuitNetlist, UploadResult } from '../types/project';
+import { flashArduinoUnoWebSerial } from '../utils/arduinoFlasher';
 
 const props = defineProps<{
   isUploading: boolean;
@@ -428,9 +429,11 @@ interface SelectablePortItem {
 const isWebSerialSupported = typeof navigator !== 'undefined' && 'serial' in (navigator as any);
 const pairedWebSerialPorts = ref<any[]>([]);
 const isWebSerialActive = ref(false);
+const isFlashingWebSerial = ref(false);
 let webSerialPortInstance: any = null;
 let webSerialReader: ReadableStreamDefaultReader<string> | null = null;
 let keepReadingWebSerial = false;
+let readLoopPromise: Promise<void> | null = null;
 
 const selectedPort = ref('');
 const baudRate = ref(9600);
@@ -751,7 +754,11 @@ async function requestWebSerialPort() {
   }
 }
 
+let isWebSerialConnecting = false;
+
 async function connectWebSerial(portToUse?: any) {
+  if (isWebSerialConnecting) return;
+  isWebSerialConnecting = true;
   try {
     const port = portToUse || webSerialPortInstance || pairedWebSerialPorts.value[0];
     if (!port) {
@@ -759,13 +766,15 @@ async function connectWebSerial(portToUse?: any) {
       return;
     }
 
-    await disconnectWebSerial();
     if (activeSocket) {
       activeSocket.close();
       activeSocket = null;
     }
 
-    await port.open({ baudRate: baudRate.value });
+    // Eğer port zaten açıksa tekrar open() çağırma (The port is already open hatasını önler)
+    if (!port.readable && !port.writable) {
+      await port.open({ baudRate: baudRate.value });
+    }
     webSerialPortInstance = port;
     isWebSerialActive.value = true;
     isSocketConnected.value = true;
@@ -776,29 +785,35 @@ async function connectWebSerial(portToUse?: any) {
     const desc = vid ? `(USB ${vid}:${pid})` : '';
     appendSerialLine(`[WEB SERIAL BAĞLANDI] ${desc} Arduino Uno kartına doğrudan USB bağlantısı kuruldu (${baudRate.value} baud)! 🔌✨`, 'system');
 
-    keepReadingWebSerial = true;
-    void readWebSerialLoop(port);
+    if (!webSerialReader) {
+      keepReadingWebSerial = true;
+      readLoopPromise = readWebSerialLoop(port);
+    }
   } catch (err: any) {
     isWebSerialActive.value = false;
     isSocketConnected.value = false;
     appendSerialLine(`[WEB SERIAL BAĞLANTI HATASI] ${err?.message || err}. Kart başka bir uygulama tarafından açık tutuluyor olabilir.`, 'system');
+  } finally {
+    isWebSerialConnecting = false;
   }
 }
 
 async function readWebSerialLoop(port: any) {
   let lineBuffer = '';
-  while (port.readable && keepReadingWebSerial) {
-    try {
-      const textDecoder = new TextDecoderStream();
-      const readableStreamClosed = port.readable.pipeTo(textDecoder.writable);
-      const reader = textDecoder.readable.getReader();
-      webSerialReader = reader;
+  const textDecoder = new TextDecoder();
 
-      while (true) {
-        const { value, done } = await reader.read();
+  while (port.readable && keepReadingWebSerial) {
+    let currentReader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+    try {
+      currentReader = port.readable.getReader();
+      webSerialReader = currentReader as any;
+
+      while (keepReadingWebSerial) {
+        const { value, done } = await currentReader.read();
         if (done) break;
         if (value) {
-          lineBuffer += value;
+          const textChunk = textDecoder.decode(value, { stream: true });
+          lineBuffer += textChunk;
           const lines = lineBuffer.split(/\r?\n/);
           lineBuffer = lines.pop() || '';
           for (const line of lines) {
@@ -809,29 +824,54 @@ async function readWebSerialLoop(port: any) {
           }
         }
       }
-      reader.releaseLock();
-      await readableStreamClosed.catch(() => {});
     } catch (err: any) {
       if (keepReadingWebSerial) {
         console.warn('Web Serial okuma hatası:', err);
       }
       break;
+    } finally {
+      if (currentReader) {
+        try {
+          currentReader.releaseLock();
+        } catch {}
+      }
+      webSerialReader = null;
     }
   }
 }
 
 async function disconnectWebSerial() {
   keepReadingWebSerial = false;
+
+  // 1. Reader'ı iptal et
   if (webSerialReader) {
     try {
       await webSerialReader.cancel();
-    } catch {}
-    webSerialReader = null;
+    } catch (e) {
+      console.warn('Reader cancel hatası:', e);
+    }
   }
+
+  // 2. Okuma döngüsünün tamamen bitmesini ve reader kilidini bırakmasını bekle
+  if (readLoopPromise) {
+    try {
+      await readLoopPromise;
+    } catch (e) {
+      console.warn('Read loop sonlanma hatası:', e);
+    }
+    readLoopPromise = null;
+  }
+  webSerialReader = null;
+
+  // 3. Port hala açıksa kapat (okuma kilidi tamamen kalktığı için hatasız kapanır)
   if (webSerialPortInstance) {
     try {
-      await webSerialPortInstance.close();
-    } catch {}
+      if (webSerialPortInstance.readable || webSerialPortInstance.writable) {
+        await webSerialPortInstance.close();
+      }
+    } catch (e) {
+      console.warn('WebSerial port close hatası:', e);
+    }
     webSerialPortInstance = null;
   }
   isWebSerialActive.value = false;
@@ -986,6 +1026,10 @@ function connectBackendWebSocket(portAddress: string) {
 }
 
 async function connectChosenSerialStream() {
+  if (isFlashingWebSerial.value) {
+    return;
+  }
+
   if (!selectedPort.value) {
     if (selectablePorts.value.length === 0) {
       appendSerialLine('[BİLGİ] Fiziksel Arduino portu bulunamadı. Lütfen USB kablosunu takın veya "🔌 Kart Eşle" butonuna tıklayın.', 'system');
@@ -1041,16 +1085,24 @@ watch(
 );
 
 watch([selectedPort, baudRate], () => {
-  void connectChosenSerialStream();
+  if (!isFlashingWebSerial.value) {
+    void connectChosenSerialStream();
+  }
 });
 
 watch(
   () => props.isUploading,
   (newVal, oldVal) => {
     if (oldVal === true && newVal === false) {
-      // Karta kod yüklendiğinde Arduino yeniden başlar (reboot); Windows USB-seri sürücüsünün portu bırakması için 2.2 sn sonra bağlan
+      // Eğer Web Serial üzerinden doğrudan tarayıcı flaşlaması yapılıyorsa veya HEX döndüyse,
+      // portu burada açma! Flaşlama bittiğinde kendi akışında otomatik bağlanacak.
+      if (isFlashingWebSerial.value || props.uploadResult?.hex) {
+        return;
+      }
       setTimeout(() => {
-        void connectChosenSerialStream();
+        if (!isFlashingWebSerial.value) {
+          void connectChosenSerialStream();
+        }
       }, 2200);
     }
   }
@@ -1058,8 +1110,66 @@ watch(
 
 watch(
   () => props.uploadResult,
-  (res) => {
+  async (res) => {
     if (!res) return;
+
+    // 1. Eğer sunucu kodu derleyip HEX ikili dosyasını gönderdiyse:
+    // Web Serial üzerinden doğrudan tarayıcıdan Arduino Uno'ya yükle (STK500v1 / Optiboot)
+    if (res.hex) {
+      isFlashingWebSerial.value = true;
+      appendSerialLine(`[DERLEME BAŞARILI] Kod sunucuda derlendi. Web Serial üzerinden Arduino Uno'ya yazılıyor... 🚀`, 'system');
+      if (res.compiler_output) {
+        appendSerialLine(`[DERLEYİCİ] ${res.compiler_output.trim()}`, 'system');
+      }
+
+      // Önce açık Serial Monitor bağlantısını tamamen temizle ve kapat
+      await disconnectWebSerial();
+      if (activeSocket) {
+        activeSocket.close();
+        activeSocket = null;
+      }
+      isSocketConnected.value = false;
+
+      let targetPort = webSerialPortInstance;
+      if (!targetPort && pairedWebSerialPorts.value.length > 0) {
+        targetPort = pairedWebSerialPorts.value[0];
+      }
+
+      if (targetPort) {
+        try {
+          statusMessage.value = "Arduino Uno'ya kod aktarılıyor...";
+          await flashArduinoUnoWebSerial(
+            targetPort,
+            res.hex,
+            (_cur, _tot, pct) => {
+              statusMessage.value = `Arduino Uno'ya Yükleniyor: %${pct}`;
+              if (pct === 25 || pct === 50 || pct === 75 || pct === 100) {
+                appendSerialLine(`[WEB SERIAL YAZMA] %${pct} aktarıldı...`, 'system');
+              }
+            }
+          );
+
+          statusMessage.value = 'Yükleme Tamamlandı! Kart çalışıyor 🎉';
+          appendSerialLine(`[YÜKLEME BAŞARILI] Tebrikler! Kodun başarıyla Arduino Uno kartına yüklendi ve çalışıyor! 🚀🎉`, 'system');
+        } catch (flashErr: any) {
+          statusMessage.value = 'Web Serial yükleme hatası';
+          appendSerialLine(`[WEB SERIAL YAZMA HATASI] ${flashErr?.message || flashErr}`, 'system');
+        } finally {
+          isFlashingWebSerial.value = false;
+        }
+
+        // Flaşlama bitti, Arduino kartının yeniden başlamasını bekle ve Serial Monitor'e bağlan
+        setTimeout(() => {
+          void connectChosenSerialStream();
+        }, 1200);
+      } else {
+        isFlashingWebSerial.value = false;
+        appendSerialLine('[UYARI] Kod derlendi fakat Web Serial kartı seçilmemiş. "🔌 Kart Eşle" butonuna basarak Arduino kartınızı seçin.', 'system');
+      }
+      return;
+    }
+
+    // 2. Standart backend yerel upload sonucu (sunucuda fiziksel COM portu kullanıldıysa)
     if (res.success) {
       appendSerialLine(`[YÜKLEME BAŞARILI] ${res.message}`, 'system');
       if (res.compiler_output) {

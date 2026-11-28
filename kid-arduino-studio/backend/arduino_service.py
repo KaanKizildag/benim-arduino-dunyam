@@ -61,28 +61,58 @@ class SerialPortLockManager:
 
 def find_arduino_cli_binary() -> Optional[str]:
     """Sistemde veya özel yolda arduino-cli olup olmadığını kontrol eder."""
-    # 0. Backend içi yerel binary (backend/bin/arduino-cli.exe)
-    local_bin = os.path.join(os.path.dirname(__file__), "bin", "arduino-cli.exe")
-    if os.path.isfile(local_bin):
-        return local_bin
+    import sys
+    is_windows = os.name == 'nt' or sys.platform.startswith('win')
+
+    # 0. Backend içi yerel binary (Windows için backend/bin/arduino-cli.exe, Linux için backend/bin/arduino-cli)
+    if is_windows:
+        local_bin = os.path.join(os.path.dirname(__file__), "bin", "arduino-cli.exe")
+        if os.path.isfile(local_bin):
+            return local_bin
+    else:
+        local_bin = os.path.join(os.path.dirname(__file__), "bin", "arduino-cli")
+        if os.path.isfile(local_bin):
+            try:
+                os.chmod(local_bin, 0o755)
+            except Exception:
+                pass
+            return local_bin
 
     custom_path = os.getenv("ARDUINO_CLI_PATH", "arduino-cli")
     
     # 1. Custom veya doğrudan komut
-    if shutil.which(custom_path):
-        return custom_path
+    found = shutil.which(custom_path)
+    if found:
+        # Linux/WSL ortamında Windows .exe binary'si yakalanmışsa (WSL interop path) yoksay
+        if not is_windows and found.lower().endswith(".exe"):
+            pass
+        else:
+            return found
     
     # 2. Windows yaygın yolları
-    common_windows_paths = [
-        os.path.expanduser(r"~\AppData\Local\Programs\Arduino CLI\arduino-cli.exe"),
-        r"C:\Program Files\Arduino CLI\arduino-cli.exe",
-        r"C:\Program Files (x86)\Arduino CLI\arduino-cli.exe",
-        os.path.expanduser(r"~\bin\arduino-cli.exe"),
-        os.path.expanduser(r"~\go\bin\arduino-cli.exe"),
-    ]
-    for p in common_windows_paths:
-        if os.path.isfile(p):
-            return p
+    if is_windows:
+        common_windows_paths = [
+            os.path.expanduser(r"~\AppData\Local\Programs\Arduino CLI\arduino-cli.exe"),
+            r"C:\Program Files\Arduino CLI\arduino-cli.exe",
+            r"C:\Program Files (x86)\Arduino CLI\arduino-cli.exe",
+            os.path.expanduser(r"~\bin\arduino-cli.exe"),
+            os.path.expanduser(r"~\go\bin\arduino-cli.exe"),
+        ]
+        for p in common_windows_paths:
+            if os.path.isfile(p):
+                return p
+    else:
+        # Linux / WSL yerel yolları
+        common_linux_paths = [
+            "/usr/local/bin/arduino-cli",
+            "/usr/bin/arduino-cli",
+            os.path.expanduser("~/.local/bin/arduino-cli"),
+            os.path.expanduser("~/bin/arduino-cli"),
+            os.path.expanduser("~/go/bin/arduino-cli"),
+        ]
+        for p in common_linux_paths:
+            if os.path.isfile(p) and os.access(p, os.X_OK):
+                return p
             
     return None
 
@@ -324,8 +354,11 @@ def compile_and_upload(code: str, port: Optional[str] = None) -> Dict[str, Any]:
 
         # A. Derleme Aşaması
         extra_compiler_notes = []
+        build_dir = os.path.join(temp_dir, "build")
+        os.makedirs(build_dir, exist_ok=True)
+
         try:
-            compile_cmd = [cli_bin, "compile", "--fqbn", fqbn]
+            compile_cmd = [cli_bin, "compile", "--fqbn", fqbn, "--output-dir", build_dir]
             for lib_dir in get_library_search_paths():
                 compile_cmd.extend(["--libraries", lib_dir])
             compile_cmd.append(sketch_folder)
@@ -380,22 +413,57 @@ def compile_and_upload(code: str, port: Optional[str] = None) -> Dict[str, Any]:
                 "can_heal": False
             }
 
+        # Derlenen Intel HEX dosyasını tara ve oku (Web Serial doğrudan yükleme için)
+        hex_content = None
+        try:
+            for root, _, files in os.walk(build_dir):
+                for f_name in files:
+                    if f_name.endswith(".hex") and not f_name.endswith(".with_bootloader.hex"):
+                        with open(os.path.join(root, f_name), "r", encoding="utf-8") as hf:
+                            hex_content = hf.read()
+                        break
+                if hex_content:
+                    break
+        except Exception as e:
+            print(f"[HEX Okuma Bilgisi]: {e}")
+
         # B. Port Belirleme
         target_port = port
-        if not target_port or target_port == "SIMULATED_PORT" or target_port == "auto" or str(target_port).startswith("webserial"):
-            # Otomatik port bul
+        is_webserial_target = (
+            not target_port
+            or target_port in ("auto", "simulated", "SIMULATED_PORT")
+            or str(target_port).startswith("webserial")
+        )
+
+        if is_webserial_target:
             detected_ports = get_connected_ports()
             real_ports = [p["address"] for p in detected_ports if p["address"] != "SIMULATED_PORT"]
             if real_ports:
                 target_port = real_ports[0]
             else:
-                return {
-                    "success": False,
-                    "status": "NO_PORT",
-                    "message": "Devre derlendi fakat Arduino kartının bağlı olduğu bir USB portu bulunamadı. USB kablosunu bilgisayara taktığından emin misin? 🔌",
-                    "compiled": True,
-                    "can_heal": False
-                }
+                # Sunucuda doğrudan USB donanımı yok (WSL / Docker / Remote Server modu).
+                # Derleme başarılı ve HEX hazırsa, tarayıcı Web Serial üzerinden doğrudan kartı programlar!
+                if hex_content:
+                    final_compiler_out = comp_res.stdout or ""
+                    if extra_compiler_notes:
+                        final_compiler_out = "\n".join(extra_compiler_notes) + ("\n" + final_compiler_out if final_compiler_out else "")
+                    return {
+                        "success": True,
+                        "status": "HEX_READY_FOR_WEBSERIAL",
+                        "message": "Kod sunucuda başarıyla derlendi! Web Serial ile doğrudan kartınıza yazılıyor... 🚀",
+                        "compiled": True,
+                        "hex": hex_content,
+                        "compiler_output": final_compiler_out,
+                        "can_heal": False
+                    }
+                else:
+                    return {
+                        "success": False,
+                        "status": "NO_PORT",
+                        "message": "Devre derlendi fakat Arduino kartının bağlı olduğu bir USB portu bulunamadı. USB kablosunu bilgisayara taktığından emin misin? 🔌",
+                        "compiled": True,
+                        "can_heal": False
+                    }
 
         # C. Karta Yükleme Aşaması
         try:
